@@ -73,13 +73,6 @@ public sealed class QuickOpen : Grid
 
     public void Hide() => Visibility = Visibility.Collapsed;
 
-    /// <summary>Abre já com um texto digitado (conferência).</summary>
-    internal void ShowWith(string text)
-    {
-        Show();
-        _box.Text = text;
-    }
-
     static string Folder(string file, string root)
     {
         var rel = Path.GetRelativePath(root, Path.GetDirectoryName(file)!);

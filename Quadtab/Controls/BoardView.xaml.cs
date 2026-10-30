@@ -74,7 +74,7 @@ public partial class BoardView : UserControl
 
     MainViewModel? _vm;
     Rect _realizedArea = Rect.Empty;
-    bool _ticking, _cameraReady, _autoFit, _testing;
+    bool _ticking, _cameraReady, _autoFit;
     TimeSpan _lastFrame;
     double _dpi = 1;
 
@@ -177,7 +177,7 @@ public partial class BoardView : UserControl
         Surface.Cursor = BoardCursors.Arrow;
         Surface.AddHandler(Mouse.LostMouseCaptureEvent, new MouseEventHandler((_, _) =>
         {
-            if (_drag is not null && !_drag.Grabbed.IsMouseCaptured && !_testing) EndDrag();
+            if (_drag is not null && !_drag.Grabbed.IsMouseCaptured) EndDrag();
         }));
 
         // Arrastar arquivos do Windows para o quadro.
@@ -892,7 +892,7 @@ public partial class BoardView : UserControl
             d.Box.Union(it.Box);
         }
         _drag = d;
-        if (!_testing) grabbed.CaptureMouse();
+        grabbed.CaptureMouse();
         ClearPorts();
         Kick();
     }
@@ -1714,55 +1714,6 @@ public partial class BoardView : UserControl
         foreach (var c in hidden) c.Visibility = Visibility.Visible;
         _itemCache.RenderAtScale = cacheBackup;
         return rtb;
-    }
-
-    // ---------- testes (desenvolvimento) ----------
-
-    internal int PeakRealized;
-
-    internal async Task<string> TestDragAsync(BoardItemViewModel item, double dx, double dy)
-    {
-        Vm.Selected = item;
-        Realize(item);
-        var c = _containers[item];
-        var start = _camera.ToScreen(new Point(item.X + 20, item.Y + 20));
-        double x0 = item.X, y0 = item.Y;
-        _testing = true;
-        StartDrag(c, start, duplicate: false);
-        for (int i = 1; i <= 10; i++)
-        {
-            _drag!.Pointer = start + new Vector(dx * i / 10, dy * i / 10);
-            await Task.Delay(20);
-        }
-        string mid = $"durante: X={item.X} offset={c.DragOffset.X:0},{c.DragOffset.Y:0}";
-        EndDrag();
-        _testing = false;
-        return $"{mid} | depois: X {x0}->{item.X}, Y {y0}->{item.Y}, offset={c.DragOffset.X},{c.DragOffset.Y}";
-    }
-
-    internal async Task<List<double>> BenchmarkAsync(double seconds)
-    {
-        var frames = new List<double>();
-        TimeSpan last = TimeSpan.Zero;
-        double cx = _camera.Cx, cy = _camera.Cy, z0 = _camera.Zoom;
-        void Frame(object? s, EventArgs e)
-        {
-            var t = ((RenderingEventArgs)e).RenderingTime;
-            if (t == last) return;
-            if (last != TimeSpan.Zero) frames.Add((t - last).TotalMilliseconds);
-            last = t;
-            double a = frames.Count / 40.0;
-            _camera.Zoom = BoardCamera.Clamp(z0 * (2.5 + 1.5 * Math.Sin(a * 0.7)));
-            _camera.Cx = cx + Math.Cos(a) * 1500;
-            _camera.Cy = cy + Math.Sin(a) * 900;
-            ApplyCamera();
-            if (_pending.Count > 0) CreateSome();
-            PeakRealized = Math.Max(PeakRealized, _containers.Count);
-        }
-        CompositionTarget.Rendering += Frame;
-        await Task.Delay(TimeSpan.FromSeconds(seconds));
-        CompositionTarget.Rendering -= Frame;
-        return frames;
     }
 }
 

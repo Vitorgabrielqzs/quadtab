@@ -44,16 +44,6 @@ public partial class App : Application
 
         var window = new MainWindow(ViewModel);
         MainWindow = window;
-
-        // Modo de conferência (desenvolvimento): QUADTAB_PRINT=arquivo.png salva uma imagem do app e fecha.
-        if (Environment.GetEnvironmentVariable("QUADTAB_PRINT") is { Length: > 0 } print)
-        {
-            window.ShowActivated = false;
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Left = -30000;
-            window.Top = 0;
-            DevSnapshot.Run(window, print, Environment.GetEnvironmentVariable("QUADTAB_PRINT_ACAO") ?? "");
-        }
         window.Show();
     }
 

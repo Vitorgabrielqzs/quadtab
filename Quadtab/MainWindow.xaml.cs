@@ -502,12 +502,6 @@ public partial class MainWindow : Window
         GlassGlow.Kick();
     }
 
-    internal void ShowMenuAt(BoardItemViewModel? item, Point boardPoint, Point windowPoint)
-    {
-        if (item is not null) _vm.Selected = item;
-        ShowMenu(item, boardPoint, windowPoint);
-    }
-
     void ShowMenu(BoardItemViewModel? item, Point boardPoint, Point windowPoint)
     {
         CloseActions();
@@ -912,7 +906,7 @@ public partial class MainWindow : Window
             _restoreBounds = new Rect(Left, Top, Width, Height);
             WindowState = WindowState.Normal;
             var mon = MonitorBounds();
-            if (!DevMode) { Left = mon.Left; Top = mon.Top; } // no modo de conferência a janela fica fora da tela
+            Left = mon.Left; Top = mon.Top;
             Width = mon.Width; Height = mon.Height;
             ResizeMode = ResizeMode.NoResize;
             // Tela realmente cheia: o quadro vai de borda a borda; lateral e barra flutuam por cima.
@@ -922,7 +916,7 @@ public partial class MainWindow : Window
         else
         {
             ResizeMode = ResizeMode.CanResize;
-            if (!DevMode) { Left = _restoreBounds.Left; Top = _restoreBounds.Top; }
+            Left = _restoreBounds.Left; Top = _restoreBounds.Top;
             Width = _restoreBounds.Width; Height = _restoreBounds.Height;
             WindowState = _restoreState;
             AppRoot.Margin = new Thickness(14);
@@ -1076,24 +1070,6 @@ public partial class MainWindow : Window
             new("Contador de FPS", "IcGrid", ToggleFps, Checked: FpsPanel.Visibility == Visibility.Visible) { Tip = "Mostra a velocidade do quadro · Ctrl+Shift+F" },
             new("Abrir a pasta Cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true) { Tip = "Abre no Explorador a pasta onde tudo fica guardado" },
         ], owner);
-    }
-
-    // ---------- conferência (desenvolvimento) ----------
-
-    static bool DevMode => Environment.GetEnvironmentVariable("QUADTAB_PRINT") is { Length: > 0 };
-
-    internal void ShowContextTrayAt(Point windowPoint) => ShowContextTray(Board.ViewCenter, windowPoint);
-    internal void TestFullscreen() => SetFullscreen(true);
-    internal void TestMore() => OnMore(MoreButton, new RoutedEventArgs());
-    internal void TestPresent() => StartPresenting();
-    internal void TestDock() => SetDock(true);
-    internal void TestSearchBox(string text) => Quick.ShowWith(text);
-
-    internal void TestSearch(string q)
-    {
-        OpenSearch();
-        _vm.BoardSearch = q;
-        JumpHit(+1);
     }
 
     // ---------- teclado ----------

@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+*.exe
 
 # Visual Studio / VS Code
 .vs/
@@ -11,3 +12,6 @@ publish/
 
 # Temporários
 *.tmp
+
+# Instruções locais
+CLAUDE.md
