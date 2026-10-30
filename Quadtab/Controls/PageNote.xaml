@@ -1,0 +1,39 @@
+<UserControl x:Class="Quadtab.Controls.PageNote"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Quadtab.Controls"
+             xmlns:b="clr-namespace:Quadtab.Behaviors"
+             Width="{Binding ItemWidth}" FontFamily="{StaticResource Nunito}">
+    <Grid x:Name="Root" MinHeight="{Binding ItemMinHeight}">
+        <c:Shadow x:Name="PageShadow" Layers="0 14 12 0 #523C230A, 0 1 1 0 #1F000000" />
+        <c:PaperElement Kind="Page" Paper="{Binding PaperColor}" />
+
+        <StackPanel Margin="40,30,18,20">
+            <Grid Margin="0,0,0,9">
+                <c:TrackedText b:UI.Field="title" Text="{Binding Title}" FontSize="18" FontWeight="Black" LineHeight="22"
+                               Foreground="{StaticResource PageTitleBrush}"
+                               Visibility="{Binding IsEditingTitle, Converter={StaticResource Hidden}}" />
+                <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="line" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="18" FontWeight="Black" Foreground="{StaticResource PageTitleBrush}" TextWrapping="NoWrap"
+                         Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
+            </Grid>
+            <Grid>
+                <TextBlock b:UI.Field="text" Text="{Binding PreviewText}" FontSize="14" FontWeight="Bold" LineHeight="28"
+                           LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{StaticResource PageBodyBrush}"
+                           Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
+                <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="14" FontWeight="Bold" Foreground="{StaticResource PageBodyBrush}"
+                         Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
+            </Grid>
+        </StackPanel>
+
+        <c:PinElement Color="{Binding PinColor}" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,5,0,0"
+                      Visibility="{Binding HasPin, Converter={StaticResource Visible}}" />
+        <c:TapeElement Color="{Binding PinColor}" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,-13,0,0"
+                       RenderTransformOrigin="0.5,0.5" Visibility="{Binding HasTape, Converter={StaticResource Visible}}">
+            <c:TapeElement.RenderTransform>
+                <RotateTransform Angle="-5" />
+            </c:TapeElement.RenderTransform>
+        </c:TapeElement>
+    </Grid>
+</UserControl>

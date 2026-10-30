@@ -1,0 +1,1116 @@
+﻿using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
+using Microsoft.Win32;
+using Quadtab.Behaviors;
+using Quadtab.Controls;
+using Quadtab.Models;
+using Quadtab.Rendering;
+using Quadtab.Services;
+using Quadtab.ViewModels;
+
+namespace Quadtab;
+
+public partial class MainWindow : Window
+{
+    /// <summary>Quanto da barra lateral aparece (1 aberta, 0 recolhida). Animado com mola.</summary>
+    public static readonly DependencyProperty SideProgressProperty = DependencyProperty.Register(
+        nameof(SideProgress), typeof(double), typeof(MainWindow), new PropertyMetadata(1.0, (d, _) => ((MainWindow)d).ApplySide()));
+
+    const double SidebarWidth = 292;
+
+    MainViewModel _vm;
+    readonly BackdropBlobs _glassBackdrop = new() { Saturation = 1.9 };
+    readonly ScaleTransform MenuScale = new();
+    readonly ScaleTransform ActionsScale = new();
+    readonly ScaleTransform TrayScale = new();
+    readonly TranslateTransform TrayShift = new() { Y = 100 }; // dock escondido abaixo da borda
+    bool _menuOpen, _actionsOpen, _ctxOpen, _ctxWasOpen;
+
+    public MainWindow(MainViewModel vm)
+    {
+        _vm = vm;
+        DataContext = vm;
+        InitializeComponent();
+        FitToScreen();
+
+        // O vidro sobre o fundo enxerga uma cópia saturada das manchas (saturate 190%, sem custo de efeito).
+        ApplyGlassBackdropColors();
+        WindowRoot.SizeChanged += (_, e) => LayoutGlassBackdrop(e.NewSize);
+        foreach (var g in new[] { SidebarGlass, SideCap, UndoCap, TrayCap, MoreCap, WindowCap, HideTitleGlass, Editor.Glass, Quick.Glass })
+            g.BackdropSource = _glassBackdrop;
+
+        // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
+        Board.Settled += RefreshBoardGlass;
+        Board.UseAsGlassBackdrop(Hint, Status, Tray.DockGlass, Tray.SheetGlass, GoToContent, FpsPanel, ZoomPanel, SearchBar, PresentBar, Inspector.Glass, Palette.Glass);
+        foreach (var g in new[] { Menu.GlassPanel, Actions.Glass, CtxTray.Glass })
+        {
+            g.SetResourceReference(GlassPanel.BackdropBaseProperty, "BgBrush");
+            g.BackdropSource = AppRoot;
+        }
+
+        // Ligações entre as partes
+        Menu.RenderTransform = MenuScale;
+        Actions.RenderTransform = ActionsScale;
+        CtxTray.RenderTransform = TrayScale;
+        Tray.RenderTransform = TrayShift;
+        Board.MenuRequested += (item, p) => ShowMenu(item, default, p);
+        Board.TrayRequested += ShowContextTray;
+        Menu.Board = Board;
+        Menu.CloseRequested += CloseMenu;
+        Menu.MoreRequested += ShowItemExtras;
+        Actions.Closed += CloseActions;
+        CtxTray.Board = Board;
+        CtxTray.CloseRequested += CloseContextTray;
+        Palette.Board = Board;
+        Tray.Overlay = Overlay;
+        Tray.Root = WindowRoot;
+        Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style);
+        Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style);
+        Editor.CloseRequested += ClosePage;
+        Editor.ExpandChanged += ApplyEditorLayout;
+        // Quadro estreito (página aberta ao lado): a dica e o status saem para não cobrir o dock.
+        BoardArea.SizeChanged += (_, e) =>
+        {
+            var v = e.NewSize.Width < 1000 || _presenting ? Visibility.Collapsed : Visibility.Visible;
+            Hint.Visibility = v;
+            Status.Visibility = v;
+        };
+        Inspector.Wanted = StorageService.State.Abertos.Contains("inspetor") || !StorageService.State.Abertos.Contains("sem-inspetor");
+
+        Attach(vm);
+        SideProgress = vm.SidebarOpen ? 1 : 0;
+        if (!vm.SidebarOpen) { SidebarGlass.Visibility = Visibility.Collapsed; SideCap.Visibility = Visibility.Visible; }
+
+        _chrome = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _chrome.Tick += (_, _) => AutoHideTick();
+
+        SourceInitialized += (_, _) =>
+        {
+            ThemeService.ApplyToWindow(this);
+            GlassGlow.Attach(this);
+            // Rolagem horizontal do touchpad (o WPF não entrega essa mensagem sozinho).
+            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
+            BoardCursors.SetScale(VisualTreeHelper.GetDpi(this).DpiScaleX);
+            if (StorageService.State.TelaCheia) SetFullscreen(true);
+        };
+        // Balões de ajuda (3 s parado em cima de um botão) e faíscas a cada clique.
+        HelpTips.Attach(this, TipLayer);
+        Sparks.Enabled = StorageService.State.Faiscas;
+        // Ponteiro próprio em todo o app: troca os cursores do Windows pelos equivalentes desenhados.
+        AddHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler((_, e) =>
+        {
+            e.Cursor = BoardCursors.Map(e.Cursor);
+            e.Handled = true;
+        }), handledEventsToo: true);
+        DpiChanged += (_, e) => BoardCursors.SetScale(e.NewDpi.DpiScaleX);
+
+        _dockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.8) };
+        _dockTimer.Tick += (_, _) => { _dockTimer.Stop(); if (!KeepDock()) SetDock(false); };
+        _zoomTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
+        _zoomTimer.Tick += (_, _) => { _zoomTimer.Stop(); HideZoom(); };
+        PreviewMouseMove += (_, e) => DockNear(e.GetPosition(BoardArea));
+        MouseLeave += (_, _) => DockNear(new Point(-1, -1));
+        _itemsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _itemsTimer.Tick += (_, _) => { _itemsTimer.Stop(); App.Library.RefreshCurrent(); };
+
+        ThemeService.Changed += () =>
+        {
+            AnimateBlobs();
+            ApplyGlassBackdropColors();
+            LayoutGlassBackdrop(WindowRoot.RenderSize);
+            RefreshBoardGlass();
+        };
+        StateChanged += (_, _) => ApplyWindowState();
+        PreviewMouseDown += OnPreviewMouseDown;
+        PreviewMouseDown += (_, e) => Sparks.Fire(e.GetPosition(Sparks));
+        PreviewMouseWheel += (_, _) => { CloseMenu(); CloseActions(); };
+        PreviewKeyDown += OnPreviewKeyDown;
+        PreviewKeyUp += (_, e) =>
+        {
+            if (e.Key == Key.Space) Board.SpaceHeld = false;
+        };
+        Deactivated += (_, _) => Board.SpaceHeld = false;
+        Closing += (_, _) => { _vm.Flush(); Editor.Flush(); };
+    }
+
+    public double SideProgress { get => (double)GetValue(SideProgressProperty); set => SetValue(SideProgressProperty, value); }
+
+    /// <summary>Raiz da janela (coordenadas dos menus).</summary>
+    public FrameworkElement Root => WindowRoot;
+
+    // ---------- trocar de quadro ----------
+
+    void Attach(MainViewModel vm)
+    {
+        _vm.PropertyChanged -= OnVmChanged;
+        _vm.Items.CollectionChanged -= OnItemsChanged;
+        _vm = vm;
+        vm.PropertyChanged += OnVmChanged;
+        vm.Items.CollectionChanged += OnItemsChanged;
+        _quietZoomUntil = DateTime.Now.AddSeconds(1); // abrir um quadro não mostra o balão de zoom
+        ApplyTitle(animate: false);
+        ApplySegment(animate: false);
+        UpdateSearchCount();
+    }
+
+    /// <summary>Mostra outro quadro (App.OpenBoard).</summary>
+    public void SetBoard(MainViewModel vm)
+    {
+        CloseMenu();
+        CloseActions();
+        CloseContextTray();
+        if (_presenting) StopPresenting();
+        CloseSearch();
+        Board.Tool = BoardTool.Select;
+        Attach(vm);
+        DataContext = vm;
+        Inspector.Rebuild();
+        RefreshBoardGlass();
+    }
+
+    /// <summary>Tamanho de referência 1440×920, mas sem passar da área livre da tela.</summary>
+    void FitToScreen()
+    {
+        var area = SystemParameters.WorkArea;
+        MinWidth = Math.Min(MinWidth, area.Width);
+        MinHeight = Math.Min(MinHeight, area.Height);
+        Width = Math.Max(MinWidth, Math.Min(Width, area.Width * 0.94));
+        Height = Math.Max(MinHeight, Math.Min(Height, area.Height * 0.94));
+    }
+
+    // A cópia saturada fica fora da árvore visual, então recebe as cores do tema diretamente.
+    void ApplyGlassBackdropColors()
+    {
+        _glassBackdrop.Bg = (Color)FindResource("BgColor");
+        _glassBackdrop.Blob1 = (Color)FindResource("Blob1Color");
+        _glassBackdrop.Blob2 = (Color)FindResource("Blob2Color");
+        _glassBackdrop.Blob3 = (Color)FindResource("Blob3Color");
+    }
+
+    void LayoutGlassBackdrop(Size size)
+    {
+        _glassBackdrop.Measure(size);
+        _glassBackdrop.Arrange(new Rect(size));
+        _glassBackdrop.UpdateLayout();
+    }
+
+    /// <summary>Reposiciona o fundo desfocado dos painéis sobre o quadro e o botão "Ir para o conteúdo".</summary>
+    void RefreshBoardGlass()
+    {
+        GoToContent.Visibility = Board.HasContentInView || _presenting ? Visibility.Collapsed : Visibility.Visible;
+        Board.RefreshGlass();
+    }
+
+    void OnVmChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(MainViewModel.TitleHidden): ApplyTitle(animate: true); break;
+            case nameof(MainViewModel.Model): ApplySegment(animate: true); break;
+            case nameof(MainViewModel.SidebarOpen): if (!_fullscreen) AnimateSidebar(); break;
+            case nameof(MainViewModel.BoardSearch): _hit = -1; UpdateSearchCount(); break;
+            case nameof(MainViewModel.Zoom): ShowZoom(); break;
+            case nameof(MainViewModel.TrayOpen):
+                if (_vm.TrayOpen) SetDock(true);
+                else if (!KeepDock()) { _dockTimer.Stop(); _dockTimer.Start(); }
+                var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.6) };
+                t.Tick += (_, _) => { t.Stop(); RefreshBoardGlass(); };
+                t.Start();
+                break;
+        }
+    }
+
+    void OnGoToContent(object sender, RoutedEventArgs e) => Board.Fit();
+    void OnUndo(object sender, RoutedEventArgs e) => _vm.Undo();
+    void OnRedo(object sender, RoutedEventArgs e) => _vm.Redo();
+
+    // ---------- contador de FPS (Ctrl+Shift+F) ----------
+
+    readonly System.Diagnostics.Stopwatch _fpsClock = new();
+    int _fpsFrames;
+    double _fpsWorst;
+    TimeSpan _fpsLast;
+
+    void ToggleFps()
+    {
+        bool on = FpsPanel.Visibility != Visibility.Visible;
+        FpsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on)
+        {
+            _fpsClock.Restart();
+            _fpsFrames = 0;
+            _fpsWorst = 0;
+            _fpsLast = TimeSpan.Zero;
+            FpsText.Text = "medindo…";
+            CompositionTarget.Rendering += OnFpsFrame;
+            RefreshBoardGlass();
+        }
+        else CompositionTarget.Rendering -= OnFpsFrame;
+    }
+
+    void OnFpsFrame(object? sender, EventArgs e)
+    {
+        var t = ((RenderingEventArgs)e).RenderingTime;
+        if (t == _fpsLast) return;
+        if (_fpsLast != TimeSpan.Zero) _fpsWorst = Math.Max(_fpsWorst, (t - _fpsLast).TotalMilliseconds);
+        _fpsLast = t;
+        _fpsFrames++;
+        double secs = _fpsClock.Elapsed.TotalSeconds;
+        if (secs < 0.5) return;
+        string gpu = (RenderCapability.Tier >> 16) == 2 ? "GPU" : "sem GPU";
+        FpsText.Text = $"{_fpsFrames / secs:0} fps · {gpu} · pior quadro {_fpsWorst:0.0} ms · cálculo {Board.LastWorkMs:0.0} ms · {Board.RealizedCount}/{Board.ItemCount} itens";
+        _fpsClock.Restart();
+        _fpsFrames = 0;
+        _fpsWorst = 0;
+    }
+
+    // Rolagem horizontal (WM_MOUSEHWHEEL): dois dedos no touchpad ou rodinha inclinada.
+    IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_MOUSEHWHEEL = 0x020E;
+        if (msg == WM_MOUSEHWHEEL && Board.IsMouseOver)
+        {
+            int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+            Board.PanBy(new Vector(-delta * 0.6, 0));
+            CloseMenu();
+            handled = true;
+        }
+        return IntPtr.Zero;
+    }
+
+    // ---------- barra lateral (largura 292 → 0, mola de 0.45 s) ----------
+
+    void AnimateSidebar() => ShowSidebar(_vm.SidebarOpen);
+
+    void ShowSidebar(bool open)
+    {
+        SidebarGlass.IsHitTestVisible = open;
+        if (open) SidebarGlass.Visibility = Visibility.Visible;
+        SideCap.Visibility = open || _fullscreen ? Visibility.Collapsed : Visibility.Visible;
+        Anim.To(this, SideProgressProperty, open ? 1 : 0, 0.45, Anim.Sidebar, () =>
+        {
+            if (SideProgress < 0.01) SidebarGlass.Visibility = Visibility.Collapsed;
+        });
+        Anim.To(SidebarGlass, OpacityProperty, open ? 1 : 0, 0.3, Anim.Ease);
+    }
+
+    void ApplySide()
+    {
+        double p = Math.Max(0, SideProgress);
+        SidebarGlass.Width = SidebarWidth * p;
+        SidebarGlass.Margin = new Thickness(0, 0, _fullscreen ? 0 : 14 * Math.Min(1, p), 0);
+    }
+
+    // ---------- título grande (recolhe em 0.5 s) e renomear ----------
+
+    void ApplyTitle(bool animate)
+    {
+        bool hidden = _vm.TitleHidden || _fullscreen;
+        double k = animate ? 1 : 0;
+        Anim.To(TitleCollapse, CollapsePanel.ProgressProperty, hidden ? 0 : 1, 0.5 * k, Anim.Collapse);
+        Anim.To(BigTitle, OpacityProperty, hidden ? 0 : 1, 0.3 * k, Anim.Ease);
+        Anim.To(BigMove, TranslateTransform.YProperty, hidden ? -14 : 0, 0.5 * k, Anim.CollapseMove);
+        Anim.To(BigScale, ScaleTransform.ScaleXProperty, hidden ? 0.98 : 1, 0.5 * k, Anim.CollapseMove);
+        Anim.To(BigScale, ScaleTransform.ScaleYProperty, hidden ? 0.98 : 1, 0.5 * k, Anim.CollapseMove);
+        BigTitle.IsHitTestVisible = !hidden;
+
+        // O título pequeno da barra surge subindo 8 px.
+        Anim.To(InlineTitle, OpacityProperty, hidden ? 1 : 0, 0.35 * k, Anim.Ease);
+        Anim.To(InlineMove, TranslateTransform.YProperty, hidden ? 0 : 8, 0.45 * k, Anim.Inline);
+    }
+
+    void OnTitleDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) { StartRename(); e.Handled = true; }
+        else DragArea(e);
+    }
+
+    void StartRename()
+    {
+        if (_vm.TitleHidden) _vm.TitleHidden = false;
+        TitleEditor.Text = _vm.BoardTitle;
+        TitleEditor.Visibility = Visibility.Visible;
+        BigTitleText.Visibility = Visibility.Hidden;
+        Dispatcher.BeginInvoke(() => { TitleEditor.Focus(); TitleEditor.SelectAll(); }, DispatcherPriority.Input);
+    }
+
+    void EndRename(bool commit)
+    {
+        if (TitleEditor.Visibility != Visibility.Visible) return;
+        TitleEditor.Visibility = Visibility.Collapsed;
+        BigTitleText.Visibility = Visibility.Visible;
+        if (commit)
+        {
+            _vm.Rename(TitleEditor.Text);
+            App.Library.Refresh();
+        }
+    }
+
+    void OnTitleKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { EndRename(true); Board.Focus(); e.Handled = true; }
+        else if (e.Key == Key.Escape) { EndRename(false); e.Handled = true; }
+    }
+
+    void OnTitleLost(object sender, KeyboardFocusChangedEventArgs e) => EndRename(true);
+
+    // ---------- controle segmentado ----------
+
+    void ApplySegment(bool animate) =>
+        Anim.To(SegMove, TranslateTransform.XProperty, (int)_vm.Model * 99, animate ? 0.5 : 0, Anim.Segment);
+
+    void OnPickModel(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: BoardModel m }) _vm.Model = m;
+    }
+
+    // ---------- zoom ----------
+
+    void OnZoomIn(object sender, RoutedEventArgs e) => Board.ZoomStep(+1);
+    void OnZoomOut(object sender, RoutedEventArgs e) => Board.ZoomStep(-1);
+    void OnFit(object sender, RoutedEventArgs e) => Board.Fit();
+
+    // ---------- menus flutuantes (abrem onde clicou e nunca saem da tela) ----------
+
+    void Place(FrameworkElement el, ScaleTransform scale, Point windowPoint, bool pop = true)
+    {
+        el.Visibility = Visibility.Visible;
+        el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = el.DesiredSize;
+        double w = WindowRoot.ActualWidth, h = WindowRoot.ActualHeight;
+        double x = Math.Clamp(windowPoint.X, 8, Math.Max(8, w - size.Width - 8));
+        double y = Math.Clamp(windowPoint.Y, 8, Math.Max(8, h - size.Height - 8));
+        Canvas.SetLeft(el, x);
+        Canvas.SetTop(el, y);
+        el.RenderTransformOrigin = new Point(
+            Math.Clamp((windowPoint.X - x) / Math.Max(1, size.Width), 0, 1),
+            Math.Clamp((windowPoint.Y - y) / Math.Max(1, size.Height), 0, 1));
+        if (!pop) return;
+        Anim.Set(scale, ScaleTransform.ScaleXProperty, 0.86);
+        Anim.Set(scale, ScaleTransform.ScaleYProperty, 0.86);
+        Anim.Set(el, OpacityProperty, 0.0);
+        Anim.To(scale, ScaleTransform.ScaleXProperty, 1, 0.4, Anim.Pop);
+        Anim.To(scale, ScaleTransform.ScaleYProperty, 1, 0.4, Anim.Pop);
+        Anim.To(el, OpacityProperty, 1, 0.2, Anim.Ease);
+        GlassGlow.Kick();
+    }
+
+    internal void ShowMenuAt(BoardItemViewModel? item, Point boardPoint, Point windowPoint)
+    {
+        if (item is not null) _vm.Selected = item;
+        ShowMenu(item, boardPoint, windowPoint);
+    }
+
+    void ShowMenu(BoardItemViewModel? item, Point boardPoint, Point windowPoint)
+    {
+        CloseActions();
+        CloseContextTray();
+        if (item is null) Menu.ShowForBoard(boardPoint);
+        else Menu.ShowForItem(item);
+        Place(Menu, MenuScale, windowPoint);
+        _menuOpen = true;
+        Dispatcher.BeginInvoke(Menu.GlassPanel.RefreshBackdrop, DispatcherPriority.Loaded);
+    }
+
+    void CloseMenu()
+    {
+        if (!_menuOpen) return;
+        _menuOpen = false;
+        Menu.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Menu genérico de ações (lateral, galeria, "…", opções extras do item).</summary>
+    public void ShowActions(Point windowPoint, IEnumerable<ActionItem> items)
+    {
+        CloseMenu();
+        CloseContextTray();
+        Actions.SetItems(items);
+        Place(Actions, ActionsScale, windowPoint);
+        _actionsOpen = true;
+        Dispatcher.BeginInvoke(Actions.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
+    }
+
+    void CloseActions()
+    {
+        if (!_actionsOpen) return;
+        _actionsOpen = false;
+        Actions.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Bandeja junto ao cursor. Um segundo clique direito fecha.</summary>
+    void ShowContextTray(Point world, Point windowPoint)
+    {
+        CloseMenu();
+        CloseActions();
+        if (_ctxWasOpen) { _ctxWasOpen = false; return; }
+        CtxTray.Show(world);
+        Place(CtxTray, TrayScale, windowPoint);
+        _ctxOpen = true;
+        Dispatcher.BeginInvoke(CtxTray.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
+    }
+
+    void CloseContextTray()
+    {
+        if (!_ctxOpen) return;
+        _ctxOpen = false;
+        CtxTray.Visibility = Visibility.Collapsed;
+    }
+
+    void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // Clicar fora fecha os menus (o clique continua valendo para o que estiver embaixo).
+        _ctxWasOpen = _ctxOpen && !CtxTray.IsMouseOver && e.ChangedButton == MouseButton.Right;
+        if (_menuOpen && !Menu.IsMouseOver) CloseMenu();
+        if (_actionsOpen && !Actions.IsMouseOver) CloseActions();
+        if (_ctxOpen && !CtxTray.IsMouseOver) CloseContextTray();
+    }
+
+    /// <summary>Opções extras de um item: agrupar, alinhar, camadas, estilo e descrição.</summary>
+    void ShowItemExtras(BoardItemViewModel item, Point at)
+    {
+        var sel = _vm.SelectedItems.ToList();
+        var list = new List<ActionItem>
+        {
+            new("Para o topo", "IcChevronUp", () => _vm.ToTop(_vm.SelectedItems.ToList())),
+            new("Para o fundo", "IcChevronDown", () => _vm.ToBottom(_vm.SelectedItems.ToList())),
+            new("Uma camada para frente", "IcArrowUp", () => _vm.Step(item, +1)),
+            new("Uma camada para trás", "IcArrowDown", () => _vm.Step(item, -1)),
+            new("Copiar estilo", "IcBrush", () => _vm.CopyStyle(item), Separator: true),
+        };
+        if (_vm.HasStyleClip) list.Add(new("Colar estilo", "IcBrush", _vm.PasteStyle));
+        list.Add(new("Descrição…", "IcDescription", () => { Inspector.Wanted = true; _vm.Selected = item; }));
+        if (sel.Count >= 2)
+        {
+            list.Add(new("Agrupar (Ctrl+G)", "IcGroup", _vm.GroupSelection, Separator: true));
+            list.Add(new("Alinhar à esquerda", "IcAlignLeft", () => _vm.Align("esquerda")));
+            list.Add(new("Centralizar", "IcAlignCenter", () => _vm.Align("centro")));
+            list.Add(new("Alinhar no topo", "IcAlignTop", () => _vm.Align("topo")));
+            list.Add(new("Centralizar na vertical", "IcAlignMiddle", () => _vm.Align("meio")));
+            if (sel.Count >= 3)
+            {
+                list.Add(new("Distribuir na horizontal", "IcDistributeH", () => _vm.Distribute(true)));
+                list.Add(new("Distribuir na vertical", "IcDistributeV", () => _vm.Distribute(false)));
+            }
+        }
+        if (sel.Any(i => i.Group is not null)) list.Add(new("Desagrupar (Ctrl+Shift+G)", "IcGroup", _vm.Ungroup, Separator: sel.Count < 2));
+        ShowActions(at, list);
+    }
+
+    // ---------- menu "…" da barra ----------
+
+    void OnMore(object sender, RoutedEventArgs e)
+    {
+        var p = MoreButton.TranslatePoint(new Point(MoreButton.ActualWidth, MoreButton.ActualHeight + 8), WindowRoot);
+        var sel = _vm.SelectedItems.ToList();
+        var list = new List<ActionItem>
+        {
+            new("Desfazer (Ctrl+Z)", "IcUndo", _vm.Undo),
+            new("Refazer (Ctrl+Shift+Z)", "IcRedo", _vm.Redo),
+            new("Procurar (Ctrl+K)", "IcSearch", ShowSearch, Separator: true),
+            new("Ajustar o quadro à tela", "IcTarget", () => Board.Fit()) { Tip = "Enquadra todos os itens na tela · Ctrl+1" },
+            new("Buscar no quadro (Ctrl+F)", "IcTarget", OpenSearch),
+            new("Renomear quadro", "IcPencil", StartRename),
+            new("Mostrar grade", "IcGrid", () => _vm.ShowGrid = !_vm.ShowGrid, Separator: true, Checked: _vm.ShowGrid),
+            new("Modo diagrama", "IcLine", () => _vm.DiagramMode = !_vm.DiagramMode, Checked: _vm.DiagramMode),
+            new("Inspetor", "IcSettings", ToggleInspector, Checked: Inspector.Wanted),
+            new(_vm.TitleHidden ? "Mostrar título" : "Ocultar título", "IcTitle", () => _vm.TitleHidden = !_vm.TitleHidden),
+            new("Cenas e apresentação…", "IcScenes", () => ShowScenes(p), Separator: true),
+            new("Apresentar", "IcPresent", StartPresenting),
+            new("Exportar quadro (PNG, PDF)…", "IcExport", () => Export(selectionOnly: false), Separator: true),
+        };
+        if (sel.Count > 0) list.Add(new("Exportar seleção…", "IcExport", () => Export(selectionOnly: true)));
+        list.Add(new("Abrir a pasta do cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true));
+        ShowActions(p, list);
+    }
+
+    void ToggleInspector()
+    {
+        Inspector.Wanted = !Inspector.Wanted;
+        MainViewModel.SaveOpen("inspetor", Inspector.Wanted);
+        MainViewModel.SaveOpen("sem-inspetor", !Inspector.Wanted);
+    }
+
+    // ---------- cenas e apresentação ----------
+
+    void ShowScenes(Point at)
+    {
+        var list = new List<ActionItem> { ActionItem.Header("Cenas deste quadro") };
+        foreach (var s in _vm.Scenes)
+        {
+            var scene = s;
+            list.Add(new(scene.Nome, "IcTarget", () => Board.GoTo(scene.X, scene.Y, scene.Zoom)));
+        }
+        if (_vm.Scenes.Count == 0) list.Add(ActionItem.Header("Nenhuma ainda: enquadre o quadro e salve a vista"));
+        list.Add(new("Salvar a vista atual como cena", "IcPlus", () => _vm.AddScene($"Cena {_vm.Scenes.Count + 1}"), Separator: true));
+        if (_vm.Scenes.Count > 0)
+        {
+            list.Add(new("Apresentar (setas ← →)", "IcPresent", StartPresenting));
+            list.Add(new("Apagar a última cena", "IcTrash", () => _vm.RemoveScene(_vm.Scenes[^1]), Danger: true, Separator: true));
+        }
+        Dispatcher.BeginInvoke(() => ShowActions(at, list), DispatcherPriority.Input);
+    }
+
+    bool _presenting, _presentMadeFullscreen;
+    int _scene;
+
+    void StartPresenting()
+    {
+        if (_presenting) return;
+        _presenting = true;
+        CloseSearch();
+        _vm.EndEdit();
+        _vm.ClearSelection();
+        Board.Tool = BoardTool.Select;
+        _presentMadeFullscreen = !_fullscreen;
+        if (!_fullscreen) SetFullscreen(true);
+        foreach (var el in new UIElement[] { Hint, Tray, Status, Inspector, Palette }) el.Visibility = Visibility.Collapsed;
+        PresentBar.Visibility = Visibility.Visible;
+        _scene = 0;
+        GoScene(0);
+        Board.Focus();
+    }
+
+    void StopPresenting()
+    {
+        _presenting = false;
+        PresentBar.Visibility = Visibility.Collapsed;
+        foreach (var el in new UIElement[] { Hint, Tray, Status }) el.Visibility = Visibility.Visible;
+        Inspector.Rebuild();
+        if (_presentMadeFullscreen) SetFullscreen(false);
+    }
+
+    void GoScene(int delta)
+    {
+        int count = Math.Max(1, _vm.Scenes.Count);
+        _scene = Math.Clamp(_scene + delta, 0, count - 1);
+        if (_vm.Scenes.Count == 0) Board.Fit();
+        else
+        {
+            var s = _vm.Scenes[_scene];
+            Board.GoTo(s.X, s.Y, s.Zoom, 0.9);
+        }
+        PresentText.Text = _vm.Scenes.Count == 0 ? "Quadro inteiro" : $"{_vm.Scenes[_scene].Nome} · {_scene + 1} de {count}";
+    }
+
+    void OnPresentPrev(object sender, RoutedEventArgs e) => GoScene(-1);
+    void OnPresentNext(object sender, RoutedEventArgs e) => GoScene(+1);
+    void OnPresentExit(object sender, RoutedEventArgs e) => StopPresenting();
+
+    // ---------- busca no quadro (Ctrl+F) ----------
+
+    int _hit = -1;
+
+    void OpenSearch()
+    {
+        SearchBar.Visibility = Visibility.Visible;
+        Hint.Visibility = Visibility.Collapsed;
+        Dispatcher.BeginInvoke(() => { SearchBox.Focus(); SearchBox.SelectAll(); }, DispatcherPriority.Input);
+        RefreshBoardGlass();
+    }
+
+    void CloseSearch()
+    {
+        if (SearchBar.Visibility != Visibility.Visible) return;
+        SearchBar.Visibility = Visibility.Collapsed;
+        if (BoardArea.ActualWidth >= 1000) Hint.Visibility = Visibility.Visible;
+        _vm.BoardSearch = "";
+        Board.Focus();
+    }
+
+    void UpdateSearchCount()
+    {
+        int n = _vm.BoardSearchHits.Count;
+        SearchCount.Text = (_vm.BoardSearch ?? "").Trim().Length == 0 ? "" : n == 0 ? "nada" : _hit >= 0 ? $"{_hit + 1} de {n}" : n == 1 ? "1 item" : $"{n} itens";
+    }
+
+    void JumpHit(int dir)
+    {
+        var hits = _vm.BoardSearchHits;
+        if (hits.Count == 0) return;
+        _hit = ((_hit < 0 && dir < 0 ? 0 : _hit + dir) % hits.Count + hits.Count) % hits.Count;
+        Board.FocusItem(hits[_hit]); // a câmera voa até o resultado
+        UpdateSearchCount();
+    }
+
+    void OnSearchKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { JumpHit(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : +1); e.Handled = true; }
+        else if (e.Key == Key.Escape) { CloseSearch(); e.Handled = true; }
+    }
+
+    void OnSearchPrev(object sender, RoutedEventArgs e) => JumpHit(-1);
+    void OnSearchNext(object sender, RoutedEventArgs e) => JumpHit(+1);
+    void OnSearchClose(object sender, RoutedEventArgs e) => CloseSearch();
+
+    // ---------- exportar ----------
+
+    void Export(bool selectionOnly)
+    {
+        var items = selectionOnly ? _vm.SelectedItems.ToList() : _vm.Items.ToList();
+        if (items.Count == 0) return;
+        var dlg = new SaveFileDialog
+        {
+            Title = selectionOnly ? "Exportar seleção" : "Exportar quadro",
+            FileName = _vm.BoardTitle + (selectionOnly ? " (seleção)" : ""),
+            Filter = "Imagem PNG|*.png|Documento PDF|*.pdf",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        var sel = _vm.SelectedItems.ToList();
+        _vm.ClearSelection(); // o contorno azul não vai para a imagem
+        var image = Board.RenderRegion(items, 2, onlyThese: selectionOnly);
+        _vm.SelectMany(sel, add: false);
+        try
+        {
+            if (dlg.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) ExportService.SavePdf(image, dlg.FileName);
+            else ExportService.SavePng(image, dlg.FileName);
+        }
+        catch (IOException) { MessageBox.Show(this, "Não foi possível salvar o arquivo (ele está aberto em outro programa?).", "Quadtab"); }
+    }
+
+    /// <summary>Miniatura do quadro para a galeria (sem seleção).</summary>
+    public void MakeThumbnail()
+    {
+        try
+        {
+            if (_vm.Items.Count == 0) return;
+            var area = _vm.Items.Aggregate(Rect.Empty, (r, i) => { r.Union(i.Bounds); return r; });
+            double scale = Math.Min(1, 560 / Math.Max(1, Math.Max(area.Width, area.Height)));
+            var sel = _vm.SelectedItems.ToList();
+            foreach (var i in sel) i.IsSelected = false;
+            var image = Board.RenderRegion(_vm.Items.ToList(), scale, onlyThese: false);
+            foreach (var i in sel) i.IsSelected = true;
+            var path = StorageService.ThumbPath(_vm.FilePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            ExportService.SavePng(image, path);
+        }
+        catch { } // miniatura é opcional
+    }
+
+    // ---------- páginas (editor ao lado) ----------
+
+    public void OpenPage(string path)
+    {
+        if (!File.Exists(path)) return;
+        Editor.Open(path);
+        ApplyEditorLayout();
+        StorageService.Touch(path);
+        App.Library.Refresh();
+    }
+
+    void ClosePage()
+    {
+        Editor.Close();
+        ApplyEditorLayout();
+    }
+
+    void ApplyEditorLayout()
+    {
+        bool open = Editor.Visibility == Visibility.Visible;
+        bool expanded = open && Editor.Expanded;
+        EditorColumn.Width = open ? new GridLength(expanded ? 1 : 0.85, GridUnitType.Star) : new GridLength(0);
+        BoardColumn.Width = expanded ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        Editor.Margin = new Thickness(expanded ? 0 : 14, 0, 0, 0);
+        BoardArea.Visibility = expanded ? Visibility.Hidden : Visibility.Visible;
+    }
+
+    public void PageRenamed(string oldPath, string newPath)
+    {
+        Editor.Renamed(oldPath, newPath);
+        App.Library.Refresh();
+    }
+
+    public void FlushPage() => Editor.Flush();
+
+    // ---------- tela cheia (F11): lateral e barra se escondem e voltam pela borda ----------
+
+    bool _fullscreen;
+    Rect _restoreBounds;
+    WindowState _restoreState;
+    readonly DispatcherTimer _chrome;
+    DateTime _sideAway, _barAway;
+    bool _sideShown, _barShown;
+
+    void OnFullscreen(object sender, RoutedEventArgs e) => SetFullscreen(!_fullscreen);
+
+    void SetFullscreen(bool on)
+    {
+        if (on == _fullscreen) return;
+        _fullscreen = on;
+        StorageService.State.TelaCheia = on && !_presenting;
+        StorageService.SaveState();
+        FullIcon.Data = (Geometry)FindResource(on ? "IcExitFullscreen" : "IcFullscreen");
+        if (on)
+        {
+            _restoreState = WindowState;
+            _restoreBounds = new Rect(Left, Top, Width, Height);
+            WindowState = WindowState.Normal;
+            var mon = MonitorBounds();
+            if (!DevMode) { Left = mon.Left; Top = mon.Top; } // no modo de conferência a janela fica fora da tela
+            Width = mon.Width; Height = mon.Height;
+            ResizeMode = ResizeMode.NoResize;
+            AppRoot.Margin = new Thickness(10);
+            // A coluna principal ocupa tudo; lateral e barra flutuam por cima quando aparecem.
+            Grid.SetColumn(MainColumn, 0);
+            Grid.SetColumnSpan(MainColumn, 2);
+            Grid.SetRow(Stage, 0);
+            Grid.SetRowSpan(Stage, 3);
+            Stage.Margin = new Thickness(0);
+            _sideShown = _barShown = false;
+            ShowSidebar(false);
+            Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse);
+            _chrome.Start();
+        }
+        else
+        {
+            _chrome.Stop();
+            ResizeMode = ResizeMode.CanResize;
+            if (!DevMode) { Left = _restoreBounds.Left; Top = _restoreBounds.Top; }
+            Width = _restoreBounds.Width; Height = _restoreBounds.Height;
+            WindowState = _restoreState;
+            AppRoot.Margin = new Thickness(14);
+            Grid.SetColumn(MainColumn, 1);
+            Grid.SetColumnSpan(MainColumn, 1);
+            Grid.SetRow(Stage, 2);
+            Grid.SetRowSpan(Stage, 1);
+            Stage.Margin = new Thickness(0, 14, 0, 0);
+            ShowSidebar(_vm.SidebarOpen);
+            Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse);
+        }
+        ApplySide();
+        ApplyTitle(animate: true);
+        RefreshBoardGlass();
+    }
+
+    void AutoHideTick()
+    {
+        if (!_fullscreen || _presenting || !IsActive) return;
+        var p = Mouse.GetPosition(WindowRoot);
+        var now = DateTime.Now;
+        // Lateral: aparece ao encostar na borda esquerda, some 1 s depois que o mouse sai dela.
+        bool nearSide = p.X <= 6 || (_sideShown && p.X <= SidebarWidth + 30);
+        if (nearSide) _sideAway = now;
+        if (nearSide && !_sideShown) { _sideShown = true; ShowSidebar(true); }
+        else if (!nearSide && _sideShown && (now - _sideAway).TotalSeconds > 1 && !SidebarView.IsKeyboardFocusWithin && !_actionsOpen)
+        { _sideShown = false; ShowSidebar(false); }
+        // Barra de ferramentas: o mesmo pela borda de cima.
+        bool nearBar = p.Y <= 6 || (_barShown && p.Y <= 76);
+        if (nearBar) _barAway = now;
+        if (nearBar && !_barShown) { _barShown = true; Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse); }
+        else if (!nearBar && _barShown && (now - _barAway).TotalSeconds > 1 && !_actionsOpen)
+        { _barShown = false; Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse); }
+    }
+
+    Rect MonitorBounds()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (hwnd == IntPtr.Zero || !GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info))
+            return new Rect(0, 0, SystemParameters.PrimaryScreenWidth, SystemParameters.PrimaryScreenHeight);
+        double s = GetDpiForWindow(hwnd) / 96.0;
+        var r = info.rcMonitor;
+        return new Rect(r.Left / s, r.Top / s, (r.Right - r.Left) / s, (r.Bottom - r.Top) / s);
+    }
+
+    // ---------- balão do zoom (some 1,2 s depois que o zoom para) ----------
+
+    readonly DispatcherTimer _zoomTimer;
+    DateTime _quietZoomUntil;
+    bool _zoomShown;
+
+    void ShowZoom()
+    {
+        if (DateTime.Now < _quietZoomUntil) return;
+        _zoomTimer.Stop();
+        _zoomTimer.Start();
+        if (_zoomShown) return;
+        _zoomShown = true;
+        ZoomPanel.Visibility = Visibility.Visible;
+        Anim.Set(ZoomScale, ScaleTransform.ScaleXProperty, 0.9);
+        Anim.Set(ZoomScale, ScaleTransform.ScaleYProperty, 0.9);
+        Anim.To(ZoomScale, ScaleTransform.ScaleXProperty, 1, 0.4, Anim.Pop);
+        Anim.To(ZoomScale, ScaleTransform.ScaleYProperty, 1, 0.4, Anim.Pop);
+        Anim.To(ZoomPanel, OpacityProperty, 1, 0.18, Anim.Ease);
+        Board.RefreshGlass();
+    }
+
+    void HideZoom()
+    {
+        _zoomShown = false;
+        Anim.To(ZoomPanel, OpacityProperty, 0, 0.25, Anim.Ease, () =>
+        {
+            if (!_zoomShown) ZoomPanel.Visibility = Visibility.Collapsed;
+        });
+    }
+
+    // ---------- dock da bandeja que se esconde ----------
+
+    readonly DispatcherTimer _dockTimer;
+    bool _dockShown;
+
+    /// <summary>Mouse a menos de 80 px da borda de baixo, na faixa central do quadro.</summary>
+    void DockNear(Point p)
+    {
+        double w = BoardArea.ActualWidth, h = BoardArea.ActualHeight;
+        bool near = p.X >= 0 && p.Y <= h && h - p.Y <= 80 && Math.Abs(p.X - w / 2) <= Math.Max(260, Tray.DockGlass.ActualWidth / 2 + 80) && !_presenting;
+        if (near || KeepDock())
+        {
+            _dockTimer.Stop();
+            if (near) SetDock(true);
+        }
+        else if (_dockShown && !_dockTimer.IsEnabled) _dockTimer.Start();
+    }
+
+    /// <summary>O dock fica à mostra: bandeja aberta, algo sendo arrastado dela ou mouse em cima.</summary>
+    bool KeepDock() => _vm.TrayOpen || Tray.IsDragging || Tray.IsMouseOver;
+
+    void SetDock(bool show)
+    {
+        if (show == _dockShown) return;
+        _dockShown = show;
+        if (show) Anim.To(TrayShift, TranslateTransform.YProperty, 0, 0.55, Anim.Panel);
+        else Anim.To(TrayShift, TranslateTransform.YProperty, 100, 0.4, Anim.Ease);
+        Anim.To(TrayHandle, OpacityProperty, show ? 0 : 1, 0.25, Anim.Ease);
+        TrackGlass(0.6);
+    }
+
+    // Enquanto o dock anda, o fundo desfocado do vidro acompanha a cada quadro.
+    DateTime _trackUntil;
+    bool _tracking;
+
+    void TrackGlass(double seconds)
+    {
+        _trackUntil = DateTime.Now.AddSeconds(seconds);
+        if (_tracking) return;
+        _tracking = true;
+        CompositionTarget.Rendering += OnTrackGlass;
+    }
+
+    void OnTrackGlass(object? sender, EventArgs e)
+    {
+        Board.RefreshGlass();
+        if (DateTime.Now < _trackUntil) return;
+        _tracking = false;
+        CompositionTarget.Rendering -= OnTrackGlass;
+    }
+
+    // ---------- itens do quadro aberto na lateral ----------
+
+    readonly DispatcherTimer _itemsTimer;
+
+    void OnItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        _itemsTimer.Stop();
+        _itemsTimer.Start();
+    }
+
+    // ---------- tema: as manchas do fundo mudam de cor suavemente ----------
+
+    Color[]? _blobColors;
+
+    void AnimateBlobs()
+    {
+        var to = new[] { "BgColor", "Blob1Color", "Blob2Color", "Blob3Color" }.Select(k => (Color)FindResource(k)).ToArray();
+        var dps = new[] { BackdropBlobs.BgProperty, BackdropBlobs.Blob1Property, BackdropBlobs.Blob2Property, BackdropBlobs.Blob3Property };
+        var from = _blobColors ?? dps.Select(d => (Color)Blobs.GetValue(d)).ToArray();
+        for (int i = 0; i < 4; i++)
+            Blobs.BeginAnimation(dps[i], new System.Windows.Media.Animation.ColorAnimation(from[i], to[i], TimeSpan.FromSeconds(SystemParameters.ClientAreaAnimation ? 0.3 : 0)));
+        _blobColors = to;
+    }
+
+    // ---------- Procurar (Ctrl+K) e Ajustes ----------
+
+    /// <summary>Caixa de busca de vidro no centro: quadros, páginas e textos.</summary>
+    public void ShowSearch()
+    {
+        CloseActions();
+        Quick.Show();
+    }
+
+    public void ShowSettings(Point at)
+    {
+        var s = StorageService.State;
+        ShowActions(at,
+        [
+            ActionItem.Header("Ajustes"),
+            new("Seguir o tema do Windows", "IcSettings", ThemeService.FollowSystem, Checked: s.Tema is null) { Tip = "Volta a usar o tema claro ou escuro do Windows" },
+            new("Faíscas ao clicar", "IcStar", () =>
+            {
+                s.Faiscas = !s.Faiscas;
+                Sparks.Enabled = s.Faiscas;
+                StorageService.SaveState();
+            }, Checked: s.Faiscas) { Tip = "Liga ou desliga as faíscas que saem do ponteiro a cada clique" },
+            new("Inspetor ao selecionar", "IcSettings", ToggleInspector, Checked: Inspector.Wanted) { Tip = "Mostra o painel de propriedades quando algo está selecionado" },
+            new("Contador de FPS", "IcGrid", ToggleFps, Checked: FpsPanel.Visibility == Visibility.Visible) { Tip = "Mostra a velocidade do quadro · Ctrl+Shift+F" },
+            new("Abrir a pasta Cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true) { Tip = "Abre no Explorador a pasta onde tudo fica guardado" },
+        ]);
+    }
+
+    // ---------- conferência (desenvolvimento) ----------
+
+    static bool DevMode => Environment.GetEnvironmentVariable("QUADTAB_PRINT") is { Length: > 0 };
+
+    internal void ShowContextTrayAt(Point windowPoint) => ShowContextTray(Board.ViewCenter, windowPoint);
+    internal void TestFullscreen() => SetFullscreen(true);
+    internal void TestMore() => OnMore(MoreButton, new RoutedEventArgs());
+    internal void TestPresent() => StartPresenting();
+    internal void TestDock() => SetDock(true);
+    internal void TestSearchBox(string text) => Quick.ShowWith(text);
+
+    internal void TestSearch(string q)
+    {
+        OpenSearch();
+        _vm.BoardSearch = q;
+        JumpHit(+1);
+    }
+
+    // ---------- teclado ----------
+
+    void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var mods = Keyboard.Modifiers;
+        bool ctrl = mods.HasFlag(ModifierKeys.Control), shift = mods.HasFlag(ModifierKeys.Shift);
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Atalhos que valem em qualquer lugar
+        switch (key)
+        {
+            case Key.F11: SetFullscreen(!_fullscreen); e.Handled = true; return;
+            case Key.O or Key.K when ctrl: ShowSearch(); e.Handled = true; return;
+            case Key.Left when mods == ModifierKeys.Alt: App.Library.GoBackCommand.Execute(null); e.Handled = true; return;
+            case Key.Right when mods == ModifierKeys.Alt: App.Library.GoForwardCommand.Execute(null); e.Handled = true; return;
+            case Key.F when ctrl && shift: ToggleFps(); e.Handled = true; return;
+        }
+
+        if (Keyboard.FocusedElement is TextBox or RichTextBox)
+        {
+            if (key == Key.Escape && (_menuOpen || _actionsOpen || _ctxOpen)) { CloseMenu(); CloseActions(); CloseContextTray(); e.Handled = true; }
+            return;
+        }
+        if (Quick.IsOpen) return;
+
+        if (_presenting)
+        {
+            switch (key)
+            {
+                case Key.Right or Key.Down or Key.PageDown or Key.Space or Key.Enter: GoScene(+1); e.Handled = true; return;
+                case Key.Left or Key.Up or Key.PageUp or Key.Back: GoScene(-1); e.Handled = true; return;
+                case Key.Escape: StopPresenting(); e.Handled = true; return;
+            }
+        }
+
+        switch (key)
+        {
+            case Key.Escape:
+                CloseMenu(); CloseActions(); CloseContextTray();
+                if (Board.Tool != BoardTool.Select) Board.Tool = BoardTool.Select;
+                else if (SearchBar.Visibility == Visibility.Visible) CloseSearch();
+                else if (App.Library.GalleryOpen) App.Library.GalleryOpen = false;
+                else { _vm.EndEdit(); _vm.ClearSelection(); }
+                break;
+            case Key.Delete or Key.Back when _vm.SelectionCount > 0:
+                CloseMenu();
+                _vm.RemoveSelected();
+                break;
+            case Key.A when ctrl: _vm.SelectAll(); break;
+            case Key.Z when ctrl && shift: _vm.Redo(); break;
+            case Key.Z when ctrl: _vm.Undo(); break;
+            case Key.Y when ctrl: _vm.Redo(); break;
+            case Key.C when ctrl: _vm.Copy(); break;
+            case Key.X when ctrl: _vm.Cut(); break;
+            case Key.V when ctrl: MediaService.Paste(_vm, Board.PointerWorld); break;
+            case Key.D when ctrl && _vm.SelectionCount > 0: _vm.DuplicateMany(_vm.SelectedItems.ToList(), new Vector(30, 30)); break;
+            case Key.G when ctrl && shift: _vm.Ungroup(); break;
+            case Key.G when ctrl: _vm.GroupSelection(); break;
+            case Key.L when ctrl && _vm.Selected is { } locked: _vm.ToggleLock(locked); break;
+            case Key.F when ctrl: OpenSearch(); break;
+            case Key.N when ctrl: App.Library.NewBoard(); break;
+            case Key.OemCloseBrackets when ctrl: if (shift) _vm.ToTop(_vm.SelectedItems.ToList()); else foreach (var i in _vm.SelectedItems.ToList()) _vm.Step(i, +1); break;
+            case Key.OemOpenBrackets when ctrl: if (shift) _vm.ToBottom(_vm.SelectedItems.ToList()); else foreach (var i in _vm.SelectedItems.ToList()) _vm.Step(i, -1); break;
+            case Key.F2:
+                if (_vm.Selected is { } edit)
+                {
+                    if (edit is { Kind: ItemKind.Page, FileFullPath: { } page }) OpenPage(page);
+                    else _vm.BeginEdit(edit, EditField.Text);
+                }
+                else StartRename();
+                break;
+            case Key.Left or Key.Right or Key.Up or Key.Down when _vm.SelectionCount > 0:
+                {
+                    // Setas empurram a seleção 1 px (Shift: 10 px).
+                    double step = shift ? 10 : 1;
+                    var d = key switch { Key.Left => new Vector(-step, 0), Key.Right => new Vector(step, 0), Key.Up => new Vector(0, -step), _ => new Vector(0, step) };
+                    _vm.Checkpoint(coalesce: true);
+                    foreach (var i in _vm.SelectedItems.Where(i => !i.Locked).ToList()) { i.X += d.X; i.Y += d.Y; }
+                    _vm.CommitMove();
+                    break;
+                }
+            case Key.Space:
+                if (!e.IsRepeat) Board.SpaceHeld = true; // Espaço + arrastar move o quadro
+                break;
+            case Key.D0 or Key.NumPad0 when ctrl: Board.ZoomReset(); break;
+            case Key.D1 or Key.NumPad1 when ctrl: Board.Fit(); break;
+            case Key.OemPlus or Key.Add when ctrl: Board.ZoomStep(+1); break;
+            case Key.OemMinus or Key.Subtract when ctrl: Board.ZoomStep(-1); break;
+            default: return;
+        }
+        e.Handled = true;
+    }
+
+    // ---------- janela ----------
+
+    void OnDragArea(object sender, MouseButtonEventArgs e) => DragArea(e);
+
+    /// <summary>Arrasta a janela (dois cliques maximizam).</summary>
+    public void DragArea(MouseButtonEventArgs e)
+    {
+        if (_fullscreen) return;
+        if (e.ClickCount == 2) ToggleMaximize();
+        else if (e.ButtonState == MouseButtonState.Pressed) DragMove();
+    }
+
+    void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    void OnMaximize(object sender, RoutedEventArgs e) => ToggleMaximize();
+    void OnClose(object sender, RoutedEventArgs e) => Close();
+
+    void ToggleMaximize()
+    {
+        if (_fullscreen) SetFullscreen(false);
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    // Maximizada, a janela sem moldura passa um pouco da tela: compensa com uma margem.
+    void ApplyWindowState()
+    {
+        bool max = WindowState == WindowState.Maximized;
+        MaxIcon.Data = (Geometry)FindResource(max ? "IcWinRestore" : "IcWinMax");
+        if (!max)
+        {
+            WindowRoot.Margin = default;
+            return;
+        }
+        var hwnd = new WindowInteropHelper(this).Handle;
+        uint dpi = GetDpiForWindow(hwnd);
+        double scale = dpi / 96.0;
+        double frame = (GetSystemMetricsForDpi(32, dpi) + GetSystemMetricsForDpi(92, dpi)) / scale; // SM_CXSIZEFRAME + SM_CXPADDEDBORDER
+        WindowRoot.Margin = new Thickness(frame);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+}

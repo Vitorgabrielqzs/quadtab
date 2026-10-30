@@ -1,0 +1,351 @@
+﻿<Window x:Class="Quadtab.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="clr-namespace:Quadtab.Controls"
+        xmlns:b="clr-namespace:Quadtab.Behaviors"
+        xmlns:m="clr-namespace:Quadtab.Models"
+        Title="Quadtab" Width="1440" Height="920" MinWidth="1100" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/Assets/Quadtab.ico"
+        Background="{DynamicResource BgBrush}"
+        Foreground="{DynamicResource InkBrush}"
+        FontFamily="{StaticResource Inter}" FontSize="14"
+        TextOptions.TextFormattingMode="Ideal">
+
+    <!-- Sem a moldura padrão do Windows (continua redimensionável e com cantos arredondados) -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0,0,0,1"
+                      CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Grid x:Name="WindowRoot">
+        <!-- Fundo com as três manchas -->
+        <c:BackdropBlobs x:Name="Blobs" Bg="{DynamicResource BgColor}" Blob1="{DynamicResource Blob1Color}"
+                         Blob2="{DynamicResource Blob2Color}" Blob3="{DynamicResource Blob3Color}" />
+
+        <Grid x:Name="AppRoot" Margin="14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ================= BARRA LATERAL ================= -->
+            <c:GlassPanel x:Name="SidebarGlass" Width="292" Margin="0,0,14,0" CornerRadius="32" Padding="14,18,14,14" ClipContent="True"
+                          Panel.ZIndex="40">
+                <c:Sidebar x:Name="SidebarView" MinWidth="264" />
+            </c:GlassPanel>
+
+            <!-- ================= COLUNA PRINCIPAL ================= -->
+            <Grid x:Name="MainColumn" Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Barra de ferramentas (também serve para arrastar a janela) -->
+                <c:CollapsePanel x:Name="ToolbarCollapse" Panel.ZIndex="35">
+                    <Grid x:Name="Toolbar" Height="50" Background="Transparent" MouseLeftButtonDown="OnDragArea">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <c:GlassPanel x:Name="SideCap" CornerRadius="25" Padding="5" Margin="0,0,10,0" Visibility="Collapsed">
+                            <Button Style="{StaticResource CapButton}" ToolTip="Mostra a barra lateral" Command="{Binding ToggleSidebarCommand}">
+                                <c:Icon Data="{StaticResource IcSidebar}" />
+                            </Button>
+                        </c:GlassPanel>
+
+                        <c:TrackedText x:Name="InlineTitle" Grid.Column="1" Text="{Binding BoardTitle}" FontSize="17" FontWeight="Bold"
+                                       Tracking="-0.022" Wrap="False" Margin="8,0" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False">
+                            <c:TrackedText.RenderTransform>
+                                <TranslateTransform x:Name="InlineMove" Y="8" />
+                            </c:TrackedText.RenderTransform>
+                        </c:TrackedText>
+
+                        <!-- Desfazer / refazer -->
+                        <c:GlassPanel x:Name="UndoCap" Grid.Column="3" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CapButton}" ToolTip="Desfaz a última mudança · Ctrl+Z" Click="OnUndo" IsEnabled="{Binding CanUndo}">
+                                    <c:Icon Data="{StaticResource IcUndo}" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Margin="2,0,0,0" ToolTip="Refaz o que foi desfeito · Ctrl+Shift+Z" Click="OnRedo" IsEnabled="{Binding CanRedo}">
+                                    <c:Icon Data="{StaticResource IcRedo}" />
+                                </Button>
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Bandeja (fica tingida quando aberta) -->
+                        <c:GlassPanel x:Name="TrayCap" Grid.Column="5" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <c:GlassPanel.Style>
+                                <Style TargetType="c:GlassPanel" BasedOn="{StaticResource {x:Type c:GlassPanel}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TrayOpen}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource AccentTintBrush}" />
+                                            <Setter Property="ShadowLayers" Value="{StaticResource AccentShadow}" />
+                                            <Setter Property="TextElement.Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </c:GlassPanel.Style>
+                            <Button Command="{Binding ToggleTrayCommand}" ToolTip="Abre a bandeja de post-its e elementos">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource CapButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TrayOpen}" Value="True">
+                                                <Setter Property="b:UI.HoverBackground" Value="{StaticResource White16Brush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <c:Icon Data="{StaticResource IcTray}" />
+                                    <TextBlock Text="Bandeja" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </c:GlassPanel>
+
+                        <!-- Mais opções e tela cheia -->
+                        <c:GlassPanel x:Name="MoreCap" Grid.Column="6" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="MoreButton" Style="{StaticResource CapButton}" ToolTip="Mostra mais opções: busca, cenas, exportar e outras" Click="OnMore">
+                                    <c:Icon Data="{StaticResource IcEllipsis}" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Margin="2,0,0,0" ToolTip="Deixa o quadro em tela cheia · F11" Click="OnFullscreen">
+                                    <c:Icon x:Name="FullIcon" Data="{StaticResource IcFullscreen}" />
+                                </Button>
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Janela: minimizar, maximizar, fechar -->
+                        <c:GlassPanel x:Name="WindowCap" Grid.Column="7" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CapButton}" ToolTip="Minimiza a janela" Click="OnMinimize">
+                                    <c:Icon Data="{StaticResource IcWinMin}" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Margin="2,0" ToolTip="Maximiza ou restaura a janela" Click="OnMaximize">
+                                    <c:Icon x:Name="MaxIcon" Data="{StaticResource IcWinMax}" />
+                                </Button>
+                                <Button ToolTip="Fecha o Quadtab (tudo já fica salvo)" Click="OnClose">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource CapButton}">
+                                            <Setter Property="b:UI.HoverBackground" Value="{DynamicResource DangerBrush}" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Foreground" Value="White" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <c:Icon Data="{StaticResource IcClose}" />
+                                </Button>
+                            </StackPanel>
+                        </c:GlassPanel>
+                    </Grid>
+                </c:CollapsePanel>
+
+                <!-- Título grande do quadro (dois cliques renomeia) -->
+                <c:CollapsePanel x:Name="TitleCollapse" Grid.Row="1">
+                    <Grid x:Name="BigTitle" Margin="10,14,10,0" RenderTransformOrigin="0,0">
+                        <Grid.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="BigScale" />
+                                <TranslateTransform x:Name="BigMove" />
+                            </TransformGroup>
+                        </Grid.RenderTransform>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Bottom" Background="Transparent" MouseLeftButtonDown="OnTitleDown">
+                            <Grid HorizontalAlignment="Left">
+                                <c:TrackedText x:Name="BigTitleText" Text="{Binding BoardTitle}" FontSize="42" FontWeight="ExtraBold" Tracking="-0.04"
+                                               LineHeight="44.1" Wrap="False" HorizontalAlignment="Left" ToolTip="Nome do quadro · 2 cliques para renomear" />
+                                <TextBox x:Name="TitleEditor" Visibility="Collapsed" FontSize="40" FontWeight="ExtraBold" MinWidth="320"
+                                         Style="{StaticResource EditBox}" KeyDown="OnTitleKey" LostKeyboardFocus="OnTitleLost" />
+                            </Grid>
+                            <TextBlock Text="{Binding Subtitle}" FontSize="15" FontWeight="Medium" Foreground="{DynamicResource Ink2Brush}" Margin="0,7,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="20,0,0,0">
+                            <!-- Controle segmentado: modelos do quadro -->
+                            <Grid Width="400" Height="38">
+                                <Border CornerRadius="12" Background="{DynamicResource FillBrush}" />
+                                <Grid Margin="2">
+                                    <Grid Width="99" HorizontalAlignment="Left">
+                                        <Grid.RenderTransform>
+                                            <TranslateTransform x:Name="SegMove" />
+                                        </Grid.RenderTransform>
+                                        <c:Shadow Layers="0 3 8 0 #1F000000, 0 0 0 0.5 #0A000000" CornerRadius="10" />
+                                        <Border CornerRadius="10" Background="{DynamicResource SegIndicatorBrush}" />
+                                    </Grid>
+                                    <UniformGrid Columns="4">
+                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Cortiça" GroupName="Seg" Click="OnPickModel"
+                                                     Tag="{x:Static m:BoardModel.Cortica}" ToolTip="Troca o fundo para cortiça"
+                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Cortica}}" />
+                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Branco" GroupName="Seg" Click="OnPickModel"
+                                                     Tag="{x:Static m:BoardModel.Branco}" ToolTip="Troca o fundo para quadro branco"
+                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Branco}}" />
+                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Lousa" GroupName="Seg" Click="OnPickModel"
+                                                     Tag="{x:Static m:BoardModel.Lousa}" ToolTip="Troca o fundo para lousa verde"
+                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Lousa}}" />
+                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Pontilhado" GroupName="Seg" Click="OnPickModel"
+                                                     Tag="{x:Static m:BoardModel.Pontilhado}" ToolTip="Troca o fundo para papel pontilhado"
+                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Pontilhado}}" />
+                                    </UniformGrid>
+                                </Grid>
+                            </Grid>
+
+                            <!-- Botão redondo de vidro que oculta o título -->
+                            <c:GlassPanel x:Name="HideTitleGlass" Width="42" Height="42" CornerRadius="21" Margin="10,0,0,0" b:Press.IsEnabled="True">
+                                <Button Style="{StaticResource SoftButton}" b:UI.Radius="21" b:UI.HoverBackground="Transparent"
+                                        Foreground="{DynamicResource Ink2Brush}" ToolTip="Esconde o título grande e aumenta o quadro" Command="{Binding ToggleTitleCommand}">
+                                    <c:Icon Data="{StaticResource IcChevronUp}" />
+                                </Button>
+                            </c:GlassPanel>
+                        </StackPanel>
+                    </Grid>
+                </c:CollapsePanel>
+
+                <!-- Palco: quadro (+ editor de página ao lado) -->
+                <Grid x:Name="Stage" Grid.Row="2" Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="BoardColumn" Width="*" />
+                        <ColumnDefinition x:Name="EditorColumn" Width="0" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid x:Name="BoardArea">
+                        <c:BoardView x:Name="Board" />
+
+                        <c:GlassPanel x:Name="Hint" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="30,30,0,0" Height="36"
+                                      CornerRadius="18" Padding="12,0,15,0" Panel.ZIndex="20" IsHitTestVisible="False">
+                            <StackPanel Orientation="Horizontal">
+                                <c:Icon Data="{StaticResource IcMouse}" Size="17" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                <TextBlock Text="Botão direito para adicionar · 2 cliques para editar" FontSize="13" FontWeight="Medium"
+                                           Foreground="{DynamicResource Ink2Brush}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Dock da bandeja: escondido abaixo da borda da cortiça; sobe quando o mouse chega perto -->
+                        <Grid Margin="16" ClipToBounds="True" Panel.ZIndex="30">
+                            <Border x:Name="TrayHandle" Width="40" Height="5" CornerRadius="2.5" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                    Margin="0,0,0,8" Background="{DynamicResource Fill2Brush}" IsHitTestVisible="False" />
+                            <c:Tray x:Name="Tray" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" />
+                        </Grid>
+
+                        <c:DrawPalette x:Name="Palette" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,96" Panel.ZIndex="31" />
+
+                        <c:Inspector x:Name="Inspector" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,30,30,90" Panel.ZIndex="28" />
+
+                        <c:GlassPanel x:Name="Status" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,32" Height="36"
+                                      CornerRadius="18" Padding="15,0" Panel.ZIndex="20">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="14" Height="14" VerticalAlignment="Center">
+                                    <Ellipse Fill="{StaticResource SuccessRingBrush}" />
+                                    <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{StaticResource SuccessBrush}" />
+                                </Grid>
+                                <TextBlock Text="{Binding StatusText}" FontSize="13" FontWeight="Medium" Foreground="{DynamicResource Ink2Brush}"
+                                           Margin="5,0,0,0" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Aparece quando a câmera está longe de todos os itens -->
+                        <c:GlassPanel x:Name="GoToContent" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,30,0,0"
+                                      CornerRadius="21" Padding="5" Panel.ZIndex="25" Visibility="Collapsed">
+                            <Button Style="{StaticResource CapButton}" Height="32" Click="OnGoToContent" ToolTip="Leva a câmera de volta até os itens do quadro">
+                                <StackPanel Orientation="Horizontal">
+                                    <c:Icon Data="{StaticResource IcTarget}" Size="17" />
+                                    <TextBlock Text="Ir para o conteúdo" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </c:GlassPanel>
+
+                        <!-- Busca no quadro (Ctrl+F) -->
+                        <c:GlassPanel x:Name="SearchBar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,24,0,0" Height="48"
+                                      CornerRadius="24" Padding="14,0,6,0" Panel.ZIndex="27" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <c:Icon Data="{StaticResource IcSearch}" Foreground="{DynamicResource Ink3Brush}" VerticalAlignment="Center" />
+                                <TextBox x:Name="SearchBox" Width="260" Margin="8,0" Style="{StaticResource SearchBox}" VerticalAlignment="Center"
+                                         Text="{Binding BoardSearch, UpdateSourceTrigger=PropertyChanged}" PreviewKeyDown="OnSearchKey" />
+                                <TextBlock x:Name="SearchCount" FontSize="13" FontWeight="Medium" Foreground="{DynamicResource Ink3Brush}"
+                                           VerticalAlignment="Center" Margin="0,0,6,0" MinWidth="64" TextAlignment="Right" />
+                                <Button Style="{StaticResource CapButton}" Height="36" MinWidth="36" Padding="0" ToolTip="Vai para o resultado anterior · Shift+Enter" Click="OnSearchPrev">
+                                    <c:Icon Data="{StaticResource IcChevronUp}" Size="16" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Height="36" MinWidth="36" Padding="0" ToolTip="Vai para o próximo resultado · Enter" Click="OnSearchNext">
+                                    <c:Icon Data="{StaticResource IcChevronDown}" Size="16" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Height="36" MinWidth="36" Padding="0" ToolTip="Fecha a busca no quadro · Esc" Click="OnSearchClose">
+                                    <c:Icon Data="{StaticResource IcClose}" Size="14" />
+                                </Button>
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Apresentação: setas e sair -->
+                        <c:GlassPanel x:Name="PresentBar" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,30" Height="52"
+                                      CornerRadius="26" Padding="6" Panel.ZIndex="45" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource CapButton}" ToolTip="Volta para a cena anterior · ←" Click="OnPresentPrev">
+                                    <c:Icon Data="{StaticResource IcChevronLeft}" />
+                                </Button>
+                                <TextBlock x:Name="PresentText" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0"
+                                           Typography.NumeralAlignment="Tabular" />
+                                <Button Style="{StaticResource CapButton}" ToolTip="Vai para a próxima cena · →" Click="OnPresentNext">
+                                    <c:Icon Data="{StaticResource IcChevronRight}" />
+                                </Button>
+                                <Button Style="{StaticResource CapButton}" Margin="6,0,0,0" Click="OnPresentExit" ToolTip="Sai da apresentação · Esc">
+                                    <TextBlock Text="Sair (Esc)" />
+                                </Button>
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Balões: contador de FPS (Ctrl+Shift+F) e, logo abaixo, o zoom -->
+                        <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="30,0,0,32" Panel.ZIndex="25" IsHitTestVisible="False">
+                            <c:GlassPanel x:Name="FpsPanel" Height="36" CornerRadius="18" Padding="14,0" Visibility="Collapsed" HorizontalAlignment="Left">
+                                <TextBlock x:Name="FpsText" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Ink2Brush}" Typography.NumeralAlignment="Tabular" />
+                            </c:GlassPanel>
+                            <c:GlassPanel x:Name="ZoomPanel" Height="36" CornerRadius="18" Padding="14,0" Margin="0,8,0,0" Visibility="Collapsed"
+                                          HorizontalAlignment="Left" RenderTransformOrigin="0,1">
+                                <c:GlassPanel.RenderTransform>
+                                    <ScaleTransform x:Name="ZoomScale" />
+                                </c:GlassPanel.RenderTransform>
+                                <TextBlock Text="{Binding ZoomText}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Ink2Brush}" Typography.NumeralAlignment="Tabular" />
+                            </c:GlassPanel>
+                        </StackPanel>
+
+                        <!-- Galeria de quadros (Todos, Recentes, Favoritos, Apagados) -->
+                        <c:Gallery x:Name="GalleryView" Panel.ZIndex="50"
+                                   Visibility="{Binding Library.GalleryOpen, Converter={StaticResource Visible}}" />
+                    </Grid>
+
+                    <!-- Editor de página (dividido ou expandido) -->
+                    <c:PageEditor x:Name="Editor" Grid.Column="1" Margin="14,0,0,0" />
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- Camada de cima: menus, bandeja no cursor e cópia arrastada da bandeja -->
+        <Canvas x:Name="Overlay">
+            <c:BoardMenu x:Name="Menu" Visibility="Collapsed" Opacity="0" />
+            <c:ActionMenu x:Name="Actions" Visibility="Collapsed" />
+            <c:ContextTray x:Name="CtxTray" Visibility="Collapsed" />
+        </Canvas>
+
+        <c:QuickOpen x:Name="Quick" />
+
+        <!-- Por cima de tudo, sem receber cliques: balões de ajuda e faíscas -->
+        <Canvas x:Name="TipLayer" IsHitTestVisible="False" />
+        <c:SparkLayer x:Name="Sparks" />
+    </Grid>
+</Window>

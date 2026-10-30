@@ -1,0 +1,13 @@
+# Compilação
+bin/
+obj/
+publish/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Temporários
+*.tmp

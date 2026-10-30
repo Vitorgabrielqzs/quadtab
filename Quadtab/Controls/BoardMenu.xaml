@@ -1,0 +1,203 @@
+<UserControl x:Class="Quadtab.Controls.BoardMenu"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Quadtab.Controls"
+             xmlns:m="clr-namespace:Quadtab.Models"
+             Width="266">
+    <UserControl.Resources>
+        <Style x:Key="Head" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
+            <Setter Property="Padding" Value="12,9,12,7" />
+        </Style>
+        <Style x:Key="Gap" TargetType="Border">
+            <Setter Property="Height" Value="7" />
+            <Setter Property="Margin" Value="-6,5" />
+            <Setter Property="Background" Value="{DynamicResource SepBrush}" />
+        </Style>
+        <Style x:Key="ThumbFrame" TargetType="Border">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="3" />
+            <Setter Property="Margin" Value="0,0,0,5" />
+        </Style>
+        <DrawingBrush x:Key="ThumbDots" TileMode="Tile" Viewport="0,0,7,7" ViewportUnits="Absolute" Viewbox="0,0,7,7" ViewboxUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#FBFBF8" Geometry="M0,0 H7 V7 H0 Z" />
+                    <GeometryDrawing Brush="#BDBDB3">
+                        <GeometryDrawing.Geometry>
+                            <EllipseGeometry Center="3.5,3.5" RadiusX="1.1" RadiusY="1.1" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </UserControl.Resources>
+
+    <c:GlassPanel x:Name="Glass" CornerRadius="24" Padding="6" Background="{DynamicResource Glass2Brush}"
+                  BackdropBlur="40" BackdropSaturation="1.9">
+        <Grid>
+            <!-- ===== Clique direito no quadro vazio ===== -->
+            <StackPanel x:Name="BoardPart">
+                <TextBlock Text="Novo post-it · escolha o estilo e a cor" Style="{StaticResource Head}" />
+                <WrapPanel Margin="10,2,4,2">
+                    <RadioButton Style="{StaticResource Chip}" Content="Alfinete" GroupName="NewStyle" ToolTip="Os próximos post-its vêm com alfinete"
+                                 IsChecked="{Binding NewStyle, Converter={StaticResource Is}, ConverterParameter={x:Static m:NoteStyle.Pin}}" />
+                    <RadioButton Style="{StaticResource Chip}" Content="Fita" GroupName="NewStyle" ToolTip="Os próximos post-its vêm com fita adesiva"
+                                 IsChecked="{Binding NewStyle, Converter={StaticResource Is}, ConverterParameter={x:Static m:NoteStyle.Tape}}" />
+                    <RadioButton Style="{StaticResource Chip}" Content="Solto" GroupName="NewStyle" ToolTip="Os próximos post-its vêm soltos"
+                                 IsChecked="{Binding NewStyle, Converter={StaticResource Is}, ConverterParameter={x:Static m:NoteStyle.None}}" />
+                    <RadioButton Style="{StaticResource Chip}" Content="Pautado" GroupName="NewStyle" ToolTip="Os próximos post-its vêm pautados, para listas"
+                                 IsChecked="{Binding NewStyle, Converter={StaticResource Is}, ConverterParameter={x:Static m:NoteStyle.Lined}}" />
+                </WrapPanel>
+                <StackPanel x:Name="NewDots" Orientation="Horizontal" Margin="12,2,12,10" />
+                <Border Style="{StaticResource Gap}" />
+
+                <Button Style="{StaticResource MenuRow}" Click="OnAddPage" ToolTip="Cola uma página de caderno aqui">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcPage}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Página" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnAddText" ToolTip="Cola um texto grande aqui">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcText}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Texto" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnAddBlock" ToolTip="Cola um bloco de vidro aqui">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcBlock}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Bloco de vidro" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Border Style="{StaticResource Gap}" />
+
+                <Button Style="{StaticResource MenuRow}" Click="OnToggleTray" ToolTip="Abre ou fecha a bandeja de post-its">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcTray}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock VerticalAlignment="Center">
+                            <Run Text="{Binding TrayToggleVerb, Mode=OneWay}" /><Run Text=" bandeja" />
+                        </TextBlock>
+                    </DockPanel>
+                </Button>
+                <Border Style="{StaticResource Gap}" />
+
+                <TextBlock Text="Modelo do quadro" Style="{StaticResource Head}" />
+                <UniformGrid Columns="4" Margin="8,2,8,8">
+                    <RadioButton Style="{StaticResource ModelThumb}" GroupName="Model" Margin="0,0,3,0" Click="OnPickModel"
+                                 IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Cortica}}"
+                                 Tag="{x:Static m:BoardModel.Cortica}" ToolTip="Troca o fundo para cortiça">
+                        <StackPanel>
+                            <Border x:Name="CorkThumb" Style="{StaticResource ThumbFrame}" BorderBrush="#D9B887" />
+                            <TextBlock Text="Cortiça" HorizontalAlignment="Center" Margin="-8,0" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource ModelThumb}" GroupName="Model" Margin="3,0" Click="OnPickModel"
+                                 IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Branco}}"
+                                 Tag="{x:Static m:BoardModel.Branco}" ToolTip="Troca o fundo para quadro branco">
+                        <StackPanel>
+                            <Border Style="{StaticResource ThumbFrame}" BorderBrush="#C9CED6">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0.2,0" EndPoint="0.8,1">
+                                        <GradientStop Color="White" Offset="0" />
+                                        <GradientStop Color="#EDF0F4" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="Branco" HorizontalAlignment="Center" Margin="-8,0" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource ModelThumb}" GroupName="Model" Margin="3,0" Click="OnPickModel"
+                                 IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Lousa}}"
+                                 Tag="{x:Static m:BoardModel.Lousa}" ToolTip="Troca o fundo para lousa verde">
+                        <StackPanel>
+                            <Border Style="{StaticResource ThumbFrame}" BorderBrush="#7A5432" Background="#2C4838" />
+                            <TextBlock Text="Lousa" HorizontalAlignment="Center" Margin="-8,0" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Style="{StaticResource ModelThumb}" GroupName="Model" Margin="3,0,0,0" Click="OnPickModel"
+                                 IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Pontilhado}}"
+                                 Tag="{x:Static m:BoardModel.Pontilhado}" ToolTip="Troca o fundo para papel pontilhado">
+                        <StackPanel>
+                            <Border Style="{StaticResource ThumbFrame}" BorderBrush="#D8D8D0" Background="{StaticResource ThumbDots}" />
+                            <TextBlock Text="Pontilhado" HorizontalAlignment="Center" Margin="-8,0" />
+                        </StackPanel>
+                    </RadioButton>
+                </UniformGrid>
+                <Border Style="{StaticResource Gap}" />
+
+                <Button Style="{StaticResource MenuRow}" Click="OnToggleTitle" ToolTip="Mostra ou esconde o título grande do quadro">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcTitle}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="{Binding TitleToggleLabel}" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+            </StackPanel>
+
+            <!-- ===== Clique direito num item ===== -->
+            <StackPanel x:Name="ItemPart" Visibility="Collapsed">
+                <TextBlock Text="Cor" Style="{StaticResource Head}" />
+                <StackPanel x:Name="ItemDots" Orientation="Horizontal" Margin="12,2,12,10" />
+
+                <StackPanel x:Name="StylePart">
+                    <Border Style="{StaticResource Gap}" />
+                    <TextBlock Text="Estilo" Style="{StaticResource Head}" />
+                    <WrapPanel Margin="10,2,4,2">
+                        <ToggleButton x:Name="ChipPin" Style="{StaticResource Chip}" Content="Alfinete" Click="OnItemStyle" Tag="{x:Static m:NoteStyle.Pin}" ToolTip="Prende com um alfinete" />
+                        <ToggleButton x:Name="ChipTape" Style="{StaticResource Chip}" Content="Fita" Click="OnItemStyle" Tag="{x:Static m:NoteStyle.Tape}" ToolTip="Prende com fita adesiva" />
+                        <ToggleButton x:Name="ChipNone" Style="{StaticResource Chip}" Content="Solto" Click="OnItemStyle" Tag="{x:Static m:NoteStyle.None}" ToolTip="Deixa solto, sem nada prendendo" />
+                        <ToggleButton x:Name="ChipLined" Style="{StaticResource Chip}" Content="Pautado" Click="OnItemStyle" Tag="{x:Static m:NoteStyle.Lined}" ToolTip="Vira um post-it pautado, para listas" />
+                    </WrapPanel>
+                </StackPanel>
+                <Border Style="{StaticResource Gap}" />
+
+                <Button Style="{StaticResource MenuRow}" Click="OnEdit" ToolTip="Edita o texto deste item · 2 cliques">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcPencil}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Editar texto" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnDuplicate" ToolTip="Cria uma cópia ao lado · Ctrl+D">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcDuplicate}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Duplicar" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnLock" ToolTip="Trava ou destrava o item no lugar · Ctrl+L">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcLock}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock x:Name="LockText" Text="Bloquear" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnFront" ToolTip="Coloca este item na frente dos outros">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcArrowUp}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Trazer para frente" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnBack" ToolTip="Coloca este item atrás dos outros">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcArrowDown}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Enviar para trás" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Button Style="{StaticResource MenuRow}" Click="OnMore" ToolTip="Mostra camadas, estilo, descrição, agrupar e alinhar">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcEllipsis}" Foreground="{DynamicResource Ink2Brush}" />
+                        <TextBlock Text="Mais opções" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+                <Border Style="{StaticResource Gap}" />
+                <Button Style="{StaticResource MenuRowDanger}" Click="OnDelete" ToolTip="Exclui este item · Delete">
+                    <DockPanel>
+                        <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcTrash}" />
+                        <TextBlock Text="Excluir" VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </c:GlassPanel>
+</UserControl>
