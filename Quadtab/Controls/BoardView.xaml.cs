@@ -188,7 +188,7 @@ public partial class BoardView : UserControl
         };
         Surface.Drop += (_, e) =>
         {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && _vm is not null)
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && _vm is { ReadOnly: false })
                 MediaService.AddFiles(_vm, files, _camera.ToWorld(e.GetPosition(Surface)));
         };
     }
@@ -721,6 +721,16 @@ public partial class BoardView : UserControl
 
         var src = e.OriginalSource as DependencyObject;
         if (Tree.FindAncestor<TextBox>(src) is not null) return; // clique dentro do campo em edição
+        // Somente visualização: arrastar só move a câmera; 2 cliques só abrem links e arquivos.
+        if (Vm.ReadOnly)
+        {
+            var seen = Tree.FindAncestor<BoardItemContainer>(src)?.Item;
+            if (e.ClickCount == 2 && seen is { Kind: ItemKind.Link or ItemKind.File or ItemKind.Video })
+                OpenOrEdit(seen, Tree.FindAncestor<BoardItemContainer>(src)!, src, default);
+            else StartPan(p);
+            e.Handled = true;
+            return;
+        }
         _camera.Stop();
         var world = _camera.ToWorld(p);
 
@@ -833,8 +843,7 @@ public partial class BoardView : UserControl
             case ItemKind.Image or ItemKind.Drawing:
                 return;
             case ItemKind.Line:
-                Vm.BeginEdit(item, EditField.Text); // rótulo no meio da linha (como no Obsidian)
-                return;
+                return; // nomes nas linhas desligados por enquanto
             case ItemKind.Table:
                 if (FindChild<TableView>(container) is { } table) table.EditAt(container.TranslatePoint(local, table));
                 return;
@@ -1273,7 +1282,7 @@ public partial class BoardView : UserControl
 
     void ShowPorts(BoardItemViewModel item)
     {
-        if (_drag is not null || _panning || Tool != BoardTool.Select) return;
+        if (Vm.ReadOnly || _drag is not null || _panning || Tool != BoardTool.Select) return;
         _hoverItem = item;
         if (Ports.Tag != item || Ports.Children.Count != 4)
         {
@@ -1567,7 +1576,7 @@ public partial class BoardView : UserControl
     void OnRightDown(object sender, MouseButtonEventArgs e)
     {
         _rightStart = null;
-        if (Tool != BoardTool.Select || _drag is not null || _connecting is not null) return;
+        if (Vm.ReadOnly || Tool != BoardTool.Select || _drag is not null || _connecting is not null) return;
         var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
         if (item is { Kind: not ItemKind.Line } && item.Editing == EditField.None) _rightStart = (item, e.GetPosition(Surface));
     }
@@ -1584,6 +1593,7 @@ public partial class BoardView : UserControl
         }
         var src = e.OriginalSource as DependencyObject;
         if (Tree.FindAncestor<TextBox>(src) is not null) return;
+        if (Vm.ReadOnly) { e.Handled = true; return; } // somente visualização: sem menus nem bandeja
         var root = Window.GetWindow(this)?.Content as IInputElement;
         var windowPoint = root is null ? default : e.GetPosition(root);
         Vm.EndEdit();

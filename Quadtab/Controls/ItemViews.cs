@@ -196,6 +196,9 @@ public sealed class LineView : ItemViewBase
         Children.Add(_labelLayer);
     }
 
+    /// <summary>Rótulos nas linhas (desligados por enquanto).</summary>
+    public const bool LabelsEnabled = false;
+
     static readonly Brush LabelFill = Frozen(Color.FromArgb(235, 255, 255, 255));
     static readonly Brush LabelInk = Frozen(Color.FromRgb(0x1D, 0x21, 0x30));
     static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
@@ -220,7 +223,8 @@ public sealed class LineView : ItemViewBase
     void PlaceLabel()
     {
         if (Item?.Line is not { } l) return;
-        bool show = Item.IsEditingText || !string.IsNullOrWhiteSpace(Item.Text);
+        // Nomes nas linhas estão desligados por enquanto (os já escritos ficam guardados, só não aparecem).
+        bool show = LabelsEnabled && (Item.IsEditingText || !string.IsNullOrWhiteSpace(Item.Text));
         _label.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show) return;
         Build(l, new Vector(Item.X, Item.Y)).GetFlattenedPathGeometry().GetPointAtFractionLength(0.5, out var mid, out _);

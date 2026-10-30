@@ -84,7 +84,8 @@ public partial class BoardMenu : UserControl
         ColorPart.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
         SpiralRow.Visibility = item.Kind == ItemKind.Page ? Visibility.Visible : Visibility.Collapsed;
         SpiralText.Text = item.Spiral ? "Tirar a espiral" : "Pôr a espiral";
-        EditText.Text = item.Line is null ? "Editar texto" : "Escrever na linha";
+        // Linhas: sem "escrever na linha" por enquanto (nomes nas linhas desligados).
+        EditRow.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
         Refresh();
     }
 

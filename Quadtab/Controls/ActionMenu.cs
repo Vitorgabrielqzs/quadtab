@@ -29,7 +29,12 @@ public sealed class ActionMenu : ContentControl
     {
         var glass = new GlassPanel { CornerRadius = 24, Padding = new Thickness(6), Width = 296 };
         glass.SetResourceReference(GlassPanel.BackgroundProperty, "Glass2Brush");
-        glass.Child = _list;
+        // Mais alto que a janela: rola em vez de ficar cortado.
+        glass.Child = new ScrollViewer
+        {
+            Content = _list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false, Style = (Style)Application.Current.FindResource("OverlayScroll"),
+        };
         Content = glass;
         Glass = glass;
     }

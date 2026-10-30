@@ -31,6 +31,9 @@ public sealed class Board
     public bool TituloOculto { get; set; }
     public bool Grade { get; set; }
     public bool Diagrama { get; set; } = true;
+
+    /// <summary>Quadro bloqueado: só dá para ver (nada se move, cria, edita ou apaga).</summary>
+    public bool SomenteLeitura { get; set; }
     public List<Scene> Cenas { get; set; } = [];
     public List<BoardItem> Itens { get; set; } = [];
 

@@ -20,6 +20,8 @@
 
     <c:GlassPanel x:Name="Glass" CornerRadius="24" Padding="6" Background="{DynamicResource Glass2Brush}"
                   BackdropBlur="40" BackdropSaturation="1.9">
+        <!-- Mais alto que a janela: rola em vez de ficar cortado -->
+        <ScrollViewer Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <Grid>
             <!-- ===== Clique direito num item ===== -->
             <StackPanel x:Name="ItemPart">
@@ -65,7 +67,7 @@
                 </StackPanel>
                 <Border Style="{StaticResource Gap}" />
 
-                <Button Style="{StaticResource MenuRow}" Click="OnEdit" ToolTip="Edita o texto deste item · 2 cliques">
+                <Button x:Name="EditRow" Style="{StaticResource MenuRow}" Click="OnEdit" ToolTip="Edita o texto deste item · 2 cliques">
                     <DockPanel>
                         <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcPencil}" Foreground="{DynamicResource Ink2Brush}" />
                         <TextBlock x:Name="EditText" Text="Editar texto" VerticalAlignment="Center" />
@@ -116,5 +118,6 @@
                 </Button>
             </StackPanel>
         </Grid>
+        </ScrollViewer>
     </c:GlassPanel>
 </UserControl>

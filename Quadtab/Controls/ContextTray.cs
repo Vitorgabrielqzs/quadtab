@@ -22,7 +22,13 @@ public sealed class ContextTray : ContentControl
 
     public ContextTray()
     {
-        Glass = UiKit.Glass(_page, 28, new Thickness(14, 12, 14, 14));
+        // Mais alta que a janela: rola em vez de ficar cortada.
+        var scroll = new ScrollViewer
+        {
+            Content = _page, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false, Style = (Style)Application.Current.FindResource("OverlayScroll"),
+        };
+        Glass = UiKit.Glass(scroll, 28, new Thickness(14, 12, 14, 14));
         Glass.Width = 372;
         Content = Glass;
         Focusable = false;

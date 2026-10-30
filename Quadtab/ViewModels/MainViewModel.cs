@@ -64,6 +64,7 @@ public partial class MainViewModel : ObservableObject
         TitleHidden = board.TituloOculto;
         ShowGrid = board.Grade;
         DiagramMode = board.Diagrama;
+        ReadOnly = board.SomenteLeitura;
         SidebarOpen = StorageService.State.LateralAberta;
         NewStyle = Enum.TryParse<NoteStyle>(StorageService.State.EstiloPostit, out var ns) ? ns : NoteStyle.Pin;
         Search = "";
@@ -187,6 +188,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial bool ShowGrid { get; set; }
     [ObservableProperty] public partial bool DiagramMode { get; set; }
 
+    /// <summary>Somente visualização ("…" → Bloquear quadro): o quadro não aceita mudanças.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    public partial bool ReadOnly { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TrayToggleVerb))]
     public partial bool TrayOpen { get; set; }
@@ -213,7 +219,7 @@ public partial class MainViewModel : ObservableObject
     public string ModelName => Palette.ModelName(Model);
     public int ModelIndex => (int)Model;
     public string Subtitle => $"{CountLabel} · editado {EditedAgo()}";
-    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")} · {CountLabel}";
+    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")} · {CountLabel}{(ReadOnly ? " · somente visualização" : "")}";
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
     public string TitleToggleVerb => TitleHidden ? "Mostrar" : "Ocultar";
     public string TitleToggleLabel => TitleToggleVerb + " título";
@@ -251,6 +257,11 @@ public partial class MainViewModel : ObservableObject
     partial void OnTitleHiddenChanged(bool value) => MarkDirty();
     partial void OnShowGridChanged(bool value) => MarkDirty(touchClock: false);
     partial void OnDiagramModeChanged(bool value) => MarkDirty(touchClock: false);
+    partial void OnReadOnlyChanged(bool value)
+    {
+        if (value) { EndEdit(); ClearSelection(); }
+        MarkDirty(touchClock: false);
+    }
     partial void OnZoomChanged(double value) => MarkDirty(touchClock: false);
     partial void OnNewStyleChanged(NoteStyle value)
     {
@@ -953,8 +964,9 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRedo));
     }
 
-    public void Undo() => Travel(_undo, _redo);
-    public void Redo() => Travel(_redo, _undo);
+    // Somente visualização: desfazer e refazer também não mudam nada.
+    public void Undo() { if (!ReadOnly) Travel(_undo, _redo); }
+    public void Redo() { if (!ReadOnly) Travel(_redo, _undo); }
 
     void Travel(List<string> from, List<string> to)
     {
@@ -1039,6 +1051,7 @@ public partial class MainViewModel : ObservableObject
         TituloOculto = TitleHidden,
         Grade = ShowGrid,
         Diagrama = DiagramMode,
+        SomenteLeitura = ReadOnly,
         Cenas = Scenes.ToList(),
         Itens = Items.OrderBy(i => i.Id).Select(i => i.ToModel()).ToList(),
     };

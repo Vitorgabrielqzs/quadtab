@@ -167,6 +167,7 @@ public partial class MainWindow : Window
         vm.Items.CollectionChanged += OnItemsChanged;
         _quietZoomUntil = DateTime.Now.AddSeconds(1); // abrir um quadro não mostra o balão de zoom
         ApplyEmptyState(StorageService.IsEmptyBoard(vm.FilePath));
+        ApplyReadOnly();
         ApplyTitle(animate: false);
         UpdateSearchCount();
     }
@@ -191,6 +192,13 @@ public partial class MainWindow : Window
     }
 
     bool _emptyMode;
+
+    /// <summary>Somente visualização: some o dock da bandeja (nada para adicionar) e fecham os menus.</summary>
+    void ApplyReadOnly()
+    {
+        Tray.Visibility = _vm.ReadOnly || _presenting ? Visibility.Collapsed : Visibility.Visible;
+        if (_vm.ReadOnly) { _vm.TrayOpen = false; CloseMenu(); CloseContextTray(); }
+    }
 
     void OnCreateFirstBoard(object sender, RoutedEventArgs e) => App.Library.NewBoard();
 
@@ -247,6 +255,7 @@ public partial class MainWindow : Window
         {
             case nameof(MainViewModel.TitleHidden): ApplyTitle(animate: true); break;
             case nameof(MainViewModel.SidebarOpen): ApplySidebar(animate: true); break;
+            case nameof(MainViewModel.ReadOnly): ApplyReadOnly(); break;
             case nameof(MainViewModel.BoardSearch): _hit = -1; UpdateSearchCount(); break;
             case nameof(MainViewModel.Zoom): ShowZoom(); break;
             case nameof(MainViewModel.TrayOpen):
@@ -470,6 +479,9 @@ public partial class MainWindow : Window
     void Place(FrameworkElement el, ScaleTransform scale, Point windowPoint, bool pop = true)
     {
         el.Visibility = Visibility.Visible;
+        // Nunca maior que a janela: o que passar rola por dentro (nada fica cortado).
+        el.MaxHeight = Math.Max(120, WindowRoot.ActualHeight - 16);
+        el.MaxWidth = Math.Max(200, WindowRoot.ActualWidth - 16);
         el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = el.DesiredSize;
         double w = WindowRoot.ActualWidth, h = WindowRoot.ActualHeight;
@@ -598,7 +610,7 @@ public partial class MainWindow : Window
 
     void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsRightDouble(e))
+        if (IsRightDouble(e) && !_vm.ReadOnly)
         {
             CloseMenu();
             CloseActions();
@@ -675,6 +687,8 @@ public partial class MainWindow : Window
             new("Renomear quadro", "IcPencil", StartRename),
             new("Mostrar grade", "IcGrid", () => _vm.ShowGrid = !_vm.ShowGrid, Separator: true, Checked: _vm.ShowGrid),
             new("Modo diagrama", "IcLine", () => _vm.DiagramMode = !_vm.DiagramMode, Checked: _vm.DiagramMode),
+            new("Somente visualização", "IcLock", () => _vm.ReadOnly = !_vm.ReadOnly, Checked: _vm.ReadOnly)
+                { Tip = "Bloqueia o quadro: dá para ver e navegar, mas nada se move, cria, edita ou apaga" },
             new(_vm.TitleHidden ? "Mostrar título" : "Ocultar título", "IcTitle", () => _vm.TitleHidden = !_vm.TitleHidden),
             new("Cenas e apresentação…", "IcScenes", () => ShowScenes(p), Separator: true),
             new("Apresentar", "IcPresent", StartPresenting),
@@ -731,7 +745,8 @@ public partial class MainWindow : Window
     {
         _presenting = false;
         PresentBar.Visibility = Visibility.Collapsed;
-        foreach (var el in new UIElement[] { Tray, Status }) el.Visibility = Visibility.Visible;
+        Status.Visibility = Visibility.Visible;
+        ApplyReadOnly(); // o dock volta, a não ser que o quadro esteja só para visualização
         UpdateHint();
         if (_presentMadeFullscreen) SetFullscreen(false);
     }
@@ -1123,6 +1138,11 @@ public partial class MainWindow : Window
             }
         }
 
+        // Somente visualização: só navegação (Esc, zoom, busca, Espaço); nada que mude o quadro.
+        if (_vm.ReadOnly && !(key is Key.Escape or Key.Space || (ctrl && key is Key.F or Key.N or Key.C or Key.D0 or Key.NumPad0
+                or Key.D1 or Key.NumPad1 or Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract)))
+            return;
+
         switch (key)
         {
             case Key.Escape:
@@ -1155,7 +1175,7 @@ public partial class MainWindow : Window
                 if (_vm.Selected is { } edit)
                 {
                     if (edit is { Kind: ItemKind.Page, FileFullPath: { } page }) OpenPage(page);
-                    else _vm.BeginEdit(edit, EditField.Text);
+                    else if (edit.Kind != ItemKind.Line) _vm.BeginEdit(edit, EditField.Text); // linhas: sem nome por enquanto
                 }
                 else StartRename();
                 break;
