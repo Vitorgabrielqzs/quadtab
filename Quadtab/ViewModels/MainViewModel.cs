@@ -487,6 +487,13 @@ public partial class MainViewModel : ObservableObject
         if (kind == ItemKind.Page) return Add(ItemKind.Page, t.Cor, at.X, at.Y);
 
         var m = StorageService.CloneItem(t);
+        if (kind == ItemKind.PostIt)
+        {
+            // Post-it repetido segue a última cor e o último estilo usados (mesmo se mudados depois de criar).
+            m.Cor = LastColor;
+            m.Pautado = NewStyle == NoteStyle.Lined;
+            if (!m.Pautado) m.Fixacao = BoardItem.FasteningToJson((Fastening)(int)NewStyle);
+        }
         Point center;
         if (m.Linha is { } l) center = new Point((l.De.X + l.Para.X) / 2, (l.De.Y + l.Para.Y) / 2);
         else
@@ -668,6 +675,7 @@ public partial class MainViewModel : ObservableObject
     public void SetStyle(BoardItemViewModel vm, NoteStyle style)
     {
         Checkpoint();
+        if (vm.Kind == ItemKind.PostIt) NewStyle = style; // os próximos post-its seguem o último estilo escolhido
         if (style == NoteStyle.Lined)
         {
             vm.Lined = !vm.Lined;

@@ -7,9 +7,9 @@ using Quadtab.Services;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Moldura do quadro. "Liso" (estilo Canvas do Obsidian): painel liso com fio de 1 px que segue o tema.
-/// Os outros modelos: madeira clara, alumínio, madeira escura ou papel, com sombras.
-/// Na tela cheia (FullBleed) não há cantos nem sombra: o quadro vai de borda a borda.
+/// Moldura do quadro, uma diferente para cada modelo: Liso = faixa suave azulada (clara ou grafite,
+/// segue o tema); Cortiça = madeira clara; Branco = alumínio; Lousa = madeira escura; Pontilhado = papel.
+/// Na tela cheia (FullBleed) a moldura continua, mas vai até a borda da tela (sem cantos nem sombra de fora).
 /// </summary>
 public sealed class FrameBackground : FrameworkElement
 {
@@ -21,6 +21,8 @@ public sealed class FrameBackground : FrameworkElement
 
     static readonly ShadowLayer[] Outer = ShadowSpec.Parse("0 34 60 -24 #8050320F, 0 8 22 0 #2950320F");
     static readonly ShadowLayer[] Inner = ShadowSpec.Parse("inset 0 2 1 0 #99FFFFFF, inset 0 -2 2 0 #405A370F");
+    static readonly ShadowLayer[] LisoShadow = ShadowSpec.Parse("0 18 40 -18 #401E243C, 0 2 8 0 #141E243C");
+    static readonly ShadowLayer[] LisoShadowDark = ShadowSpec.Parse("0 18 40 -18 #99000000, 0 2 8 0 #4D000000");
 
     public FrameBackground()
     {
@@ -33,7 +35,7 @@ public sealed class FrameBackground : FrameworkElement
     public bool FullBleed { get => (bool)GetValue(FullBleedProperty); set => SetValue(FullBleedProperty, value); }
 
     /// <summary>Margem entre a moldura e a superfície (o "batente" da moldura).</summary>
-    public static double Inset(BoardModel m, bool fullBleed) => fullBleed ? 0 : m == BoardModel.Liso ? 1 : 16;
+    public static double Inset(BoardModel m, bool fullBleed) => m == BoardModel.Liso ? 10 : 16;
 
     protected override Size MeasureOverride(Size availableSize) => default;
 
@@ -41,19 +43,24 @@ public sealed class FrameBackground : FrameworkElement
     {
         var box = new Rect(RenderSize);
         if (box.Width <= 1 || box.Height <= 1) return;
+        double radius = FullBleed ? 0 : Model == BoardModel.Liso ? 26 : 32;
         if (Model == BoardModel.Liso)
         {
-            double r = FullBleed ? 0 : 16;
-            var fill = (Brush)FindResource("CanvasBrush");
-            if (FullBleed) { dc.DrawRectangle(fill, null, box); return; }
-            var edge = new Pen((Brush)FindResource("CanvasEdgeBrush"), 1);
-            if (edge.CanFreeze) edge.Freeze(); // durante a troca de tema o pincel está animando
-            box.Inflate(-0.5, -0.5);
-            dc.DrawRoundedRectangle(fill, edge, box, r, r);
+            // Faixa de 10 px com um degradê suave e um fio de luz por dentro (moldura própria do Liso).
+            bool dark = ThemeService.IsDark;
+            if (!FullBleed) ShadowCache.Draw(dc, box, radius, dark ? LisoShadowDark : LisoShadow);
+            var band = dark
+                ? new[] { (H(0x30333D), 0.0), (H(0x24262E), 0.55), (H(0x1B1D23), 1.0) }
+                : new[] { (H(0xF6F8FC), 0.0), (H(0xE3E8F1), 0.55), (H(0xD2D9E6), 1.0) };
+            dc.DrawRoundedRectangle(BoardSurfaces.CssGradient(160, box, band), null, box, radius, radius);
+            var rim = new Pen(ColorMath.Brush(dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(200, 255, 255, 255)), 1);
+            rim.Freeze();
+            var inner = box;
+            inner.Inflate(-0.5, -0.5);
+            dc.DrawRoundedRectangle(null, rim, inner, Math.Max(0, radius - 0.5), Math.Max(0, radius - 0.5));
             return;
         }
 
-        double radius = FullBleed ? 0 : 32;
         if (!FullBleed) ShadowCache.Draw(dc, box, radius, Outer);
         var (stops, stripeLight, stripeDark) = Model switch
         {
@@ -118,7 +125,7 @@ public sealed class SurfaceBackground : FrameworkElement
     public bool FullBleed { get => (bool)GetValue(FullBleedProperty); set => SetValue(FullBleedProperty, value); }
 
     /// <summary>Raio dos cantos da superfície (0 na tela cheia).</summary>
-    public static double CornerRadius(BoardModel m, bool fullBleed) => fullBleed ? 0 : m == BoardModel.Liso ? 15 : 16;
+    public static double CornerRadius(BoardModel m, bool fullBleed) => 16;
 
     static readonly Brush WhiteBase = ColorMath.Brush(Palette.C(0xF9FAFB));
     static readonly Brush ChalkBase = ColorMath.Brush(Palette.C(0x2C4838));
@@ -214,6 +221,11 @@ public sealed class SurfaceBackground : FrameworkElement
             dc.DrawRectangle((Brush)FindResource("CanvasBrush"), null, box);
             dc.DrawRectangle(ShowGrid ? _grid : _dots, null, box);
             dc.Pop();
+            var edge = new Pen((Brush)FindResource("CanvasEdgeBrush"), 1);
+            if (edge.CanFreeze) edge.Freeze(); // durante a troca de tema o pincel está animando
+            var line = box;
+            line.Inflate(-0.5, -0.5);
+            dc.DrawRoundedRectangle(null, edge, line, r - 0.5, r - 0.5);
             return;
         }
 
@@ -242,7 +254,7 @@ public sealed class SurfaceBackground : FrameworkElement
         }
         if (ShowGrid) dc.DrawRectangle(Model == BoardModel.Lousa ? _gridLight : _gridDark, null, box);
         dc.Pop();
-        if (!FullBleed) ShadowCache.Draw(dc, box, r, Insets[Model]);
+        ShadowCache.Draw(dc, box, r, Insets[Model]);
     }
 
     static void Smudge(DrawingContext dc, Rect area, double cx, double cy, double rx, double ry, byte alpha)

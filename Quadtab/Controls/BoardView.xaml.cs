@@ -226,6 +226,9 @@ public partial class BoardView : UserControl
         ApplyGlassModel();
         if (_cameraReady) StartCamera(); // trocou de quadro: câmera deste quadro
         Invalidate();
+        // Os itens do quadro aberto surgem suavemente.
+        Anim.Set(ItemsLayer, OpacityProperty, 0.0);
+        Anim.To(ItemsLayer, OpacityProperty, 1, 0.35, Anim.Ease);
     }
 
     void Track(BoardItemViewModel it)
@@ -249,7 +252,8 @@ public partial class BoardView : UserControl
             foreach (BoardItemViewModel it in e.NewItems)
             {
                 Track(it);
-                Realize(it); // itens novos aparecem na hora
+                Realize(it); // itens novos aparecem na hora, com uma mola
+                if (e.NewItems.Count <= 20 && _containers.TryGetValue(it, out var c)) c.PlayAppear();
             }
         UpdateAdorner();
         Settle();

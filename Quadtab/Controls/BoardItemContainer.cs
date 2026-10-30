@@ -95,6 +95,17 @@ public sealed class BoardItemContainer : ContentControl
         vm.PropertyChanged += OnVmChanged;
     }
 
+    /// <summary>Item recém-criado: surge com fade e uma mola (de 85% até o tamanho normal).</summary>
+    public void PlayAppear()
+    {
+        Anim.Set(this, OpacityProperty, 0.0);
+        Anim.Set(_scale, ScaleTransform.ScaleXProperty, 0.85);
+        Anim.Set(_scale, ScaleTransform.ScaleYProperty, 0.85);
+        Anim.To(this, OpacityProperty, _vm?.IsDimmed == true ? 0.16 : 1, 0.22, Anim.Ease);
+        Anim.To(_scale, ScaleTransform.ScaleXProperty, 1, 0.45, Anim.Item);
+        Anim.To(_scale, ScaleTransform.ScaleYProperty, 1, 0.45, Anim.Item);
+    }
+
     internal void Detach()
     {
         if (_vm is not null) _vm.PropertyChanged -= OnVmChanged;

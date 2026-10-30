@@ -240,6 +240,13 @@ public partial class Sidebar : UserControl
         bool open = VaultPage.Visibility != Visibility.Visible;
         VaultPage.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         MainPage.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        // A página que entra desliza 16 px e ganha opacidade.
+        FrameworkElement shown = open ? VaultPage : MainPage;
+        var slide = new TranslateTransform(open ? 16 : -16, 0);
+        shown.RenderTransform = slide;
+        Anim.Set(shown, OpacityProperty, 0.0);
+        Anim.To(shown, OpacityProperty, 1, 0.25, Anim.Ease);
+        Anim.To(slide, TranslateTransform.XProperty, 0, 0.45, Anim.Panel);
         if (open) Lib.Refresh();
         // Com a página aberta, o botão fica marcado (pílula de destaque).
         if (open) VaultButton.SetResourceReference(BackgroundProperty, "Fill2Brush");

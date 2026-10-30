@@ -53,6 +53,10 @@ public static class StorageService
     public static string MetaDir => Path.Combine(Root, ".quadtab");
     static string StatePath => Path.Combine(MetaDir, "estado.json");
 
+    /// <summary>"Quadro" usado quando todos foram apagados (tela com "Criar novo quadro"); não aparece na lista.</summary>
+    public static string EmptyBoardPath => Path.Combine(MetaDir, "vazio" + BoardExt);
+    public static bool IsEmptyBoard(string path) => string.Equals(path, EmptyBoardPath, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Registros de erro: dentro do cofre (.quadtab), como todo o resto.</summary>
     public static string LogDir => Root.Length > 0 ? MetaDir : OldDataDir;
 
@@ -77,6 +81,7 @@ public static class StorageService
 
         // Tudo fica em Documentos\Cofre; o estado pode apontar para outro cofre (Ajustes).
         Root = defaultRoot;
+        bool freshVault = !File.Exists(StatePath);
         State = ReadJson(StatePath, Json.AppState) ?? new AppState();
         if (!string.IsNullOrEmpty(State.Cofre) && Directory.Exists(State.Cofre)) Root = State.Cofre;
         else State.Cofre = null;
@@ -88,7 +93,8 @@ public static class StorageService
         try { File.SetAttributes(MetaDir, FileAttributes.Directory | FileAttributes.Hidden); } catch { }
 
         MigrateOldBoard();
-        if (!BoardFiles().Any()) CreateBoard("", "Meu quadro", Board.CreateDefault());
+        // Só um cofre novo ganha o quadro de exemplo; quem apagou todos vê "Criar novo quadro".
+        if (freshVault && !BoardFiles().Any()) CreateBoard("", "Meu quadro", Board.CreateDefault());
         PurgeTrash();
     }
 
@@ -341,6 +347,21 @@ public static class StorageService
         if (notify) NotifyLibrary();
     }
 
+    /// <summary>
+    /// Notas pertencem aos quadros: as que nenhum quadro usa mais (de um quadro apagado, tiradas do
+    /// quadro, antigas) vão para a lixeira.
+    /// </summary>
+    public static void TrashOrphanNotes()
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var b in BoardFiles())
+            foreach (var it in LoadBoard(b).Itens)
+                if (it is { Tipo: "pagina", Arquivo: { } rel }) used.Add(Path.GetFullPath(Full(rel)));
+        foreach (var note in PageFiles().ToList())
+            if (!used.Contains(Path.GetFullPath(note)))
+                try { TrashPage(note); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
     public static IEnumerable<TrashEntry> TrashEntries()
     {
         if (!Directory.Exists(TrashDir)) yield break;
@@ -356,6 +377,10 @@ public static class StorageService
 
     public static string RestoreBoard(TrashEntry e)
     {
+        // Cascata: as notas do quadro voltam com ele (o conteúdo exato, da lixeira).
+        foreach (var (note, trashed) in TrashedNotesOf(e.TrashPath))
+            if (!File.Exists(note))
+                try { Directory.CreateDirectory(Path.GetDirectoryName(note)!); File.Move(trashed, note); } catch (IOException) { }
         var target = Path.Combine(BoardsDir, e.OriginalRel);
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         target = Unique(Path.GetDirectoryName(target)!, Path.GetFileNameWithoutExtension(target), BoardExt);
@@ -366,15 +391,39 @@ public static class StorageService
 
     public static void DeleteForever(TrashEntry e)
     {
-        try { File.Delete(e.TrashPath); } catch { }
+        DeleteWithNotes(e.TrashPath);
         NotifyLibrary();
+    }
+
+    /// <summary>Cascata: o quadro é o dono das notas; apagado de vez, as notas dele somem junto.</summary>
+    static void DeleteWithNotes(string trashedBoard)
+    {
+        foreach (var (_, trashed) in TrashedNotesOf(trashedBoard))
+            try { File.Delete(trashed); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        try { File.Delete(trashedBoard); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>Notas de um quadro que está na lixeira: (onde a nota morava, a cópia mais nova na lixeira).</summary>
+    static IEnumerable<(string Note, string Trashed)> TrashedNotesOf(string trashedBoard)
+    {
+        var dir = Path.Combine(TrashDir, "Notas");
+        if (!Directory.Exists(dir)) yield break;
+        var board = ReadJson(trashedBoard, Json.Board);
+        if (board is null) yield break;
+        foreach (var it in board.Itens)
+        {
+            if (it is not { Tipo: "pagina", Arquivo: { } rel }) continue;
+            var note = Full(rel);
+            var newest = Directory.EnumerateFiles(dir, "*__" + Path.GetFileName(note)).OrderByDescending(f => f, StringComparer.Ordinal).FirstOrDefault();
+            if (newest is not null) yield return (note, newest);
+        }
     }
 
     static void PurgeTrash()
     {
         foreach (var e in TrashEntries().ToList())
             if ((DateTime.Now - e.DeletedAt).TotalDays > 30)
-                try { File.Delete(e.TrashPath); } catch { }
+                DeleteWithNotes(e.TrashPath);
     }
 
     // ---------- páginas (.md) ----------

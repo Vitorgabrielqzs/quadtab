@@ -134,6 +134,29 @@
                     </Grid>
                 </c:CollapsePanel>
 
+                <!-- Nenhum quadro (todos foram apagados): só o botão para criar um novo -->
+                <Border x:Name="EmptyState" Grid.Row="1" Grid.RowSpan="2" Margin="0,14,0,0" CornerRadius="16" Panel.ZIndex="60"
+                        Background="{DynamicResource CanvasBrush}" BorderBrush="{DynamicResource CanvasEdgeBrush}" BorderThickness="1"
+                        Visibility="Collapsed">
+                    <StackPanel x:Name="EmptyContent" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                        <StackPanel.RenderTransform>
+                            <ScaleTransform x:Name="EmptyScale" />
+                        </StackPanel.RenderTransform>
+                        <c:Icon Data="{StaticResource IcBoard}" Size="46" StrokeThickness="1.6" Foreground="{DynamicResource Ink3Brush}" HorizontalAlignment="Center" />
+                        <c:TrackedText Text="Nenhum quadro" FontSize="24" FontWeight="Bold" Tracking="-0.025" Wrap="False"
+                                       HorizontalAlignment="Center" Margin="0,16,0,6" />
+                        <TextBlock Text="Todos os quadros foram apagados." FontSize="14" Foreground="{DynamicResource Ink2Brush}" HorizontalAlignment="Center" />
+                        <Button Style="{StaticResource PillButton}" Height="42" Padding="22,0" Margin="0,22,0,0" HorizontalAlignment="Center"
+                                Background="{StaticResource AccentBrush}" Foreground="White" b:UI.Radius="21" b:Press.IsEnabled="True"
+                                b:UI.HoverBackground="#FF2B95FF" Click="OnCreateFirstBoard" ToolTip="Cria um quadro novo · Ctrl+N">
+                            <StackPanel Orientation="Horizontal">
+                                <c:Icon Data="{StaticResource IcPlus}" Size="17" Foreground="White" Margin="0,0,8,0" />
+                                <TextBlock Text="Criar novo quadro" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
                 <!-- Palco: quadro (+ editor de página ao lado) -->
                 <Grid x:Name="Stage" Grid.Row="2" Margin="0,14,0,0">
                     <Grid.ColumnDefinitions>

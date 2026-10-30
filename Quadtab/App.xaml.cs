@@ -33,11 +33,14 @@ public partial class App : Application
 
         var start = StorageService.State.QuadroAberto is { } rel && File.Exists(StorageService.Full(rel))
             ? StorageService.Full(rel)
-            : StorageService.BoardFiles().First();
+            : StorageService.BoardFiles().FirstOrDefault() ?? StorageService.EmptyBoardPath; // nenhum quadro: tela vazia
         ViewModel = new MainViewModel(StorageService.LoadBoard(start), start);
-        StorageService.Touch(start);
         Library = new LibraryViewModel();
-        Library.Visit(start);
+        if (!StorageService.IsEmptyBoard(start))
+        {
+            StorageService.Touch(start);
+            Library.Visit(start);
+        }
 
         var window = new MainWindow(ViewModel);
         MainWindow = window;
@@ -66,11 +69,12 @@ public partial class App : Application
         if (makeThumb) MakeThumbnail();
         ViewModel?.Close();
         ViewModel = new MainViewModel(StorageService.LoadBoard(path), path);
-        StorageService.Touch(path);
+        bool empty = StorageService.IsEmptyBoard(path);
+        if (!empty) StorageService.Touch(path);
         Window?.SetBoard(ViewModel);
         Library.GalleryOpen = false;
         Library.Refresh();
-        Library.Visit(path);
+        if (!empty) Library.Visit(path);
     }
 
     /// <summary>Abre uma página no editor ao lado do quadro.</summary>

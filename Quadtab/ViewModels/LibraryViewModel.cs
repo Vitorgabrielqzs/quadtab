@@ -584,20 +584,27 @@ public partial class LibraryViewModel : ObservableObject
     {
         bool isCurrent = App.ViewModel is { } cur && string.Equals(cur.FilePath, path, StringComparison.OrdinalIgnoreCase);
         if (isCurrent) App.ViewModel!.Close();
+        else App.ViewModel?.Flush(); // notas novas do quadro aberto precisam estar salvas antes da limpeza
         // As notas ficam só no quadro: vão para a lixeira junto com ele (restaurar o quadro as recria).
         foreach (var it in StorageService.LoadBoard(path).Itens)
             if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(StorageService.Full(rel)))
                 try { StorageService.TrashPage(StorageService.Full(rel)); } catch (IOException) { }
         StorageService.TrashBoard(path);
+        StorageService.TrashOrphanNotes(); // cascata: nenhuma nota fica sem quadro
         if (isCurrent)
         {
             var next = StorageService.State.Recentes.Select(StorageService.Full).FirstOrDefault(File.Exists)
                        ?? StorageService.BoardFiles().FirstOrDefault()
-                       ?? StorageService.CreateBoard("", "Novo quadro");
+                       ?? StorageService.EmptyBoardPath; // apagou o último: tela com "Criar novo quadro"
             App.OpenBoard(next, makeThumb: false);
         }
     }
 
-    public void Restore(TrashEntry e) => StorageService.RestoreBoard(e);
+    public void Restore(TrashEntry e)
+    {
+        var path = StorageService.RestoreBoard(e);
+        // Estava sem nenhum quadro: o restaurado já abre.
+        if (App.ViewModel is { } cur && StorageService.IsEmptyBoard(cur.FilePath)) App.OpenBoard(path);
+    }
     public void DeleteForever(TrashEntry e) => StorageService.DeleteForever(e);
 }

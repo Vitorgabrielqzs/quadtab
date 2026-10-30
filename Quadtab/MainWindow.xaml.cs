@@ -85,12 +85,14 @@ public partial class MainWindow : Window
         };
 
         Attach(vm);
-        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        App.Library.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LibraryViewModel.GalleryOpen)) ApplyEmptyState(_emptyMode);
+        };
+        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _sideTimer.Tick += (_, _) => { _sideTimer.Stop(); if (!KeepSide()) RevealSide(false); };
         ApplySidebar(animate: false);
 
-        _chrome = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
-        _chrome.Tick += (_, _) => AutoHideTick();
 
         SourceInitialized += (_, _) =>
         {
@@ -164,9 +166,33 @@ public partial class MainWindow : Window
         vm.PropertyChanged += OnVmChanged;
         vm.Items.CollectionChanged += OnItemsChanged;
         _quietZoomUntil = DateTime.Now.AddSeconds(1); // abrir um quadro não mostra o balão de zoom
+        ApplyEmptyState(StorageService.IsEmptyBoard(vm.FilePath));
         ApplyTitle(animate: false);
         UpdateSearchCount();
     }
+
+    /// <summary>Todos os quadros apagados: a tela vazia cobre título e quadro, com o botão "Criar novo quadro".</summary>
+    void ApplyEmptyState(bool empty)
+    {
+        _emptyMode = empty;
+        TitleCollapse.Visibility = empty ? Visibility.Collapsed : Visibility.Visible; // sem o nome interno "vazio"
+        // A galeria (ex.: Apagados recentemente, para restaurar) fica por cima da tela vazia.
+        empty &= !App.Library.GalleryOpen;
+        bool was = EmptyState.Visibility == Visibility.Visible;
+        EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        if (!empty || was) return;
+        // Surge com fade e uma leve mola.
+        Anim.Set(EmptyState, OpacityProperty, 0.0);
+        Anim.Set(EmptyScale, ScaleTransform.ScaleXProperty, 0.92);
+        Anim.Set(EmptyScale, ScaleTransform.ScaleYProperty, 0.92);
+        Anim.To(EmptyState, OpacityProperty, 1, 0.3, Anim.Ease);
+        Anim.To(EmptyScale, ScaleTransform.ScaleXProperty, 1, 0.55, Anim.Panel);
+        Anim.To(EmptyScale, ScaleTransform.ScaleYProperty, 1, 0.55, Anim.Panel);
+    }
+
+    bool _emptyMode;
+
+    void OnCreateFirstBoard(object sender, RoutedEventArgs e) => App.Library.NewBoard();
 
     /// <summary>Mostra outro quadro (App.OpenBoard).</summary>
     public void SetBoard(MainViewModel vm)
@@ -327,10 +353,11 @@ public partial class MainWindow : Window
     {
         if (show == _sideRevealed || SideDocked) return;
         _sideRevealed = show;
+        if (!show) _sideHeld = false;
         MoveSide(animate: true);
     }
 
-    /// <summary>Escondida: aparece com o mouse a menos de ~30 px da borda esquerda e some 2 s depois que ele sai.</summary>
+    /// <summary>Escondida: aparece com o mouse a menos de ~30 px da borda esquerda e some 1 s depois que ele sai.</summary>
     void SideNear(Point p)
     {
         if (SideDocked || _presenting) return;
@@ -343,8 +370,11 @@ public partial class MainWindow : Window
         else if (_sideRevealed && !_sideTimer.IsEnabled) _sideTimer.Start();
     }
 
-    // Segura aberta com um menu dela aberto, renomeando algo nela ou com o mouse em cima.
-    bool KeepSide() => _actionsOpen || (Keyboard.FocusedElement is TextBox tb && SidebarView.IsAncestorOf(tb)) || (_sideRevealed && SidebarGlass.IsMouseOver);
+    // Clicou dentro dela enquanto aberta: fica na tela até clicar fora (no quadro, na barra...).
+    bool _sideHeld;
+
+    // Segura aberta: clicada, com um menu dela aberto, renomeando algo nela ou com o mouse em cima.
+    bool KeepSide() => _sideHeld || _actionsOpen || (Keyboard.FocusedElement is TextBox tb && SidebarView.IsAncestorOf(tb)) || (_sideRevealed && SidebarGlass.IsMouseOver);
 
     // ---------- título grande (recolhe em 0.5 s) e renomear ----------
 
@@ -371,9 +401,19 @@ public partial class MainWindow : Window
     /// Na tela cheia a seta continua funcionando: com o título à mostra, o quadro começa abaixo dele.
     /// </summary>
     /// <summary>A pílula com o nome do quadro só aparece quando o título grande está escondido.</summary>
-    void UpdateHint() =>
-        Hint.Visibility = _vm.TitleHidden && !_presenting && SearchBar.Visibility != Visibility.Visible && BoardArea.ActualWidth >= 700
-            ? Visibility.Visible : Visibility.Collapsed;
+    void UpdateHint()
+    {
+        bool show = _vm.TitleHidden && !_presenting && SearchBar.Visibility != Visibility.Visible && BoardArea.ActualWidth >= 700;
+        if (show == (Hint.Visibility == Visibility.Visible)) return;
+        Hint.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        // Surge com fade, descendo 6 px.
+        var drop = new TranslateTransform(0, -6);
+        Hint.RenderTransform = drop;
+        Anim.Set(Hint, OpacityProperty, 0.0);
+        Anim.To(Hint, OpacityProperty, 1, 0.3, Anim.Ease);
+        Anim.To(drop, TranslateTransform.YProperty, 0, 0.45, Anim.Panel);
+    }
 
     void LayoutStage()
     {
@@ -570,6 +610,12 @@ public partial class MainWindow : Window
             _vm.RepeatLast(Board.ToWorld(WindowRoot, e.GetPosition(WindowRoot)));
             e.Handled = true;
             return;
+        }
+        // Lateral escondida e aberta pelo mouse: um clique nela a prende; um clique fora solta (e ela sai em 1 s).
+        if (_sideRevealed && !SideDocked)
+        {
+            _sideHeld = SidebarGlass.IsMouseOver;
+            if (!_sideHeld && !_sideTimer.IsEnabled) _sideTimer.Start();
         }
         // Renomeando (na lateral ou no título) e clicou fora do campo: termina e grava o nome.
         if (Keyboard.FocusedElement is TextBox renaming && !renaming.IsMouseOver
@@ -838,9 +884,6 @@ public partial class MainWindow : Window
     bool _fullscreen;
     Rect _restoreBounds;
     WindowState _restoreState;
-    readonly DispatcherTimer _chrome;
-    DateTime _barAway;
-    bool _barShown;
 
     void SetFullscreen(bool on)
     {
@@ -860,38 +903,20 @@ public partial class MainWindow : Window
             // Tela realmente cheia: o quadro vai de borda a borda; lateral e barra flutuam por cima.
             AppRoot.Margin = new Thickness(0);
             Board.FullBleed = true;
-            _barShown = false;
-            Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse);
-            _chrome.Start();
         }
         else
         {
-            _chrome.Stop();
             ResizeMode = ResizeMode.CanResize;
             if (!DevMode) { Left = _restoreBounds.Left; Top = _restoreBounds.Top; }
             Width = _restoreBounds.Width; Height = _restoreBounds.Height;
             WindowState = _restoreState;
             AppRoot.Margin = new Thickness(14);
             Board.FullBleed = false;
-            Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse);
         }
         ApplySidebar(animate: true);
         GlassPanel.ShadowsEnabled = !on; // na tela cheia, sem sombras (ficavam cortadas sobre o quadro)
         ApplyTitle(animate: true);
         RefreshBoardGlass();
-    }
-
-    void AutoHideTick()
-    {
-        if (!_fullscreen || _presenting || !IsActive) return;
-        var p = Mouse.GetPosition(WindowRoot);
-        var now = DateTime.Now;
-        // Barra de ferramentas: aparece ao encostar na borda de cima, some 1 s depois que o mouse sai.
-        bool nearBar = p.Y <= 6 || (_barShown && p.Y <= 76);
-        if (nearBar) _barAway = now;
-        if (nearBar && !_barShown) { _barShown = true; Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse); }
-        else if (!nearBar && _barShown && (now - _barAway).TotalSeconds > 1 && !_actionsOpen)
-        { _barShown = false; Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse); }
     }
 
     Rect MonitorBounds()
@@ -1072,6 +1097,13 @@ public partial class MainWindow : Window
             case Key.Left when mods == ModifierKeys.Alt: App.Library.GoBackCommand.Execute(null); e.Handled = true; return;
             case Key.Right when mods == ModifierKeys.Alt: App.Library.GoForwardCommand.Execute(null); e.Handled = true; return;
             case Key.F when ctrl && shift: ToggleFps(); e.Handled = true; return;
+        }
+
+        // Sem nenhum quadro: só criar um novo (o resto dos atalhos não tem onde agir).
+        if (_emptyMode && !App.Library.GalleryOpen)
+        {
+            if (key == Key.N && ctrl) { App.Library.NewBoard(); e.Handled = true; }
+            return;
         }
 
         if (Keyboard.FocusedElement is TextBox or RichTextBox)
