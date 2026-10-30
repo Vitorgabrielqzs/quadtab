@@ -24,14 +24,18 @@ public partial class MainWindow : Window
         nameof(SideProgress), typeof(double), typeof(MainWindow), new PropertyMetadata(1.0, (d, _) => ((MainWindow)d).ApplySide()));
 
     const double SidebarWidth = 292;
+    const double SidePeekWidth = 18;   // recolhida, a lateral deixa esta faixa à mostra
+    const double DockHiddenY = 52;     // escondido, o dock deixa ~14 px à mostra
 
     MainViewModel _vm;
     readonly BackdropBlobs _glassBackdrop = new() { Saturation = 1.9 };
     readonly ScaleTransform MenuScale = new();
     readonly ScaleTransform ActionsScale = new();
     readonly ScaleTransform TrayScale = new();
-    readonly TranslateTransform TrayShift = new() { Y = 100 }; // dock escondido abaixo da borda
+    readonly TranslateTransform TrayShift = new() { Y = DockHiddenY }; // dock quase todo abaixo da borda
     bool _menuOpen, _actionsOpen, _ctxOpen, _ctxWasOpen;
+    // Botão que abriu o menu de ações: clicar nele de novo fecha (em vez de reabrir).
+    FrameworkElement? _actionsOwner, _ownerJustClosed;
 
     public MainWindow(MainViewModel vm)
     {
@@ -43,7 +47,7 @@ public partial class MainWindow : Window
         // O vidro sobre o fundo enxerga uma cópia saturada das manchas (saturate 190%, sem custo de efeito).
         ApplyGlassBackdropColors();
         WindowRoot.SizeChanged += (_, e) => LayoutGlassBackdrop(e.NewSize);
-        foreach (var g in new[] { SidebarGlass, SideCap, UndoCap, TrayCap, MoreCap, WindowCap, HideTitleGlass, Editor.Glass, Quick.Glass })
+        foreach (var g in new[] { SidebarGlass, TitleCap, UndoCap, MoreCap, WindowCap, Editor.Glass, Quick.Glass })
             g.BackdropSource = _glassBackdrop;
 
         // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
@@ -86,7 +90,7 @@ public partial class MainWindow : Window
 
         Attach(vm);
         SideProgress = vm.SidebarOpen ? 1 : 0;
-        if (!vm.SidebarOpen) { SidebarGlass.Visibility = Visibility.Collapsed; SideCap.Visibility = Visibility.Visible; }
+        ApplySideContent(vm.SidebarOpen, animate: false);
 
         _chrome = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _chrome.Tick += (_, _) => AutoHideTick();
@@ -128,8 +132,18 @@ public partial class MainWindow : Window
             RefreshBoardGlass();
         };
         StateChanged += (_, _) => ApplyWindowState();
-        PreviewMouseDown += OnPreviewMouseDown;
+        // O X fecha o app sempre, mesmo com algo aberto por cima dele (Procurar, galeria, menus).
+        PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (!CloseButton.IsVisible || ToolbarCollapse.Progress < 0.5) return;
+            var p = e.GetPosition(CloseButton);
+            if (p.X < 0 || p.Y < 0 || p.X > CloseButton.ActualWidth || p.Y > CloseButton.ActualHeight) return;
+            e.Handled = true;
+            CloseApp();
+        };
         PreviewMouseDown += (_, e) => Sparks.Fire(e.GetPosition(Sparks));
+        PreviewMouseDown += OnPreviewMouseDown;
+        PreviewMouseRightButtonUp += OnPreviewMouseRightUp;
         PreviewMouseWheel += (_, _) => { CloseMenu(); CloseActions(); };
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewKeyUp += (_, e) =>
@@ -137,7 +151,7 @@ public partial class MainWindow : Window
             if (e.Key == Key.Space) Board.SpaceHeld = false;
         };
         Deactivated += (_, _) => Board.SpaceHeld = false;
-        Closing += (_, _) => { _vm.Flush(); Editor.Flush(); };
+        Closing += (_, _) => { if (!_closing) SaveAll(); };
     }
 
     public double SideProgress { get => (double)GetValue(SideProgressProperty); set => SetValue(SideProgressProperty, value); }
@@ -291,21 +305,36 @@ public partial class MainWindow : Window
 
     void ShowSidebar(bool open)
     {
-        SidebarGlass.IsHitTestVisible = open;
-        if (open) SidebarGlass.Visibility = Visibility.Visible;
-        SideCap.Visibility = open || _fullscreen ? Visibility.Collapsed : Visibility.Visible;
+        // Fora da tela cheia, recolhida ela continua como uma faixa de vidro (nunca some de vez).
+        SidebarGlass.Visibility = Visibility.Visible;
         Anim.To(this, SideProgressProperty, open ? 1 : 0, 0.45, Anim.Sidebar, () =>
         {
-            if (SideProgress < 0.01) SidebarGlass.Visibility = Visibility.Collapsed;
+            if (SideProgress < 0.01 && _fullscreen) SidebarGlass.Visibility = Visibility.Collapsed;
         });
-        Anim.To(SidebarGlass, OpacityProperty, open ? 1 : 0, 0.3, Anim.Ease);
+        Anim.To(SidebarGlass, OpacityProperty, open || !_fullscreen ? 1 : 0, 0.3, Anim.Ease);
+        ApplySideContent(open, animate: true);
+    }
+
+    /// <summary>Conteúdo da lateral (some na faixa recolhida) e a faixa clicável que reabre.</summary>
+    void ApplySideContent(bool open, bool animate)
+    {
+        SidebarView.IsHitTestVisible = open;
+        Anim.To(SidebarView, OpacityProperty, open ? 1 : 0, animate ? (open ? 0.35 : 0.15) : 0, Anim.Ease);
+        SidePeek.Visibility = open || _fullscreen ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    void OnSidePeek(object sender, MouseButtonEventArgs e)
+    {
+        _vm.SidebarOpen = true;
+        e.Handled = true;
     }
 
     void ApplySide()
     {
         double p = Math.Max(0, SideProgress);
-        SidebarGlass.Width = SidebarWidth * p;
-        SidebarGlass.Margin = new Thickness(0, 0, _fullscreen ? 0 : 14 * Math.Min(1, p), 0);
+        double peek = _fullscreen ? 0 : SidePeekWidth;
+        SidebarGlass.Width = peek + (SidebarWidth - peek) * p;
+        SidebarGlass.Margin = new Thickness(0, 0, _fullscreen ? 0 : 10 + 4 * Math.Min(1, p), 0);
     }
 
     // ---------- título grande (recolhe em 0.5 s) e renomear ----------
@@ -320,6 +349,11 @@ public partial class MainWindow : Window
         Anim.To(BigScale, ScaleTransform.ScaleXProperty, hidden ? 0.98 : 1, 0.5 * k, Anim.CollapseMove);
         Anim.To(BigScale, ScaleTransform.ScaleYProperty, hidden ? 0.98 : 1, 0.5 * k, Anim.CollapseMove);
         BigTitle.IsHitTestVisible = !hidden;
+
+        // A seta da barra (sempre à mostra) aponta para baixo quando o título está escondido.
+        Anim.To(TitleArrow, RotateTransform.AngleProperty, hidden ? 180 : 0, 0.5 * k, Anim.Tap);
+        TitleButton.ToolTip = hidden ? "Mostra o título grande do quadro" : "Esconde o título grande e aumenta o quadro";
+        TitleCap.Visibility = _fullscreen ? Visibility.Collapsed : Visibility.Visible;
 
         // O título pequeno da barra surge subindo 8 px.
         Anim.To(InlineTitle, OpacityProperty, hidden ? 1 : 0, 0.35 * k, Anim.Ease);
@@ -426,14 +460,19 @@ public partial class MainWindow : Window
         Menu.Visibility = Visibility.Collapsed;
     }
 
-    /// <summary>Menu genérico de ações (lateral, galeria, "…", opções extras do item).</summary>
-    public void ShowActions(Point windowPoint, IEnumerable<ActionItem> items)
+    /// <summary>
+    /// Menu genérico de ações (lateral, galeria, "…", opções extras do item).
+    /// owner = botão que abre o menu: clicar nele com o menu aberto fecha o menu.
+    /// </summary>
+    public void ShowActions(Point windowPoint, IEnumerable<ActionItem> items, FrameworkElement? owner = null)
     {
         CloseMenu();
         CloseContextTray();
+        if (owner is not null && owner == _ownerJustClosed) { _ownerJustClosed = null; return; }
         Actions.SetItems(items);
         Place(Actions, ActionsScale, windowPoint);
         _actionsOpen = true;
+        _actionsOwner = owner;
         Dispatcher.BeginInvoke(Actions.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
     }
 
@@ -441,6 +480,7 @@ public partial class MainWindow : Window
     {
         if (!_actionsOpen) return;
         _actionsOpen = false;
+        _actionsOwner = null;
         Actions.Visibility = Visibility.Collapsed;
     }
 
@@ -463,10 +503,49 @@ public partial class MainWindow : Window
         CtxTray.Visibility = Visibility.Collapsed;
     }
 
+    // Dois cliques com o botão direito no quadro: outro item igual ao último criado, no ponto clicado.
+    long _lastRightDown;
+    Point _lastRightPos;
+    bool _eatRightUp;
+
+    bool IsRightDouble(MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Right) return false;
+        var p = e.GetPosition(WindowRoot);
+        long now = Environment.TickCount64;
+        bool dbl = now - _lastRightDown <= GetDoubleClickTime()
+                   && Math.Abs(p.X - _lastRightPos.X) <= SystemParameters.MinimumHorizontalDragDistance * 2
+                   && Math.Abs(p.Y - _lastRightPos.Y) <= SystemParameters.MinimumVerticalDragDistance * 2;
+        _lastRightDown = dbl ? 0 : now; // um terceiro clique começa de novo
+        _lastRightPos = p;
+        return dbl && BoardArea.IsVisible && !Quick.IsOpen && !App.Library.GalleryOpen && !_presenting && Board.IsInside(WindowRoot, p);
+    }
+
+    void OnPreviewMouseRightUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_eatRightUp) return;
+        _eatRightUp = false;
+        e.Handled = true; // o soltar do 2º clique não abre a bandeja de novo
+    }
+
     void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsRightDouble(e))
+        {
+            CloseMenu();
+            CloseActions();
+            CloseContextTray();
+            _ctxWasOpen = false;
+            _eatRightUp = true;
+            _vm.EndEdit();
+            Board.Tool = BoardTool.Select;
+            _vm.RepeatLast(Board.ToWorld(WindowRoot, e.GetPosition(WindowRoot)));
+            e.Handled = true;
+            return;
+        }
         // Clicar fora fecha os menus (o clique continua valendo para o que estiver embaixo).
         _ctxWasOpen = _ctxOpen && !CtxTray.IsMouseOver && e.ChangedButton == MouseButton.Right;
+        _ownerJustClosed = _actionsOpen && _actionsOwner is { IsMouseOver: true } ? _actionsOwner : null;
         if (_menuOpen && !Menu.IsMouseOver) CloseMenu();
         if (_actionsOpen && !Actions.IsMouseOver) CloseActions();
         if (_ctxOpen && !CtxTray.IsMouseOver) CloseContextTray();
@@ -523,11 +602,13 @@ public partial class MainWindow : Window
             new(_vm.TitleHidden ? "Mostrar título" : "Ocultar título", "IcTitle", () => _vm.TitleHidden = !_vm.TitleHidden),
             new("Cenas e apresentação…", "IcScenes", () => ShowScenes(p), Separator: true),
             new("Apresentar", "IcPresent", StartPresenting),
+            new(_fullscreen ? "Sair da tela cheia" : "Tela cheia", _fullscreen ? "IcExitFullscreen" : "IcFullscreen", () => SetFullscreen(!_fullscreen))
+                { Tip = "Deixa o quadro em tela cheia · F11" },
             new("Exportar quadro (PNG, PDF)…", "IcExport", () => Export(selectionOnly: false), Separator: true),
         };
         if (sel.Count > 0) list.Add(new("Exportar seleção…", "IcExport", () => Export(selectionOnly: true)));
         list.Add(new("Abrir a pasta do cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true));
-        ShowActions(p, list);
+        ShowActions(p, list, MoreButton);
     }
 
     void ToggleInspector()
@@ -738,15 +819,12 @@ public partial class MainWindow : Window
     DateTime _sideAway, _barAway;
     bool _sideShown, _barShown;
 
-    void OnFullscreen(object sender, RoutedEventArgs e) => SetFullscreen(!_fullscreen);
-
     void SetFullscreen(bool on)
     {
         if (on == _fullscreen) return;
         _fullscreen = on;
         StorageService.State.TelaCheia = on && !_presenting;
         StorageService.SaveState();
-        FullIcon.Data = (Geometry)FindResource(on ? "IcExitFullscreen" : "IcFullscreen");
         if (on)
         {
             _restoreState = WindowState;
@@ -785,6 +863,7 @@ public partial class MainWindow : Window
             Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse);
         }
         ApplySide();
+        ApplySideContent(on ? _sideShown : _vm.SidebarOpen, animate: false);
         ApplyTitle(animate: true);
         RefreshBoardGlass();
     }
@@ -876,8 +955,7 @@ public partial class MainWindow : Window
         if (show == _dockShown) return;
         _dockShown = show;
         if (show) Anim.To(TrayShift, TranslateTransform.YProperty, 0, 0.55, Anim.Panel);
-        else Anim.To(TrayShift, TranslateTransform.YProperty, 100, 0.4, Anim.Ease);
-        Anim.To(TrayHandle, OpacityProperty, show ? 0 : 1, 0.25, Anim.Ease);
+        else Anim.To(TrayShift, TranslateTransform.YProperty, DockHiddenY, 0.4, Anim.Ease);
         TrackGlass(0.6);
     }
 
@@ -934,7 +1012,7 @@ public partial class MainWindow : Window
         Quick.Show();
     }
 
-    public void ShowSettings(Point at)
+    public void ShowSettings(Point at, FrameworkElement? owner = null)
     {
         var s = StorageService.State;
         ShowActions(at,
@@ -950,7 +1028,7 @@ public partial class MainWindow : Window
             new("Inspetor ao selecionar", "IcSettings", ToggleInspector, Checked: Inspector.Wanted) { Tip = "Mostra o painel de propriedades quando algo está selecionado" },
             new("Contador de FPS", "IcGrid", ToggleFps, Checked: FpsPanel.Visibility == Visibility.Visible) { Tip = "Mostra a velocidade do quadro · Ctrl+Shift+F" },
             new("Abrir a pasta Cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true) { Tip = "Abre no Explorador a pasta onde tudo fica guardado" },
-        ]);
+        ], owner);
     }
 
     // ---------- conferência (desenvolvimento) ----------
@@ -1078,7 +1156,26 @@ public partial class MainWindow : Window
 
     void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     void OnMaximize(object sender, RoutedEventArgs e) => ToggleMaximize();
-    void OnClose(object sender, RoutedEventArgs e) => Close();
+    void OnClose(object sender, RoutedEventArgs e) => CloseApp();
+
+    bool _closing;
+
+    /// <summary>Fecha o app, não importa o que esteja aberto (salva o que der antes).</summary>
+    void CloseApp()
+    {
+        if (_closing) return;
+        _closing = true;
+        SaveAll();
+        Application.Current.Shutdown();
+    }
+
+    // Salvar nunca impede de fechar: um erro aqui fica só registrado.
+    void SaveAll()
+    {
+        try { EndRename(true); } catch (Exception ex) { App.Log(ex); }
+        try { _vm.Flush(); } catch (Exception ex) { App.Log(ex); }
+        try { Editor.Flush(); } catch (Exception ex) { App.Log(ex); }
+    }
 
     void ToggleMaximize()
     {
@@ -1110,6 +1207,7 @@ public partial class MainWindow : Window
     struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
 
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern uint GetDoubleClickTime();
     [DllImport("user32.dll")] static extern int GetSystemMetricsForDpi(int index, uint dpi);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);

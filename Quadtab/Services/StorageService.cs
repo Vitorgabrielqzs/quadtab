@@ -125,6 +125,10 @@ public static class StorageService
 
     public static void SaveState() => WriteText(StatePath, JsonSerializer.Serialize(State, Json.AppState));
 
+    /// <summary>Cópia independente de um item (passa pelo JSON, então copia tudo, inclusive linhas e tabelas).</summary>
+    public static BoardItem CloneItem(BoardItem m) =>
+        JsonSerializer.Deserialize(JsonSerializer.Serialize(new List<BoardItem> { m }, Json.ListBoardItem), Json.ListBoardItem)![0];
+
     // ---------- caminhos ----------
 
     public static string Rel(string full) => Path.GetRelativePath(Root, full);

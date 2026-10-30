@@ -235,7 +235,7 @@ public sealed partial class PageEditor : Grid
         var boards = StorageService.BoardFiles().Select(f => "Quadro: " + System.IO.Path.GetFileNameWithoutExtension(f));
         _candidates = pages.Concat(boards)
             .Where(n => !string.Equals(n, _title.Text, StringComparison.OrdinalIgnoreCase) && ViewModels.BoardItemViewModel.Normalize(n).Contains(q))
-            .OrderBy(n => ViewModels.BoardItemViewModel.Normalize(n).StartsWith(q) ? 0 : 1).ThenBy(n => n).Take(8).ToList();
+            .OrderBy(n => ViewModels.BoardItemViewModel.Normalize(n).StartsWith(q, StringComparison.Ordinal) ? 0 : 1).ThenBy(n => n).Take(8).ToList();
         if (_candidates.Count == 0) { HideSuggest(); return; }
         _pick = Math.Clamp(_pick, 0, _candidates.Count - 1);
         _suggestList.Children.Clear();
@@ -245,7 +245,7 @@ public sealed partial class PageEditor : Grid
             var row = new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 6, 10, 6), Cursor = Cursors.Hand };
             if (i == _pick) row.SetResourceReference(Border.BackgroundProperty, "Accent14Brush");
             else row.Background = Brushes.Transparent;
-            row.Child = UiKit.Row(new Icon { Data = UiKit.G(name.StartsWith("Quadro: ") ? "IcBoard" : "IcPage"), Size = 15, Margin = new Thickness(0, 0, 8, 0) },
+            row.Child = UiKit.Row(new Icon { Data = UiKit.G(name.StartsWith("Quadro: ", StringComparison.Ordinal) ? "IcBoard" : "IcPage"), Size = 15, Margin = new Thickness(0, 0, 8, 0) },
                 new TextBlock { Text = name, FontSize = 14 });
             row.MouseLeftButtonDown += (_, e) => { Accept(name); e.Handled = true; };
             _suggestList.Children.Add(row);
@@ -303,7 +303,7 @@ public sealed partial class PageEditor : Grid
         {
             var line = lines[i];
             int lineIndex = i;
-            if (line.TrimStart().StartsWith("```"))
+            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
             {
                 code = !code;
                 if (code)
@@ -355,7 +355,7 @@ public sealed partial class PageEditor : Grid
                 p.Inlines.Add(new Run(mark) { FontWeight = FontWeights.Bold });
                 AddInlines(p, bullet.Groups[2].Value);
             }
-            else if (trimmed.StartsWith("> "))
+            else if (trimmed.StartsWith("> ", StringComparison.Ordinal))
             {
                 p = new Paragraph { Margin = new Thickness(0, 4, 0, 4), Padding = new Thickness(12, 2, 0, 2), BorderThickness = new Thickness(3, 0, 0, 0), FontStyle = FontStyles.Italic };
                 p.SetResourceReference(Paragraph.BorderBrushProperty, "AccentBrush");

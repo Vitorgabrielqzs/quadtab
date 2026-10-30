@@ -29,15 +29,15 @@ public static partial class Markdown
         foreach (var raw in md.Replace("\r", "").Split('\n'))
         {
             var l = raw.TrimEnd();
-            if (l.StartsWith("```")) { code = !code; continue; }
+            if (l.StartsWith("```", StringComparison.Ordinal)) { code = !code; continue; }
             if (l.Trim() is "---" or "***") continue;
             if (!code)
             {
                 var h = Heading().Match(l);
                 if (h.Success) l = h.Groups[2].Value;
                 l = l.Replace("- [ ] ", "○ ").Replace("- [x] ", "● ").Replace("- [X] ", "● ");
-                if (l.StartsWith("- ") || l.StartsWith("* ")) l = "• " + l[2..];
-                if (l.StartsWith("> ")) l = l[2..];
+                if (l.StartsWith("- ", StringComparison.Ordinal) || l.StartsWith("* ", StringComparison.Ordinal)) l = "• " + l[2..];
+                if (l.StartsWith("> ", StringComparison.Ordinal)) l = l[2..];
                 l = l.Replace("**", "").Replace("__", "").Replace("~~", "").Replace("==", "");
                 l = WikiLink().Replace(l, m => m.Groups[1].Value);
                 l = Regex.Replace(l, @"!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)", "🖼");
@@ -54,7 +54,7 @@ public static partial class Markdown
         bool code = false;
         foreach (var raw in md.Replace("\r", "").Split('\n'))
         {
-            if (raw.StartsWith("```")) { code = !code; continue; }
+            if (raw.StartsWith("```", StringComparison.Ordinal)) { code = !code; continue; }
             if (code) continue;
             var m = Heading().Match(raw);
             if (m.Success && m.Groups[1].Length <= 3) yield return (m.Groups[1].Length, m.Groups[2].Value.Trim());

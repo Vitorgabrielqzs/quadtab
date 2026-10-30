@@ -95,4 +95,11 @@ public sealed class AppState
 
     /// <summary>Faíscas ao clicar (Ajustes).</summary>
     public bool Faiscas { get; set; } = true;
+
+    /// <summary>Última cor e último estilo de post-it escolhidos.</summary>
+    public string CorPostit { get; set; } = "amarelo";
+    public string EstiloPostit { get; set; } = "Pin";
+
+    /// <summary>Molde do último item criado: 2 cliques com o botão direito colocam outro igual.</summary>
+    public BoardItem? UltimoItem { get; set; }
 }

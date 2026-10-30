@@ -134,20 +134,69 @@ public sealed class ShapeView : ItemViewBase
     protected override void Rebuild() { }
 }
 
-/// <summary>Linha, seta ou conector (reta, curva ou em ângulo), com pontas configuráveis.</summary>
+/// <summary>
+/// Linha, seta ou conector (reta, curva ou em ângulo), com pontas configuráveis e, como no Canvas do
+/// Obsidian, um rótulo opcional no meio (2 cliques na linha escrevem nele).
+/// </summary>
 public sealed class LineView : ItemViewBase
 {
     public const double Pad = 24;
     readonly LineVisual _visual = new();
+    readonly Canvas _labelLayer = new() { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+    readonly Border _label;
+    readonly TextBlock _labelText;
+    readonly TextBox _labelEdit;
 
-    public LineView() => Children.Add(_visual);
+    public LineView()
+    {
+        Children.Add(_visual);
+        _labelText = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = LabelInk, TextAlignment = TextAlignment.Center, MaxWidth = 220, TextWrapping = TextWrapping.Wrap };
+        UI.SetField(_labelText, "text");
+        _labelText.SetBinding(TextBlock.TextProperty, "Text");
+        _labelText.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Hidden") });
+        _labelEdit = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = 13, FontWeight = FontWeights.SemiBold, MinWidth = 80, TextAlignment = TextAlignment.Center };
+        EditBox.SetMode(_labelEdit, "note");
+        _labelEdit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged });
+        _labelEdit.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Visible") });
+        var stack = new Grid();
+        stack.Children.Add(_labelText);
+        stack.Children.Add(_labelEdit);
+        _label = new Border { Background = LabelFill, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 3, 7, 3), Child = stack };
+        _label.SizeChanged += (_, _) => PlaceLabel();
+        _labelLayer.Children.Add(_label);
+        Children.Add(_labelLayer);
+    }
 
-    protected override void Rebuild() => _visual.SetItem(Item);
+    static readonly Brush LabelFill = Frozen(Color.FromArgb(235, 255, 255, 255));
+    static readonly Brush LabelInk = Frozen(Color.FromRgb(0x1D, 0x21, 0x30));
+    static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
+
+    protected override void Rebuild()
+    {
+        _visual.SetItem(Item);
+        PlaceLabel();
+    }
 
     protected override void OnItem(string p)
     {
         if (p is nameof(BoardItemViewModel.Line) or nameof(BoardItemViewModel.Style) or nameof(BoardItemViewModel.X) or nameof(BoardItemViewModel.Y))
+        {
             _visual.Refresh();
+            PlaceLabel();
+        }
+        else if (p is nameof(BoardItemViewModel.Text) or nameof(BoardItemViewModel.Editing)) PlaceLabel();
+    }
+
+    /// <summary>Rótulo centrado no meio do caminho (some quando está vazio e fora da edição).</summary>
+    void PlaceLabel()
+    {
+        if (Item?.Line is not { } l) return;
+        bool show = Item.IsEditingText || !string.IsNullOrWhiteSpace(Item.Text);
+        _label.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        Build(l, new Vector(Item.X, Item.Y)).GetFlattenedPathGeometry().GetPointAtFractionLength(0.5, out var mid, out _);
+        Canvas.SetLeft(_label, Math.Round(mid.X - _label.ActualWidth / 2));
+        Canvas.SetTop(_label, Math.Round(mid.Y - _label.ActualHeight / 2));
     }
 
     /// <summary>Pontos da linha em coordenadas do mundo.</summary>

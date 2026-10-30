@@ -104,7 +104,7 @@ public static partial class MediaService
         var item = vm.AddItem(new BoardItem
         {
             Tipo = "link", X = Math.Round(at.X - 150), Y = Math.Round(at.Y - 60), Url = url,
-            Site = uri.Host.StartsWith("www.") ? uri.Host[4..] : uri.Host, Fixacao = "nenhuma",
+            Site = uri.Host.StartsWith("www.", StringComparison.Ordinal) ? uri.Host[4..] : uri.Host, Fixacao = "nenhuma",
         });
         _ = FetchPreviewAsync(item, uri);
         return item;
@@ -114,7 +114,7 @@ public static partial class MediaService
     {
         url = text.Trim();
         if (url.Contains(' ') || url.Contains('\n')) return false;
-        if (url.StartsWith("www.")) url = "https://" + url;
+        if (url.StartsWith("www.", StringComparison.Ordinal)) url = "https://" + url;
         return Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");
     }
 
@@ -215,7 +215,7 @@ public static partial class MediaService
             {
                 using var ir = await Http.GetAsync(imgUri);
                 var type = ir.Content.Headers.ContentType?.MediaType ?? "";
-                if (!ir.IsSuccessStatusCode || !type.StartsWith("image/")) return;
+                if (!ir.IsSuccessStatusCode || !type.StartsWith("image/", StringComparison.Ordinal)) return;
                 var bytes = await ir.Content.ReadAsByteArrayAsync();
                 if (bytes.Length > 8_000_000) return;
                 var ext = type switch { "image/png" => ".png", "image/gif" => ".gif", "image/webp" => ".webp", _ => ".jpg" };

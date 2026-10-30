@@ -30,10 +30,17 @@
             </Grid.ColumnDefinitions>
 
             <!-- ================= BARRA LATERAL ================= -->
-            <c:GlassPanel x:Name="SidebarGlass" Width="292" Margin="0,0,14,0" CornerRadius="32" Padding="14,18,14,14" ClipContent="True"
-                          Panel.ZIndex="40">
-                <c:Sidebar x:Name="SidebarView" MinWidth="264" />
-            </c:GlassPanel>
+            <Grid x:Name="SideColumn" Panel.ZIndex="40" HorizontalAlignment="Left">
+                <c:GlassPanel x:Name="SidebarGlass" Width="292" Margin="0,0,14,0" CornerRadius="32" Padding="14,18,14,14" ClipContent="True">
+                    <c:Sidebar x:Name="SidebarView" MinWidth="264" />
+                </c:GlassPanel>
+                <!-- Recolhida, a lateral deixa uma faixa de vidro à mostra: clicar nela reabre -->
+                <Border x:Name="SidePeek" Width="18" HorizontalAlignment="Left" Background="Transparent" Cursor="Hand"
+                        Visibility="Collapsed" ToolTip="Mostra a barra lateral" MouseLeftButtonUp="OnSidePeek">
+                    <Border x:Name="SideGrip" Width="4" Height="44" CornerRadius="2" Background="{DynamicResource Fill2Brush}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Grid>
 
             <!-- ================= COLUNA PRINCIPAL ================= -->
             <Grid x:Name="MainColumn" Grid.Column="1">
@@ -54,25 +61,29 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <c:GlassPanel x:Name="SideCap" CornerRadius="25" Padding="5" Margin="0,0,10,0" Visibility="Collapsed">
-                            <Button Style="{StaticResource CapButton}" ToolTip="Mostra a barra lateral" Command="{Binding ToggleSidebarCommand}">
-                                <c:Icon Data="{StaticResource IcSidebar}" />
-                            </Button>
-                        </c:GlassPanel>
-
-                        <c:TrackedText x:Name="InlineTitle" Grid.Column="1" Text="{Binding BoardTitle}" FontSize="17" FontWeight="Bold"
+                        <c:TrackedText x:Name="InlineTitle" Grid.Column="0" Text="{Binding BoardTitle}" FontSize="17" FontWeight="Bold"
                                        Tracking="-0.022" Wrap="False" Margin="8,0" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False">
                             <c:TrackedText.RenderTransform>
                                 <TranslateTransform x:Name="InlineMove" Y="8" />
                             </c:TrackedText.RenderTransform>
                         </c:TrackedText>
 
+                        <!-- Mostrar / ocultar o título grande: sempre à mostra (a seta gira) -->
+                        <c:GlassPanel x:Name="TitleCap" Grid.Column="3" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <Button x:Name="TitleButton" Style="{StaticResource CapButton}" Command="{Binding ToggleTitleCommand}"
+                                    ToolTip="Mostra ou esconde o título grande do quadro">
+                                <c:Icon Data="{StaticResource IcChevronUp}" RenderTransformOrigin="0.5,0.5">
+                                    <c:Icon.RenderTransform>
+                                        <RotateTransform x:Name="TitleArrow" />
+                                    </c:Icon.RenderTransform>
+                                </c:Icon>
+                            </Button>
+                        </c:GlassPanel>
+
                         <!-- Desfazer / refazer -->
-                        <c:GlassPanel x:Name="UndoCap" Grid.Column="3" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="UndoCap" Grid.Column="4" CornerRadius="25" Padding="5" Margin="10,0,0,0">
                             <StackPanel Orientation="Horizontal">
                                 <Button Style="{StaticResource CapButton}" ToolTip="Desfaz a última mudança · Ctrl+Z" Click="OnUndo" IsEnabled="{Binding CanUndo}">
                                     <c:Icon Data="{StaticResource IcUndo}" />
@@ -83,50 +94,15 @@
                             </StackPanel>
                         </c:GlassPanel>
 
-                        <!-- Bandeja (fica tingida quando aberta) -->
-                        <c:GlassPanel x:Name="TrayCap" Grid.Column="5" CornerRadius="25" Padding="5" Margin="10,0,0,0">
-                            <c:GlassPanel.Style>
-                                <Style TargetType="c:GlassPanel" BasedOn="{StaticResource {x:Type c:GlassPanel}}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding TrayOpen}" Value="True">
-                                            <Setter Property="Background" Value="{StaticResource AccentTintBrush}" />
-                                            <Setter Property="ShadowLayers" Value="{StaticResource AccentShadow}" />
-                                            <Setter Property="TextElement.Foreground" Value="White" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </c:GlassPanel.Style>
-                            <Button Command="{Binding ToggleTrayCommand}" ToolTip="Abre a bandeja de post-its e elementos">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource CapButton}">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding TrayOpen}" Value="True">
-                                                <Setter Property="b:UI.HoverBackground" Value="{StaticResource White16Brush}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <c:Icon Data="{StaticResource IcTray}" />
-                                    <TextBlock Text="Bandeja" Margin="7,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
+                        <!-- Mais opções (clicar de novo fecha) -->
+                        <c:GlassPanel x:Name="MoreCap" Grid.Column="5" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                            <Button x:Name="MoreButton" Style="{StaticResource CapButton}" ToolTip="Mostra mais opções: busca, cenas, tela cheia, exportar e outras" Click="OnMore">
+                                <c:Icon Data="{StaticResource IcEllipsis}" />
                             </Button>
                         </c:GlassPanel>
 
-                        <!-- Mais opções e tela cheia -->
-                        <c:GlassPanel x:Name="MoreCap" Grid.Column="6" CornerRadius="25" Padding="5" Margin="10,0,0,0">
-                            <StackPanel Orientation="Horizontal">
-                                <Button x:Name="MoreButton" Style="{StaticResource CapButton}" ToolTip="Mostra mais opções: busca, cenas, exportar e outras" Click="OnMore">
-                                    <c:Icon Data="{StaticResource IcEllipsis}" />
-                                </Button>
-                                <Button Style="{StaticResource CapButton}" Margin="2,0,0,0" ToolTip="Deixa o quadro em tela cheia · F11" Click="OnFullscreen">
-                                    <c:Icon x:Name="FullIcon" Data="{StaticResource IcFullscreen}" />
-                                </Button>
-                            </StackPanel>
-                        </c:GlassPanel>
-
                         <!-- Janela: minimizar, maximizar, fechar -->
-                        <c:GlassPanel x:Name="WindowCap" Grid.Column="7" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="WindowCap" Grid.Column="6" CornerRadius="25" Padding="5" Margin="10,0,0,0">
                             <StackPanel Orientation="Horizontal">
                                 <Button Style="{StaticResource CapButton}" ToolTip="Minimiza a janela" Click="OnMinimize">
                                     <c:Icon Data="{StaticResource IcWinMin}" />
@@ -134,7 +110,7 @@
                                 <Button Style="{StaticResource CapButton}" Margin="2,0" ToolTip="Maximiza ou restaura a janela" Click="OnMaximize">
                                     <c:Icon x:Name="MaxIcon" Data="{StaticResource IcWinMax}" />
                                 </Button>
-                                <Button ToolTip="Fecha o Quadtab (tudo já fica salvo)" Click="OnClose">
+                                <Button x:Name="CloseButton" ToolTip="Fecha o Quadtab (tudo já fica salvo)" Click="OnClose">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource CapButton}">
                                             <Setter Property="b:UI.HoverBackground" Value="{DynamicResource DangerBrush}" />
@@ -204,14 +180,6 @@
                                     </UniformGrid>
                                 </Grid>
                             </Grid>
-
-                            <!-- Botão redondo de vidro que oculta o título -->
-                            <c:GlassPanel x:Name="HideTitleGlass" Width="42" Height="42" CornerRadius="21" Margin="10,0,0,0" b:Press.IsEnabled="True">
-                                <Button Style="{StaticResource SoftButton}" b:UI.Radius="21" b:UI.HoverBackground="Transparent"
-                                        Foreground="{DynamicResource Ink2Brush}" ToolTip="Esconde o título grande e aumenta o quadro" Command="{Binding ToggleTitleCommand}">
-                                    <c:Icon Data="{StaticResource IcChevronUp}" />
-                                </Button>
-                            </c:GlassPanel>
                         </StackPanel>
                     </Grid>
                 </c:CollapsePanel>
@@ -235,10 +203,8 @@
                             </StackPanel>
                         </c:GlassPanel>
 
-                        <!-- Dock da bandeja: escondido abaixo da borda da cortiça; sobe quando o mouse chega perto -->
+                        <!-- Dock da bandeja: fica um pouquinho à mostra na borda da cortiça; sobe quando o mouse chega perto -->
                         <Grid Margin="16" ClipToBounds="True" Panel.ZIndex="30">
-                            <Border x:Name="TrayHandle" Width="40" Height="5" CornerRadius="2.5" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                    Margin="0,0,0,8" Background="{DynamicResource Fill2Brush}" IsHitTestVisible="False" />
                             <c:Tray x:Name="Tray" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" />
                         </Grid>
 

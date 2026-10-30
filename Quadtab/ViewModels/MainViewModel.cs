@@ -64,6 +64,7 @@ public partial class MainViewModel : ObservableObject
         ShowGrid = board.Grade;
         DiagramMode = board.Diagrama;
         SidebarOpen = StorageService.State.LateralAberta;
+        NewStyle = Enum.TryParse<NoteStyle>(StorageService.State.EstiloPostit, out var ns) ? ns : NoteStyle.Pin;
         Search = "";
         BoardSearch = "";
         OutlineOpen = StorageService.State.Abertos.Contains("noquadro");
@@ -150,7 +151,17 @@ public partial class MainViewModel : ObservableObject
 
     public NoteColor[] Colors => Palette.Colors;
 
-    public string LastColor { get; set; } = "amarelo";
+    /// <summary>Última cor de post-it usada (fica salva em estado.json).</summary>
+    public string LastColor
+    {
+        get => StorageService.State.CorPostit;
+        set
+        {
+            if (value == StorageService.State.CorPostit) return;
+            StorageService.State.CorPostit = value;
+            StorageService.SaveState();
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ModelName), nameof(ModelIndex), nameof(Subtitle), nameof(StatusText))]
@@ -233,6 +244,13 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowGridChanged(bool value) => MarkDirty(touchClock: false);
     partial void OnDiagramModeChanged(bool value) => MarkDirty(touchClock: false);
     partial void OnZoomChanged(double value) => MarkDirty(touchClock: false);
+    partial void OnNewStyleChanged(NoteStyle value)
+    {
+        if (StorageService.State.EstiloPostit == value.ToString()) return;
+        StorageService.State.EstiloPostit = value.ToString();
+        StorageService.SaveState();
+    }
+
     partial void OnSidebarOpenChanged(bool value)
     {
         StorageService.State.LateralAberta = value;
@@ -414,7 +432,11 @@ public partial class MainViewModel : ObservableObject
         }
 
         var vm = AddItem(m);
-        if (kind == ItemKind.PostIt) LastColor = color;
+        if (kind == ItemKind.PostIt)
+        {
+            LastColor = color;
+            if (style is { } ns) NewStyle = ns;
+        }
         if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox) BeginEdit(vm, EditField.Text);
         return vm;
     }
@@ -435,7 +457,45 @@ public partial class MainViewModel : ObservableObject
             EndEdit();
             Selected = vm;
         }
+        Remember(m);
         StructureChanged();
+        return vm;
+    }
+
+    // ---------- repetir o último item criado (2 cliques com o botão direito) ----------
+
+    /// <summary>Guarda o molde do item recém-criado em estado.json (traços soltos e conectores não contam).</summary>
+    static void Remember(BoardItem m)
+    {
+        if (m.Tipo == "desenho" || m.Linha is { De.Item: not null } or { Para.Item: not null }) return;
+        var t = StorageService.CloneItem(m);
+        t.Id = 0;
+        t.Z = 0;
+        t.Grupo = null;
+        t.Bloqueado = false;
+        StorageService.State.UltimoItem = t;
+        StorageService.SaveState();
+    }
+
+    /// <summary>Coloca, centrado no ponto, outro item igual ao último criado (sem molde: um post-it da última cor).</summary>
+    public BoardItemViewModel RepeatLast(Point at)
+    {
+        if (StorageService.State.UltimoItem is not { } t)
+            return Add(ItemKind.PostIt, LastColor, at.X, at.Y, NewStyle);
+        var kind = BoardItem.KindFromJson(t.Tipo);
+        // Página é um arquivo: repetir cria uma página nova, com a mesma cor.
+        if (kind == ItemKind.Page) return Add(ItemKind.Page, t.Cor, at.X, at.Y);
+
+        var m = StorageService.CloneItem(t);
+        Point center;
+        if (m.Linha is { } l) center = new Point((l.De.X + l.Para.X) / 2, (l.De.Y + l.Para.Y) / 2);
+        else
+        {
+            var size = BoardItemViewModel.DefaultSize(kind);
+            center = new Point(m.X + (m.Largura ?? size.Width) / 2, m.Y + (m.Altura ?? size.Height) / 2);
+        }
+        var vm = PasteModels([m], at - center)[0];
+        if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox) BeginEdit(vm, EditField.Text);
         return vm;
     }
 

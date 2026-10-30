@@ -183,6 +183,8 @@ public partial class LibraryViewModel : ObservableObject
     [RelayCommand]
     void ShowGallery(string group)
     {
+        // Clicar de novo no mesmo botão fecha a galeria.
+        if (GalleryOpen && GalleryGroup == group) { GalleryOpen = false; return; }
         App.MakeThumbnail();
         GalleryGroup = group;
         BuildGallery();
@@ -372,7 +374,7 @@ public partial class LibraryViewModel : ObservableObject
         foreach (var d in Directory.EnumerateDirectories(dir).Where(d => !System.IO.Path.GetFileName(d).StartsWith('.'))
                      .OrderBy(d => d, StringComparer.CurrentCultureIgnoreCase))
             yield return new SideNode(SideKind.Folder, d, System.IO.Path.GetFileName(d), depth, "cofre") { Icon = "IcFolder" };
-        foreach (var f in Directory.EnumerateFiles(dir).Where(f => !System.IO.Path.GetFileName(f).StartsWith('.') && !f.EndsWith(".tmp"))
+        foreach (var f in Directory.EnumerateFiles(dir).Where(f => !System.IO.Path.GetFileName(f).StartsWith('.') && !f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase))
         {
             var ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
@@ -500,7 +502,7 @@ public partial class LibraryViewModel : ObservableObject
     public void NewFolder(string parent)
     {
         var rel = System.IO.Path.GetRelativePath(StorageService.BoardsDir, parent);
-        if (rel == "." || rel.StartsWith("..")) rel = "";
+        if (rel == "." || rel.StartsWith("..", StringComparison.Ordinal)) rel = "";
         StorageService.CreateFolder(rel, "Nova pasta");
     }
 
@@ -571,7 +573,7 @@ public partial class LibraryViewModel : ObservableObject
     {
         var rel = System.IO.Path.GetRelativePath(StorageService.BoardsDir, folderPath);
         if (rel == ".") rel = "";
-        if (rel.StartsWith("..")) return; // só dentro de Quadros\
+        if (rel.StartsWith("..", StringComparison.Ordinal)) return; // só dentro de Quadros\
         bool isCurrent = App.ViewModel is { } cur && string.Equals(cur.FilePath, boardPath, StringComparison.OrdinalIgnoreCase);
         if (isCurrent) App.ViewModel!.Flush();
         var target = StorageService.MoveBoard(boardPath, rel);

@@ -116,23 +116,31 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        MakeThumbnail();
-        ViewModel?.Close();
-        Window?.FlushPage();
-        StorageService.SaveState();
+        // Cada passo isolado: um erro ao salvar não impede o resto nem o fechamento.
+        foreach (var step in new Action[] { MakeThumbnail, () => ViewModel?.Close(), () => Window?.FlushPage(), StorageService.SaveState })
+        {
+            try { step(); }
+            catch (Exception ex) { Log(ex); }
+        }
         base.OnExit(e);
     }
 
-    // Um erro inesperado não fecha o app: fica registrado em %AppData%\Quadtab\erros.log.
+    // Um erro inesperado não fecha o app: fica registrado em Cofre\.quadtab\erros.log.
     static void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        Log(e.Exception);
+        e.Handled = true;
+    }
+
+    /// <summary>Registra um erro em erros.log (nunca lança).</summary>
+    public static void Log(Exception ex)
     {
         try
         {
             Directory.CreateDirectory(StorageService.LogDir);
             File.AppendAllText(Path.Combine(StorageService.LogDir, "erros.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.Exception}\n\n");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\n\n");
         }
         catch { }
-        e.Handled = true;
     }
 }

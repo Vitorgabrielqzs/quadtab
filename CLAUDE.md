@@ -197,7 +197,7 @@ Este é o efeito principal. Todo painel de vidro tem quatro camadas:
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ ┌──────────────┐  ┌ barra de ferramentas ────────────────────────┐  │
-│ │ BARRA        │  │ [título inline]      [− 86% +] [👁 Ocultar título] [Bandeja] │
+│ │ BARRA        │  │ [título inline]            [⌃ título] [↶ ↷] […] [– □ ✕] │
 │ │ LATERAL      │  └──────────────────────────────────────────────┘  │
 │ │ (vidro)      │   Meu quadro                     [Cortiça|Branco|Lousa|Pontilhado] (^) │
 │ │              │   14 itens · Cortiça · editado agora               │
@@ -217,7 +217,7 @@ Tamanho de referência: 1440×920. Mínimo sugerido: 1100×720.
 No estilo da barra lateral do app Claude: lista limpa, linhas compactas (34 de altura, raio 10, hover `Fill`), ícones de traço à esquerda, rótulos de seção pequenos e cinzas (12.5/600/`Ink3`) com setinha que abre e fecha, filhos recuados 16 px e "Ver todos" em cinza. Mantém o vidro (raio 32), as cores, as fontes e as animações do Quadtab. **Não há** ícone/nome do app, títulos grandes de seção nem campo de busca fixo.
 
 De cima para baixo:
-1. **Topo:** recolher a lateral (largura 292 → 0; reabre pela cápsula no começo da barra de ferramentas), **voltar** e **avançar** (histórico de quadros e páginas abertos; também Alt+← / Alt+→). O espaço livre arrasta a janela.
+1. **Topo:** recolher a lateral (largura 292 → 18: fica uma **faixa de vidro à mostra** com uma alcinha vertical `Fill2` de 4×44; clicar na faixa reabre. Ela nunca some de vez fora da tela cheia), **voltar** e **avançar** (histórico de quadros e páginas abertos; também Alt+← / Alt+→). O espaço livre arrasta a janela.
 2. **Ações:** Novo quadro (Ctrl+N) · Procurar (Ctrl+K) · Nova página · Apagados recentemente (com contador).
 3. **Quadros** (sem rótulo): só o nome, pela ordem do último aberto, até 8 e depois "Ver todos" (galeria).
    - O quadro aberto fica numa **pílula** de destaque (`Fill2`).
@@ -233,13 +233,15 @@ De cima para baixo:
 
 - Cápsulas de vidro com 50 de altura e padding 5. Os botões dentro têm 40 de altura, mínimo de 40 de largura, padding horizontal 13 e hover `Fill`.
 - Da esquerda para a direita:
-  1. *(só com a lateral recolhida)* cápsula para mostrar a lateral;
-  2. **título inline** (17/700), invisível enquanto o título grande aparece. Quando o título grande some, este surge subindo 8 px e ganhando opacidade;
-  3. espaço livre;
+  1. **título inline** (17/700), invisível enquanto o título grande aparece. Quando o título grande some, este surge subindo 8 px e ganhando opacidade;
+  2. espaço livre;
+  3. **mostrar/ocultar título**: cápsula com a seta, **sempre à mostra**; a seta gira 180° (para baixo) quando o título está escondido;
   4. desfazer · refazer;
-  5. cápsula "Bandeja" (tingida de `Accent` quando aberta);
-  6. "…" (mais opções) · tela cheia;
-  7. minimizar · maximizar · fechar.
+  5. "…" (mais opções; a tela cheia fica dentro dele e no F11);
+  6. minimizar · maximizar · fechar.
+- **Não há** botão de tela cheia nem cápsula "Bandeja" na barra (removidos de propósito). A bandeja abre pelo dock, pelo botão direito ou pelo menu.
+- **Botões que abrem algo fecham no segundo clique** ("…", Ajustes, "…" das linhas da lateral, galerias da lateral). O menu guarda o botão "dono" (`ShowActions(..., owner)`).
+- **O ✕ fecha o app sempre**, mesmo com Procurar, galeria ou menus abertos por cima (a janela testa o clique na área do ✕ antes de tudo). Salvar ao fechar nunca impede o fechamento: erros vão para `erros.log`.
 - **Não há botões de zoom.** O zoom é pela rodinha, pela pinça e por Ctrl + / Ctrl − / Ctrl 0 (Ctrl+1 ajusta à tela). Sempre que o zoom muda, a porcentagem aparece num **balão** igual ao do contador de FPS (mesmo vidro, fonte 13/600, canto inferior esquerdo do quadro, a 30/32 px): surge com fade e leve mola, atualiza em tempo real e some 1,2 s depois que o zoom para. Com o FPS ligado, fica logo abaixo dele.
 
 ### 5.3 Título grande do quadro
@@ -247,8 +249,8 @@ De cima para baixo:
 - Fica entre a barra e o quadro, com padding horizontal de 10.
 - **Esquerda:** "Meu quadro" (42/800) e, embaixo, "14 itens · Cortiça · editado agora".
 - **Direita:**
+  - (o botão de ocultar/mostrar fica na barra de ferramentas, sempre visível)
   - controle segmentado com os modelos do quadro (400×38, raio 12, fundo `Fill`). A pílula branca desliza até a opção escolhida;
-  - botão redondo de vidro de 42 com seta para cima, que oculta o título.
 - **Ocultar:** a seção recolhe (altura → 0, opacidade → 0, sobe 14 px, escala 0.98) em 0.5s, e o quadro cresce para ocupar o espaço.
 - **Mostrar:** o inverso.
 
@@ -380,11 +382,11 @@ Todo item tem posição (x, y), camada (z), rotação, cor e estilo de fixação
 
 A bandeja é o "estojo" com todos os itens prontos para colar.
 
-### 7.1 Dock (escondido até o mouse chegar perto)
+### 7.1 Dock (quase escondido até o mouse chegar perto)
 
-- Fica **escondido** abaixo da borda da cortiça; só aparece uma **alça fina de vidro** (40×5, `Fill2`) no centro de baixo.
+- Fica quase todo abaixo da borda da cortiça, deixando **~14 px do próprio dock à mostra** no centro de baixo (deslocamento de 52).
 - **Sobe com a mola de painel** quando o mouse chega a menos de **80 px da borda de baixo**, na faixa central.
-- **Desce 0,8 s** depois que o mouse se afasta, a não ser que a bandeja esteja aberta, algo esteja sendo arrastado dela ou o mouse esteja em cima dela. Abrir a bandeja pela barra também faz o dock subir.
+- **Desce 0,8 s** depois que o mouse se afasta, a não ser que a bandeja esteja aberta, algo esteja sendo arrastado dela ou o mouse esteja em cima dela. Abrir a bandeja (pelo menu ou pelo botão direito) também faz o dock subir.
 - Em tela cheia funciona igual. O botão direito no quadro continua abrindo a bandeja junto ao cursor.
 
 Cápsula de vidro de 56 de altura, centralizada na parte de baixo do quadro. Contém:
@@ -413,7 +415,6 @@ Os atalhos rápidos adicionam o item no centro da área visível.
   - **arrastar** até o quadro e soltar: o item nasce centralizado onde foi solto;
   - **clicar:** o item nasce no centro da área visível, com um pequeno desvio aleatório.
 - **Abrir e fechar** a bandeja:
-  - pela cápsula "Bandeja" da barra de ferramentas;
   - pelo botão do dock;
   - pelo **menu do botão direito** ("Abrir bandeja" / "Fechar bandeja").
 
@@ -488,7 +489,7 @@ Menu próprio (não o menu padrão do Windows), no estilo dos menus de toque lon
   - `Páginas\` — cada página é um arquivo `.md` de verdade (abre em qualquer editor);
   - `Anexos\` — imagens, vídeos, arquivos, prévias de PDF e de links (sempre copiados para cá);
   - `.lixeira\` — quadros apagados (somem de vez depois de 30 dias);
-  - `.quadtab\` — `estado.json` (quadro aberto, recentes, fixados, importantes, seções abertas, tela cheia, tema, faíscas), miniaturas da galeria e `erros.log`.
+  - `.quadtab\` — `estado.json` (quadro aberto, recentes, fixados, importantes, seções abertas, tela cheia, tema, faíscas, última cor/estilo de post-it e o molde do último item criado), miniaturas da galeria e `erros.log`.
 - Migração: a pasta antiga `Documentos\Quadtab` vira `Documentos\Cofre` (se o Cofre ainda não existir); o antigo `%AppData%\Quadtab\quadro.json` também é importado.
 - Salvamento automático ~1 s depois da última mudança (gravação atômica). O status mostra "Salvando…" e depois "Salvo".
 
@@ -564,9 +565,10 @@ Menu próprio (não o menu padrão do Windows), no estilo dos menus de toque lon
 
 ### 13.1 Adicionar (Fase 2)
 - **Botão direito no vazio** abre a **bandeja junto ao cursor** (vidro denso, mola de pop). Um segundo clique direito fecha. Tudo nasce **no ponto clicado**.
-- Conteúdo: estilo + 8 cores de post-it; elementos Página, Texto, Bloco, Caixa de texto, **Formas** (biblioteca com busca e categorias Básicas/Setas/Símbolos/Objetos/Natureza), **Linha**, **Desenhar**, **Tabela**, **Imagem**, **Arquivo**, **Link**, **Colar**; pílulas abrir/fechar bandeja e ocultar título.
+- **2 cliques com o botão direito** no quadro (no vazio ou em cima de um item): fecha o que o 1º clique abriu e coloca, centrado no ponto, **outro item igual ao último criado** (mesmo tipo, cor, estilo, forma, tamanho; página cria uma página nova). Sem nada criado ainda: post-it da última cor e estilo. O molde (`ultimoItem`), a última cor (`corPostit`) e o último estilo de post-it (`estiloPostit`) ficam salvos em `estado.json`. Traços de desenho e conectores não viram molde.
+- Conteúdo: estilo + 8 cores de post-it; elementos Página, Texto, Bloco, Caixa de texto, **Formas** (biblioteca com busca e categorias Básicas/Setas/Símbolos/Objetos/Natureza), **Linha**, **Seta**, **Desenhar**, **Tabela**, **Imagem**, **Arquivo**, **Link**, **Colar**; pílulas abrir/fechar bandeja e ocultar título.
 - Botão direito num item: menu do item (cor, estilo, editar, duplicar, bloquear, camadas, excluir) + **Mais opções** (topo/fundo, copiar/colar estilo, descrição, agrupar, alinhar, distribuir, desagrupar).
-- Barra de ferramentas: desfazer/refazer · Bandeja · **"…"** (procurar, ajustar à tela, buscar no quadro, renomear, grade, modo diagrama, inspetor, título, cenas, apresentar, exportar, pasta do cofre) · tela cheia · janela.
+- Barra de ferramentas: título · desfazer/refazer · **"…"** (procurar, ajustar à tela, buscar no quadro, renomear, grade, modo diagrama, inspetor, título, cenas, apresentar, tela cheia, exportar, pasta do cofre) · janela.
 
 ### 13.2 Quadros, pastas e galeria (Fase 3)
 - Quadros ilimitados, em pastas (arrastar um quadro sobre uma pasta move). Renomear: dois cliques ou F2 (na lateral) e dois cliques no título grande.
@@ -575,7 +577,7 @@ Menu próprio (não o menu padrão do Windows), no estilo dos menus de toque lon
 
 ### 13.3 Lateral e tela cheia (Fase 4)
 - Os itens de cada quadro aparecem recuados sob o nome dele na lateral (ver 5.1); páginas mostram seus títulos (#).
-- **F11 / botão:** tela cheia no monitor inteiro. Lateral e barra somem; aparecem ao encostar o mouse na borda esquerda/de cima e somem 1 s depois de sair.
+- **F11 / "…" → Tela cheia:** tela cheia no monitor inteiro. Lateral e barra somem; aparecem ao encostar o mouse na borda esquerda/de cima e somem 1 s depois de sair.
 
 ### 13.4 Edição (Fase 5)
 - Item selecionado: **8 alças + girar** (Shift = proporção / 15°). Texto solto: as alças mudam o tamanho da letra.
@@ -585,8 +587,9 @@ Menu próprio (não o menu padrão do Windows), no estilo dos menus de toque lon
 - **Inspetor** (painel à direita, aparece com seleção): cor, fixação, preenchimento, borda, espessura, opacidade, texto (fonte, tamanho, negrito, itálico, lista, alinhamento, cor), linha (reta/curva/ângulo, pontas), traço, imagem (cantos e recorte), rotação, camadas, alinhar/distribuir, agrupar, copiar/colar estilo, descrição (vira dica ao passar o mouse).
 
 ### 13.5 Elementos (Fase 6)
-- Caixa de texto, formas, linhas e setas, **conectores**: passar o mouse num item mostra 4 pontos azuis; arrastar de um ponto até outro item liga os dois; soltar no vazio cria uma **cópia ligada**. As pontas seguem os itens. As pontas de uma linha selecionada viram bolinhas arrastáveis (soltar sobre um item prende).
-- **Modo diagrama** (menu "…"): desligado, os conectores somem.
+- Caixa de texto, formas, linhas e setas, **conectores** (como no Canvas do Obsidian): passar o mouse em **qualquer item** (inclusive bloqueados, imagens, links, tabelas, desenhos) mostra 4 pontos azuis; arrastar de um ponto até outro item liga os dois (com seta no fim); soltar no vazio cria uma **cópia ligada**. As pontas seguem os itens. As pontas de uma linha selecionada viram bolinhas arrastáveis (soltar sobre um item prende).
+- **Direção e rótulo das linhas:** botão direito numa linha → **Direção** (Sem seta · → Uma · ↔ Duas · ⇄ Inverter) e traçado (Reta · Curva · Ângulo). **2 cliques na linha** escrevem um **rótulo** no meio dela (pílula branca 92%, Inter 13/600, `#1D2130`; vazio = some).
+- **Modo diagrama** (menu "…"): desligado, os conectores somem. Criar um conector liga o modo de novo.
 - **Desenho à mão:** caneta, lápis, marcador, borracha e laço, numa paleta de vidro flutuante (cores e 3 espessuras; "Pronto" volta à seleção).
 - **Imagens e vídeos:** arrastar do Windows ou Ctrl+V (inclusive print). Recorte e cantos pelo inspetor. Vídeo toca no próprio quadro.
 - **Arquivos:** cartão com tipo e nome; PDF mostra a 1ª página (Windows.Data.Pdf). Dois cliques abrem no programa padrão.

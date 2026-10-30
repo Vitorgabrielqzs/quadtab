@@ -90,7 +90,7 @@ public sealed class QuickOpen : Grid
     {
         var q = BoardItemViewModel.Normalize(_box.Text.Trim());
         _shown = _all.Where(e => q.Length == 0 || BoardItemViewModel.Normalize(e.Name).Contains(q))
-            .OrderBy(e => q.Length > 0 && BoardItemViewModel.Normalize(e.Name).StartsWith(q) ? 0 : 1).Take(q.Length == 0 ? 9 : 5).ToList();
+            .OrderBy(e => q.Length > 0 && BoardItemViewModel.Normalize(e.Name).StartsWith(q, StringComparison.Ordinal) ? 0 : 1).Take(q.Length == 0 ? 9 : 5).ToList();
         if (q.Length >= 2)
         {
             // Textos: itens do quadro aberto e o conteúdo dos outros quadros e páginas.

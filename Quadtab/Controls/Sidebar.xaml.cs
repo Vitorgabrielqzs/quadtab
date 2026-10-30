@@ -83,7 +83,7 @@ public partial class Sidebar : UserControl
 
     void OnMore(string what)
     {
-        if (what.StartsWith("abrir:")) App.OpenBoard(what[6..]);
+        if (what.StartsWith("abrir:", StringComparison.Ordinal)) App.OpenBoard(what[6..]);
         else if (what == "paginas") Shell?.ShowSearch();
         else Lib.ShowGalleryCommand.Execute(what);
     }
@@ -124,7 +124,7 @@ public partial class Sidebar : UserControl
     void OnNodeMore(object sender, RoutedEventArgs e)
     {
         if (NodeOf(sender) is { } n && sender is FrameworkElement b && Shell is { } shell)
-            shell.ShowActions(b.TranslatePoint(new Point(b.ActualWidth, 0), shell.Root), ActionsFor(n));
+            shell.ShowActions(b.TranslatePoint(new Point(b.ActualWidth, 0), shell.Root), ActionsFor(n), b);
         e.Handled = true;
     }
 
@@ -236,6 +236,6 @@ public partial class Sidebar : UserControl
     void OnSettings(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement b || Shell is not { } shell) return;
-        shell.ShowSettings(b.TranslatePoint(new Point(0, -8), shell.Root));
+        shell.ShowSettings(b.TranslatePoint(new Point(0, -8), shell.Root), b);
     }
 }

@@ -96,7 +96,8 @@ public sealed class ContextTray : ContentControl
         Tile("Bloco", "IcBlock", () => { Vm.Add(ItemKind.Block, "azul", _world.X, _world.Y); Done(); }, "Cola um bloco de vidro aqui");
         Tile("Caixa", "IcTextBox", () => { Vm.Add(ItemKind.TextBox, "branco", _world.X, _world.Y); Done(); }, "Cola uma caixa de texto aqui");
         Tile("Formas", "IcShapes", ShowShapes, "Mostra a biblioteca de formas");
-        Tile("Linha", "IcLine", () => { Done(); Board!.Tool = BoardTool.Line; }, "Desenha uma linha ou seta (de um item a outro para ligar)");
+        Tile("Linha", "IcLinePlain", () => { Done(); DrawSettings.ArrowEnd = false; Board!.Tool = BoardTool.Line; }, "Desenha uma linha (de um item a outro para ligar)");
+        Tile("Seta", "IcLine", () => { Done(); DrawSettings.ArrowEnd = true; Board!.Tool = BoardTool.Line; }, "Desenha uma seta (de um item a outro para ligar)");
         Tile("Desenhar", "IcPen", () => { Done(); Board!.Tool = BoardTool.Pen; }, "Desenha à mão livre");
         Tile("Tabela", "IcTable", AddTable, "Cola uma tabela aqui");
         Tile("Imagem", "IcImage", () => PickFiles("Imagens e vídeos|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.tif;*.tiff;*.mp4;*.mov;*.wmv;*.webm;*.m4v|Todos os arquivos|*.*"), "Escolhe imagens ou vídeos do computador");

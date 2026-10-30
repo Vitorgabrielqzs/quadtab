@@ -92,6 +92,8 @@ public partial class BoardMenu : UserControl
         BoardPart.Visibility = Visibility.Collapsed;
         ItemPart.Visibility = Visibility.Visible;
         StylePart.Visibility = item.Kind == ItemKind.PostIt ? Visibility.Visible : Visibility.Collapsed;
+        LinePart.Visibility = item.Line is null ? Visibility.Collapsed : Visibility.Visible;
+        EditText.Text = item.Line is null ? "Editar texto" : "Escrever na linha";
         Refresh();
     }
 
@@ -105,6 +107,54 @@ public partial class BoardMenu : UserControl
         ChipNone.IsChecked = _item.Fastening == Fastening.None;
         ChipLined.IsChecked = _item.Lined;
         LockText.Text = _item.Locked ? "Desbloquear" : "Bloquear";
+        if (_item.Line is { } l)
+        {
+            int arrows = (l.De.Ponta == "seta" ? 1 : 0) + (l.Para.Ponta == "seta" ? 1 : 0);
+            DirNone.IsChecked = arrows == 0;
+            DirOne.IsChecked = arrows == 1;
+            DirBoth.IsChecked = arrows == 2;
+            PathStraight.IsChecked = l.Tipo is not ("curva" or "angulo");
+            PathCurve.IsChecked = l.Tipo == "curva";
+            PathAngle.IsChecked = l.Tipo == "angulo";
+        }
+    }
+
+    // ---------- linha ----------
+
+    void ChangeLine(Action<LineData> change)
+    {
+        if (_item?.Line is not { } l) return;
+        Vm.Checkpoint();
+        change(l);
+        _item.Touch(nameof(BoardItemViewModel.Line));
+        Vm.CommitMove();
+        Refresh();
+    }
+
+    /// <summary>Sem seta · uma (no fim, ou onde já estava) · duas.</summary>
+    void OnDirection(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string t }) return;
+        ChangeLine(l =>
+        {
+            switch (t)
+            {
+                case "0": l.De.Ponta = l.Para.Ponta = "nenhuma"; break;
+                case "1":
+                    bool startOnly = l.De.Ponta == "seta" && l.Para.Ponta != "seta";
+                    l.De.Ponta = startOnly ? "seta" : "nenhuma";
+                    l.Para.Ponta = startOnly ? "nenhuma" : "seta";
+                    break;
+                default: l.De.Ponta = l.Para.Ponta = "seta"; break;
+            }
+        });
+    }
+
+    void OnFlip(object sender, RoutedEventArgs e) => ChangeLine(l => (l.De.Ponta, l.Para.Ponta) = (l.Para.Ponta, l.De.Ponta));
+
+    void OnLineType(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string t }) ChangeLine(l => l.Tipo = t);
     }
 
     // ---------- quadro vazio ----------

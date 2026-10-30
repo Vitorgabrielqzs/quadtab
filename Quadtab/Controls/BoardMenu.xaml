@@ -152,12 +152,30 @@
                         <ToggleButton x:Name="ChipLined" Style="{StaticResource Chip}" Content="Pautado" Click="OnItemStyle" Tag="{x:Static m:NoteStyle.Lined}" ToolTip="Vira um post-it pautado, para listas" />
                     </WrapPanel>
                 </StackPanel>
+
+                <!-- Linhas e conectores: direção das setas e traçado (como no Canvas do Obsidian) -->
+                <StackPanel x:Name="LinePart">
+                    <Border Style="{StaticResource Gap}" />
+                    <TextBlock Text="Direção" Style="{StaticResource Head}" />
+                    <WrapPanel Margin="10,2,4,2">
+                        <ToggleButton x:Name="DirNone" Style="{StaticResource Chip}" Content="Sem seta" Click="OnDirection" Tag="0" ToolTip="Só a linha, sem setas" />
+                        <ToggleButton x:Name="DirOne" Style="{StaticResource Chip}" Content="→ Uma" Click="OnDirection" Tag="1" ToolTip="Seta no fim da linha" />
+                        <ToggleButton x:Name="DirBoth" Style="{StaticResource Chip}" Content="↔ Duas" Click="OnDirection" Tag="2" ToolTip="Setas nas duas pontas" />
+                        <Button Style="{StaticResource PillButton}" Margin="0,0,6,6" Background="{DynamicResource FillBrush}" Content="⇄ Inverter" Click="OnFlip"
+                                ToolTip="Troca o sentido da seta" />
+                    </WrapPanel>
+                    <WrapPanel Margin="10,0,4,2">
+                        <ToggleButton x:Name="PathStraight" Style="{StaticResource Chip}" Content="Reta" Click="OnLineType" Tag="reta" ToolTip="Linha reta" />
+                        <ToggleButton x:Name="PathCurve" Style="{StaticResource Chip}" Content="Curva" Click="OnLineType" Tag="curva" ToolTip="Linha curva" />
+                        <ToggleButton x:Name="PathAngle" Style="{StaticResource Chip}" Content="Ângulo" Click="OnLineType" Tag="angulo" ToolTip="Linha em ângulo reto" />
+                    </WrapPanel>
+                </StackPanel>
                 <Border Style="{StaticResource Gap}" />
 
                 <Button Style="{StaticResource MenuRow}" Click="OnEdit" ToolTip="Edita o texto deste item · 2 cliques">
                     <DockPanel>
                         <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcPencil}" Foreground="{DynamicResource Ink2Brush}" />
-                        <TextBlock Text="Editar texto" VerticalAlignment="Center" />
+                        <TextBlock x:Name="EditText" Text="Editar texto" VerticalAlignment="Center" />
                     </DockPanel>
                 </Button>
                 <Button Style="{StaticResource MenuRow}" Click="OnDuplicate" ToolTip="Cria uma cópia ao lado · Ctrl+D">

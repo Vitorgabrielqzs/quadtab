@@ -45,6 +45,9 @@ public partial class BoardView : UserControl
         public bool Moved;
         public Rect Box;                         // caixa de tudo o que se move (antes do deslocamento)
         public List<double> GuideX = [], GuideY = [];
+        Dictionary<int, BoardItemViewModel>? _moving;
+        /// <summary>Itens que se movem, por id (montado uma vez por arraste; as linhas presas a eles acompanham).</summary>
+        public Dictionary<int, BoardItemViewModel> Moving => _moving ??= MovedById(Parts.Select(p => p.Item));
     }
 
     /// <summary>Alça de redimensionar (0..7) ou girar (8), ou ponta de linha (9 = início, 10 = fim).</summary>
@@ -123,17 +126,20 @@ public partial class BoardView : UserControl
         set
         {
             _tool = value;
-            Surface.Cursor = value switch
-            {
-                BoardTool.Select => BoardCursors.Grab,
-                BoardTool.Eraser or BoardTool.Lasso => Cursors.Cross,
-                _ => Cursors.Pen,
-            };
+            RestoreCursor();
             ClearPorts();
             ToolChanged?.Invoke();
         }
     }
     BoardTool _tool;
+
+    /// <summary>Cursor da ferramenta atual (mão aberta na seleção).</summary>
+    void RestoreCursor() => Surface.Cursor = _tool switch
+    {
+        BoardTool.Select => BoardCursors.Grab,
+        BoardTool.Eraser or BoardTool.Lasso => Cursors.Cross,
+        _ => Cursors.Pen,
+    };
 
     public BoardView()
     {
@@ -206,6 +212,7 @@ public partial class BoardView : UserControl
         ItemsLayer.Children.Add(InkPreview);
         foreach (var p in _pool) p.Clear();
         _index.Clear();
+        _lines = null;
         _realizedArea = Rect.Empty;
         _drag = null;
         _handle = null;
@@ -231,6 +238,7 @@ public partial class BoardView : UserControl
     void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset) { Attach(_vm); return; }
+        _lines = null;
         if (e.OldItems is not null)
             foreach (BoardItemViewModel it in e.OldItems)
             {
@@ -403,7 +411,7 @@ public partial class BoardView : UserControl
                 c.DragOffset.X = off.X;
                 c.DragOffset.Y = off.Y;
             }
-            RefreshLines(d.Parts.Select(p => p.Item), off);
+            RefreshLines(d.Moving, off);
         }
         return changed;
     }
@@ -804,7 +812,10 @@ public partial class BoardView : UserControl
             case ItemKind.File or ItemKind.Video when item.FileFullPath is { } file:
                 ItemViewBase.OpenExternal(file);
                 return;
-            case ItemKind.Image or ItemKind.Drawing or ItemKind.Line:
+            case ItemKind.Image or ItemKind.Drawing:
+                return;
+            case ItemKind.Line:
+                Vm.BeginEdit(item, EditField.Text); // rótulo no meio da linha (como no Obsidian)
                 return;
             case ItemKind.Table:
                 if (FindChild<TableView>(container) is { } table) table.EditAt(container.TranslatePoint(local, table));
@@ -918,7 +929,7 @@ public partial class BoardView : UserControl
             // Pontos de conexão aparecem ao passar o mouse sobre um item.
             var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
             if (item is null && e.OriginalSource is FrameworkElement { Tag: PortTag }) return;
-            if (item is { Kind: not ItemKind.Line, Locked: false } && item.Editing == EditField.None) ShowPorts(item);
+            if (item is { Kind: not ItemKind.Line } && item.Editing == EditField.None) ShowPorts(item);
             else ClearPorts();
         }
     }
@@ -975,7 +986,7 @@ public partial class BoardView : UserControl
         }
         _panSamples.Clear();
         ReleaseSurface();
-        Tool = Tool; // restaura o cursor da ferramenta
+        RestoreCursor();
         Kick();
     }
 
@@ -1007,7 +1018,7 @@ public partial class BoardView : UserControl
             c.SetDragging(false);
             if (it.Line is not null) it.Touch(nameof(BoardItemViewModel.Line));
         }
-        RefreshLines(d.Parts.Select(p => p.Item), default);
+        RefreshLines(d.Moving, default);
         Vm.CommitMove();
         UpdateAdorner();
         Settle();
@@ -1336,6 +1347,7 @@ public partial class BoardView : UserControl
             Fixacao = "nenhuma",
         });
         FitLineBox(line);
+        if (!Vm.DiagramMode) Vm.DiagramMode = true; // com o modo diagrama desligado o conector ficaria invisível
         return line;
     }
 
@@ -1348,28 +1360,44 @@ public partial class BoardView : UserControl
         line.Touch(nameof(BoardItemViewModel.Line));
     }
 
-    void RefreshLines(BoardItemViewModel moved) => RefreshLines([moved], default);
+    // Só as linhas do quadro (refeita quando itens entram ou saem): arrastar não percorre todos os itens.
+    List<BoardItemViewModel>? _lines;
+    List<BoardItemViewModel> Lines => _lines ??= _vm is null ? [] : _vm.Items.Where(i => i.Kind == ItemKind.Line).ToList();
+
+    static Dictionary<int, BoardItemViewModel> MovedById(IEnumerable<BoardItemViewModel> moved)
+    {
+        var ids = new Dictionary<int, BoardItemViewModel>();
+        foreach (var m in moved)
+            if (m.Kind != ItemKind.Line) ids[m.Id] = m;
+        return ids;
+    }
+
+    void RefreshLines(BoardItemViewModel moved) => RefreshLines(MovedById([moved]), default);
+
+    void RefreshLines(IEnumerable<BoardItemViewModel> moved, Vector offset) => RefreshLines(MovedById(moved), offset);
 
     /// <summary>Linhas presas aos itens que se moveram acompanham (offset = deslocamento do arraste).</summary>
-    void RefreshLines(IEnumerable<BoardItemViewModel> moved, Vector offset)
+    void RefreshLines(Dictionary<int, BoardItemViewModel> ids, Vector offset)
     {
-        if (_vm is null) return;
-        var ids = moved.Where(m => m.Kind != ItemKind.Line).ToDictionary(m => m.Id);
-        if (ids.Count == 0) return;
-        foreach (var line in _vm.Items)
+        if (_vm is null || ids.Count == 0) return;
+        foreach (var line in Lines)
         {
             if (line.Line is not { } l) continue;
-            bool changed = false;
-            foreach (var end in new[] { l.De, l.Para })
-            {
-                if (end.Item is not { } id || !ids.TryGetValue(id, out var target)) continue;
-                var box = target.Box;
-                box.Offset(offset);
-                var p = SidePoint(box, end.Lado);
-                if (p.X != end.X || p.Y != end.Y) { end.X = p.X; end.Y = p.Y; changed = true; }
-            }
+            bool changed = MoveEnd(l.De, ids, offset) | MoveEnd(l.Para, ids, offset);
             if (changed) FitLineBox(line);
         }
+    }
+
+    static bool MoveEnd(LineEnd end, Dictionary<int, BoardItemViewModel> ids, Vector offset)
+    {
+        if (end.Item is not { } id || !ids.TryGetValue(id, out var target)) return false;
+        var box = target.Box;
+        box.Offset(offset);
+        var p = SidePoint(box, end.Lado);
+        if (p.X == end.X && p.Y == end.Y) return false;
+        end.X = p.X;
+        end.Y = p.Y;
+        return true;
     }
 
     BoardItemViewModel? ItemAt(Point screen, BoardItemViewModel? except)
@@ -1471,6 +1499,7 @@ public partial class BoardView : UserControl
         if (a is not null) RefreshLines([a], default);
         if (b is not null) RefreshLines([b], default);
         FitLineBox(line);
+        if ((a ?? b) is not null && !Vm.DiagramMode) Vm.DiagramMode = true;
         Tool = BoardTool.Select;
     }
 
