@@ -13,7 +13,7 @@ namespace Quadtab.Controls;
 
 /// <summary>
 /// Bandeja que abre junto ao cursor (botão direito no vazio). Tudo o que ela cria nasce no ponto clicado.
-/// Tem duas páginas: a principal (post-its, elementos e ferramentas) e a biblioteca de formas.
+/// Tem duas páginas: a principal (elementos e ferramentas) e a biblioteca de formas.
 /// </summary>
 public sealed class ContextTray : ContentControl
 {
@@ -57,24 +57,6 @@ public sealed class ContextTray : ContentControl
         head.Children.Add(new TextBlock { Text = "Adicionar aqui", FontSize = 17, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
         root.Children.Add(head);
 
-        // Post-its: cor + estilo
-        root.Children.Add(UiKit.Section("Post-it · escolha o estilo e a cor"));
-        var styles = new WrapPanel();
-        foreach (var (name, style) in new[] { ("Alfinete", NoteStyle.Pin), ("Fita", NoteStyle.Tape), ("Solto", NoteStyle.None), ("Pautado", NoteStyle.Lined) })
-            styles.Children.Add(UiKit.Chip(name, Vm.NewStyle == style, () => { Vm.NewStyle = style; ShowMain(); }));
-        root.Children.Add(styles);
-        var dots = new WrapPanel { Margin = new Thickness(2, 2, 0, 0) };
-        foreach (var c in Palette.Colors)
-        {
-            var key = c.Key;
-            dots.Children.Add(UiKit.Swatch(c.PaperBrush, key == Vm.LastColor, $"Cola um post-it {c.Name.ToLowerInvariant()} aqui", () =>
-            {
-                Vm.Add(ItemKind.PostIt, key, _world.X, _world.Y, Vm.NewStyle);
-                Done();
-            }, 28));
-        }
-        root.Children.Add(dots);
-
         // Elementos e ferramentas
         root.Children.Add(UiKit.Section("Elementos"));
         var grid = new UniformGrid { Columns = 4 };
@@ -91,9 +73,9 @@ public sealed class ContextTray : ContentControl
             b.Click += (_, _) => run();
             grid.Children.Add(b);
         }
-        Tile("Página", "IcPage", () => { Vm.Add(ItemKind.Page, "branco", _world.X, _world.Y); Done(); }, "Cola uma página de caderno aqui");
+        Tile("Página", "IcPage", () => { Vm.Add(ItemKind.Page, "branco", _world.X, _world.Y); Done(); }, "Cola uma folha de caderno aqui");
         Tile("Texto", "IcText", () => { Vm.Add(ItemKind.Text, "branco", _world.X, _world.Y); Done(); }, "Cola um texto grande aqui");
-        Tile("Bloco", "IcBlock", () => { Vm.Add(ItemKind.Block, "azul", _world.X, _world.Y); Done(); }, "Cola um bloco de vidro aqui");
+        Tile("Bloco", "IcBlock", () => { Vm.Add(ItemKind.Block, "branco", _world.X, _world.Y); Done(); }, "Cola um bloco com título livre aqui");
         Tile("Caixa", "IcTextBox", () => { Vm.Add(ItemKind.TextBox, "branco", _world.X, _world.Y); Done(); }, "Cola uma caixa de texto aqui");
         Tile("Formas", "IcShapes", ShowShapes, "Mostra a biblioteca de formas");
         Tile("Linha", "IcLinePlain", () => { Done(); DrawSettings.ArrowEnd = false; Board!.Tool = BoardTool.Line; }, "Desenha uma linha (de um item a outro para ligar)");

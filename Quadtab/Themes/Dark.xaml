@@ -17,6 +17,8 @@
     <SolidColorBrush x:Key="Ink3Brush" Color="#959AAA" />
     <SolidColorBrush x:Key="GlassBrush" Color="#8C1E202A" />
     <SolidColorBrush x:Key="Glass2Brush" Color="#E0282A36" />
+    <!-- Menus e bandejas que abrem por cima do quadro: quase opacos, para nada aparecer atrás -->
+    <SolidColorBrush x:Key="MenuGlassBrush" Color="#F2282A36" />
     <SolidColorBrush x:Key="FillBrush" Color="#14FFFFFF" />
     <SolidColorBrush x:Key="Fill2Brush" Color="#26FFFFFF" />
     <SolidColorBrush x:Key="SepBrush" Color="#14FFFFFF" />
@@ -24,6 +26,15 @@
     <SolidColorBrush x:Key="DangerBrush" Color="#FF5A52" />
     <SolidColorBrush x:Key="DangerSoftBrush" Color="#1FFF5A52" />
     <SolidColorBrush x:Key="ScrollThumbBrush" Color="#40FFFFFF" />
+
+    <!-- Quadro no estilo do Canvas do Obsidian: fundo liso com pontinhos e cartões retos -->
+    <Color x:Key="CanvasColor">#1E1E21</Color>
+    <Color x:Key="CanvasDotColor">#3A3B41</Color>
+    <SolidColorBrush x:Key="CanvasBrush" Color="#1E1E21" />
+    <SolidColorBrush x:Key="CanvasEdgeBrush" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="CardBgBrush" Color="#26272B" />
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#45464D" />
+    <SolidColorBrush x:Key="CardTextBrush" Color="#E6E7EB" />
 
     <sys:Double x:Key="GlowAlpha">0.16</sys:Double>
     <sys:String x:Key="GlassShadow">0 16 40 0 #6B000000, 0 1 3 0 #4D000000</sys:String>

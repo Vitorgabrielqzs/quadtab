@@ -5,11 +5,11 @@
              xmlns:m="clr-namespace:Quadtab.Models">
     <UserControl.Resources>
         <c:ItemTemplateSelector x:Key="ItemTemplates">
-            <c:ItemTemplateSelector.PostIt><DataTemplate><c:PostIt /></DataTemplate></c:ItemTemplateSelector.PostIt>
+            <c:ItemTemplateSelector.PostIt><DataTemplate><c:GlassBlock /></DataTemplate></c:ItemTemplateSelector.PostIt>
             <c:ItemTemplateSelector.Page><DataTemplate><c:PageNote /></DataTemplate></c:ItemTemplateSelector.Page>
             <c:ItemTemplateSelector.Block><DataTemplate><c:GlassBlock /></DataTemplate></c:ItemTemplateSelector.Block>
             <c:ItemTemplateSelector.Text><DataTemplate><c:TextLabel /></DataTemplate></c:ItemTemplateSelector.Text>
-            <c:ItemTemplateSelector.TextBox><DataTemplate><c:TextBoxView /></DataTemplate></c:ItemTemplateSelector.TextBox>
+            <c:ItemTemplateSelector.TextBox><DataTemplate><c:CardView /></DataTemplate></c:ItemTemplateSelector.TextBox>
             <c:ItemTemplateSelector.Shape><DataTemplate><c:ShapeView /></DataTemplate></c:ItemTemplateSelector.Shape>
             <c:ItemTemplateSelector.Line><DataTemplate><c:LineView /></DataTemplate></c:ItemTemplateSelector.Line>
             <c:ItemTemplateSelector.Drawing><DataTemplate><c:DrawingView /></DataTemplate></c:ItemTemplateSelector.Drawing>
@@ -34,7 +34,7 @@
                             <Border x:Name="Hit" Margin="-10" CornerRadius="10" BorderThickness="3" BorderBrush="#990A84FF"
                                     IsHitTestVisible="False" Visibility="Collapsed" />
                             <ContentPresenter />
-                            <Border x:Name="Outline" Margin="-7" CornerRadius="6" BorderThickness="2.5"
+                            <Border x:Name="Outline" Margin="-4" CornerRadius="13" BorderThickness="2"
                                     BorderBrush="{StaticResource AccentBrush}" IsHitTestVisible="False" Visibility="Collapsed" />
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -45,7 +45,7 @@
                                 <Setter TargetName="Hit" Property="Visibility" Value="Visible" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static m:ItemKind.Block}">
-                                <Setter TargetName="Outline" Property="CornerRadius" Value="31" />
+                                <Setter TargetName="Outline" Property="CornerRadius" Value="27" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static m:ItemKind.Line}">
                                 <Setter TargetName="Outline" Property="Visibility" Value="Collapsed" />
@@ -66,7 +66,7 @@
         </c:FrameBackground>
 
         <!-- Superfície infinita + itens. Só a matriz da câmera muda ao mover ou dar zoom. -->
-        <Grid x:Name="Surface" Margin="16" Background="Transparent" Focusable="True" FocusVisualStyle="{x:Null}" AllowDrop="True">
+        <Grid x:Name="Surface" Margin="1" Background="Transparent" Focusable="True" FocusVisualStyle="{x:Null}" AllowDrop="True">
             <c:SurfaceBackground x:Name="SurfaceBg" Model="{Binding Model}" ShowGrid="{Binding ShowGrid}" />
             <Canvas x:Name="ItemsLayer">
                 <Canvas.RenderTransform>

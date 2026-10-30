@@ -36,39 +36,39 @@ public sealed class Board
     /// <summary>Formato antigo (versão 1) guardava só o zoom; é ignorado ao abrir.</summary>
     public double? Zoom { get; set; }
 
-    /// <summary>Conteúdo da primeira vez que o app abre.</summary>
+    /// <summary>Conteúdo da primeira vez que o app abre: uma página, três blocos e duas linhas ligando-os.</summary>
     public static Board CreateDefault()
     {
         var hoje = DateTime.Today.ToString("yyyy-MM-dd");
-        BoardItem P(int id, string tipo, string cor, double x, double y, double rot, string fix,
-                    string texto, string titulo = "", bool pautado = false) => new()
+        BoardItem P(int id, string tipo, string cor, double x, double y, string titulo, string texto, double? largura = null) => new()
         {
-            Id = id, Tipo = tipo, Cor = cor, X = x, Y = y, Z = id, Rotacao = rot, Fixacao = fix,
-            Texto = texto, Titulo = titulo, Pautado = pautado, Criado = hoje,
+            Id = id, Tipo = tipo, Cor = cor, X = x, Y = y, Z = id, Fixacao = "nenhuma", Titulo = titulo, Texto = texto,
+            Largura = largura, Criado = hoje,
+        };
+        BoardItem L(int id, int from, string fromSide, int to, string toSide, string cor, string traco) => new()
+        {
+            Id = id, Tipo = "linha", Z = id, Fixacao = "nenhuma", Criado = hoje,
+            Estilo = new ItemStyle { Borda = cor, Espessura = 2.5 },
+            Linha = new LineData
+            {
+                De = new LineEnd { Item = from, Lado = fromSide },
+                Para = new LineEnd { Item = to, Lado = toSide, Ponta = "seta" },
+                Traco = traco,
+            },
         };
 
         return new Board
         {
             Itens =
             [
-                P(1, "postit", "amarelo", 90, 70, -4, "alfinete", "Crie sua vida"),
-                P(2, "pagina", "branco", 330, 50, 1.5, "fita",
-                  "- [ ] Reserva de 6 meses\n- [ ] Viajar para o Chile\n- [ ] Ler 24 livros\n- [ ] Aprender a nadar\n- [ ] Correr 10 km", "Metas para 2027"),
-                P(3, "postit", "rosa", 640, 104, 3, "fita", "Aventure-se"),
-                P(4, "bloco", "azul", 890, 62, -1, "alfinete",
-                  "Pequenos passos todos os dias. Revise este quadro aos domingos e mova o que já foi feito para Conquistas.", "Lembrete"),
-                P(5, "postit", "verde", 1250, 90, -2, "alfinete", "Casa nova"),
-                P(6, "postit", "azul", 110, 330, 2, "alfinete", "Liberdade financeira"),
-                P(7, "texto", "branco", 640, 392, 0, "nenhuma", "GRATIDÃO"),
-                P(8, "postit", "roxo", 380, 450, -3, "fita", "Formatura"),
-                P(9, "postit", "laranja", 985, 330, 4, "alfinete", "Comprar fita\nRevisar metas\nLigar para a vó", "Esta semana", pautado: true),
-                P(10, "pagina", "menta", 1200, 320, -1.5, "fita",
-                  "1. O Pequeno Príncipe\n2. Sapiens\n3. Hábitos Atômicos\n4. Dom Casmurro", "Lista de leitura"),
-                P(11, "postit", "menta", 120, 620, -2, "alfinete", "Mais tempo ao ar livre"),
-                P(12, "bloco", "rosa", 600, 540, 1, "alfinete",
-                  "Separar uma área do quadro só para viagens, com fotos e o orçamento de cada uma.", "Ideia"),
-                P(13, "postit", "branco", 950, 630, 3, "fita", "Respirar fundo"),
-                P(14, "texto", "verde", 1160, 760, 0, "nenhuma", "Conquistas"),
+                P(1, "pagina", "branco", 40, 40, "Bem-vindo ao Quadtab",
+                  "Dê 2 cliques no vazio para criar uma página.\n\nO botão direito abre a bandeja de elementos.\n\n" +
+                  "Segure o botão direito num item e arraste até outro para ligar os dois com uma linha."),
+                P(2, "bloco", "azul", 420, 40, "Ideias", "Anote aqui o que vier à cabeça.", 260),
+                P(3, "bloco", "verde", 420, 250, "Tarefas", "- Organizar o quadro\n- Revisar as metas", 260),
+                P(4, "bloco", "roxo", 800, 140, "Projeto", "Ligue os blocos com linhas sólidas ou de barbante, com setas.", 260),
+                L(5, 2, "direita", 4, "esquerda", "#FF8A8F98", "solido"),
+                L(6, 3, "direita", 4, "esquerda", "#FFC2A06E", "barbante"),
             ],
         };
     }

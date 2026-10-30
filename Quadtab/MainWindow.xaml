@@ -30,20 +30,18 @@
             </Grid.ColumnDefinitions>
 
             <!-- ================= BARRA LATERAL ================= -->
-            <Grid x:Name="SideColumn" Panel.ZIndex="40" HorizontalAlignment="Left">
-                <c:GlassPanel x:Name="SidebarGlass" Width="292" Margin="0,0,14,0" CornerRadius="32" Padding="14,18,14,14" ClipContent="True">
-                    <c:Sidebar x:Name="SidebarView" MinWidth="264" />
-                </c:GlassPanel>
-                <!-- Recolhida, a lateral deixa uma faixa de vidro à mostra: clicar nela reabre -->
-                <Border x:Name="SidePeek" Width="18" HorizontalAlignment="Left" Background="Transparent" Cursor="Hand"
-                        Visibility="Collapsed" ToolTip="Mostra a barra lateral" MouseLeftButtonUp="OnSidePeek">
-                    <Border x:Name="SideGrip" Width="4" Height="44" CornerRadius="2" Background="{DynamicResource Fill2Brush}"
-                            HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-            </Grid>
+            <!-- Fixa: ocupa a coluna. Escondida: flutua por cima do quadro, deixando ~12 px à mostra na borda
+                 esquerda (como o dock da bandeja), e desliza para fora quando o mouse chega perto. -->
+            <c:GlassPanel x:Name="SidebarGlass" Width="292" HorizontalAlignment="Left" CornerRadius="32" Padding="14,18,14,14"
+                          ClipContent="True" Panel.ZIndex="40">
+                <c:GlassPanel.RenderTransform>
+                    <TranslateTransform x:Name="SideShift" />
+                </c:GlassPanel.RenderTransform>
+                <c:Sidebar x:Name="SidebarView" MinWidth="264" />
+            </c:GlassPanel>
 
             <!-- ================= COLUNA PRINCIPAL ================= -->
-            <Grid x:Name="MainColumn" Grid.Column="1">
+            <Grid x:Name="MainColumn" Grid.ColumnSpan="2" Margin="306,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -152,35 +150,6 @@
                             <TextBlock Text="{Binding Subtitle}" FontSize="15" FontWeight="Medium" Foreground="{DynamicResource Ink2Brush}" Margin="0,7,0,0" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="20,0,0,0">
-                            <!-- Controle segmentado: modelos do quadro -->
-                            <Grid Width="400" Height="38">
-                                <Border CornerRadius="12" Background="{DynamicResource FillBrush}" />
-                                <Grid Margin="2">
-                                    <Grid Width="99" HorizontalAlignment="Left">
-                                        <Grid.RenderTransform>
-                                            <TranslateTransform x:Name="SegMove" />
-                                        </Grid.RenderTransform>
-                                        <c:Shadow Layers="0 3 8 0 #1F000000, 0 0 0 0.5 #0A000000" CornerRadius="10" />
-                                        <Border CornerRadius="10" Background="{DynamicResource SegIndicatorBrush}" />
-                                    </Grid>
-                                    <UniformGrid Columns="4">
-                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Cortiça" GroupName="Seg" Click="OnPickModel"
-                                                     Tag="{x:Static m:BoardModel.Cortica}" ToolTip="Troca o fundo para cortiça"
-                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Cortica}}" />
-                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Branco" GroupName="Seg" Click="OnPickModel"
-                                                     Tag="{x:Static m:BoardModel.Branco}" ToolTip="Troca o fundo para quadro branco"
-                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Branco}}" />
-                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Lousa" GroupName="Seg" Click="OnPickModel"
-                                                     Tag="{x:Static m:BoardModel.Lousa}" ToolTip="Troca o fundo para lousa verde"
-                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Lousa}}" />
-                                        <RadioButton Style="{StaticResource SegmentItem}" Content="Pontilhado" GroupName="Seg" Click="OnPickModel"
-                                                     Tag="{x:Static m:BoardModel.Pontilhado}" ToolTip="Troca o fundo para papel pontilhado"
-                                                     IsChecked="{Binding Model, Mode=OneWay, Converter={StaticResource Is}, ConverterParameter={x:Static m:BoardModel.Pontilhado}}" />
-                                    </UniformGrid>
-                                </Grid>
-                            </Grid>
-                        </StackPanel>
                     </Grid>
                 </c:CollapsePanel>
 
@@ -198,7 +167,7 @@
                                       CornerRadius="18" Padding="12,0,15,0" Panel.ZIndex="20" IsHitTestVisible="False">
                             <StackPanel Orientation="Horizontal">
                                 <c:Icon Data="{StaticResource IcMouse}" Size="17" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
-                                <TextBlock Text="Botão direito para adicionar · 2 cliques para editar" FontSize="13" FontWeight="Medium"
+                                <TextBlock Text="2 cliques no vazio criam uma página · botão direito para adicionar" FontSize="13" FontWeight="Medium"
                                            Foreground="{DynamicResource Ink2Brush}" Margin="8,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </c:GlassPanel>
@@ -210,7 +179,6 @@
 
                         <c:DrawPalette x:Name="Palette" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,96" Panel.ZIndex="31" />
 
-                        <c:Inspector x:Name="Inspector" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,30,30,90" Panel.ZIndex="28" />
 
                         <c:GlassPanel x:Name="Status" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,32" Height="36"
                                       CornerRadius="18" Padding="15,0" Panel.ZIndex="20">

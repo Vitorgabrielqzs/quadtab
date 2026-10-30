@@ -17,8 +17,9 @@ public static class BoardCursors
     static double _scale = 1;
 
     public static Cursor Arrow => Get("seta");
-    public static Cursor Grab => Get("mao");
-    public static Cursor Grabbing => Get("mao-fechada");
+    // Sem mãozinhas: no quadro e em todo o app fica só a seta personalizada.
+    public static Cursor Grab => Arrow;
+    public static Cursor Grabbing => Arrow;
     public static Cursor IBeam => Get("texto");
 
     /// <summary>Escala da tela (1 = 100%). Mudou: os cursores são desenhados de novo.</summary>

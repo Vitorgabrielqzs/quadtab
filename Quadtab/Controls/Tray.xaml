@@ -32,78 +32,53 @@
                     </Button>
                     <StackPanel>
                         <c:TrackedText Text="Bandeja" FontSize="20" FontWeight="Bold" Tracking="-0.025" Wrap="False" />
-                        <TextBlock Text="Arraste para o quadro ou clique para adicionar no centro" FontSize="13.5"
+                        <TextBlock Text="Arraste um elemento para o quadro ou clique para adicionar no centro" FontSize="13.5"
                                    Foreground="{DynamicResource Ink2Brush}" Margin="0,2,0,0" />
                     </StackPanel>
                 </DockPanel>
-
-                <TextBlock Text="Post-its" Style="{StaticResource SectionLabel}" />
-                <StackPanel x:Name="NoteRow" Orientation="Horizontal" />
-
-                <TextBlock Text="Estilos de post-it" Style="{StaticResource SectionLabel}" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition />
-                    </Grid.ColumnDefinitions>
-                    <Button x:Name="CardPin" Grid.Column="0" Style="{StaticResource TrayCard}" ToolTip="Cola um post-it com alfinete (clique ou arraste para o quadro)">
-                        <StackPanel Orientation="Horizontal">
-                            <Grid Width="30" Height="30" Margin="0,0,12,0" RenderTransformOrigin="0.5,0.5">
-                                <Grid.RenderTransform><RotateTransform Angle="-4" /></Grid.RenderTransform>
-                                <c:Shadow Layers="0 4 6 -2 #66321900" />
-                                <Border Background="#FFE27A" CornerRadius="2" />
-                                <Ellipse Width="9" Height="9" VerticalAlignment="Top" Margin="0,-2,0,0" Fill="{StaticResource MiniPinRed}" />
-                            </Grid>
-                            <TextBlock Text="Com alfinete" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="CardTape" Grid.Column="2" Style="{StaticResource TrayCard}" ToolTip="Cola um post-it com fita (clique ou arraste para o quadro)">
-                        <StackPanel Orientation="Horizontal">
-                            <Grid Width="30" Height="30" Margin="0,0,12,0" RenderTransformOrigin="0.5,0.5">
-                                <Grid.RenderTransform><RotateTransform Angle="-4" /></Grid.RenderTransform>
-                                <c:Shadow Layers="0 4 6 -2 #66321900" />
-                                <Border Background="#FFB1C6" CornerRadius="2" />
-                                <Border Width="20" Height="8" Background="#B3FFFFFF" HorizontalAlignment="Left" VerticalAlignment="Top"
-                                        Margin="5,-5,0,0" RenderTransformOrigin="0.5,0.5">
-                                    <Border.RenderTransform><RotateTransform Angle="-6" /></Border.RenderTransform>
-                                </Border>
-                            </Grid>
-                            <TextBlock Text="Com fita" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="CardLined" Grid.Column="4" Style="{StaticResource TrayCard}" ToolTip="Cola um post-it pautado, para listas">
-                        <StackPanel Orientation="Horizontal">
-                            <Grid Width="30" Height="30" Margin="0,0,12,0" RenderTransformOrigin="0.5,0.5">
-                                <Grid.RenderTransform><RotateTransform Angle="-4" /></Grid.RenderTransform>
-                                <c:Shadow Layers="0 4 6 -2 #66321900" />
-                                <Border Background="#A6D3FF" CornerRadius="2" />
-                                <Border Margin="5,9,5,4" Background="{StaticResource MiniLines}" />
-                            </Grid>
-                            <TextBlock Text="Pautado" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
 
                 <TextBlock Text="Elementos" Style="{StaticResource SectionLabel}" />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition />
                     </Grid.ColumnDefinitions>
-                    <Button x:Name="CardPage" Grid.Column="0" Style="{StaticResource TrayCard}" ToolTip="Cola uma página de caderno (vira um arquivo .md)">
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <Button x:Name="CardPage" Grid.Column="0" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola uma folha de caderno (clique ou arraste para o quadro)">
                         <StackPanel Orientation="Horizontal">
                             <c:Icon Data="{StaticResource IcPage}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
                             <TextBlock Text="Página" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="CardText" Grid.Column="2" Style="{StaticResource TrayCard}" ToolTip="Cola um texto grande e solto">
+                    <Button x:Name="CardBlock" Grid.Column="2" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um bloco com título livre e texto">
+                        <StackPanel Orientation="Horizontal">
+                            <c:Icon Data="{StaticResource IcBlock}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="Bloco" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="CardText" Grid.Column="4" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um texto grande e solto">
                         <StackPanel Orientation="Horizontal">
                             <c:Icon Data="{StaticResource IcText}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
                             <TextBlock Text="Texto" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="CardBlock" Grid.Column="4" Style="{StaticResource TrayCard}" ToolTip="Cola um bloco de vidro com título e texto">
+                    <Button x:Name="CardBox" Grid.Column="0" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola uma caixa só com texto" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcBlock}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
-                            <TextBlock Text="Bloco de vidro" VerticalAlignment="Center" />
+                            <c:Icon Data="{StaticResource IcTextBox}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="Caixa de texto" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="CardShape" Grid.Column="2" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola uma forma (troque pelo botão direito)" Margin="0,10,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <c:Icon Data="{StaticResource IcShapes}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="Forma" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="CardTable" Grid.Column="4" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola uma tabela" Margin="0,10,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <c:Icon Data="{StaticResource IcTable}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="Tabela" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -114,7 +89,7 @@
         <c:GlassPanel x:Name="Dock" CornerRadius="28" Height="56" Padding="6" HorizontalAlignment="Center"
                      >
             <StackPanel Orientation="Horizontal">
-                <Button Style="{StaticResource DockButton}" Margin="0,0,1,0" ToolTip="Abre a bandeja de post-its e elementos"
+                <Button Style="{StaticResource DockButton}" Margin="0,0,1,0" ToolTip="Abre a bandeja de elementos"
                         Command="{Binding ToggleTrayCommand}">
                     <StackPanel Orientation="Horizontal">
                         <c:Icon Data="{StaticResource IcTray}" />
@@ -127,22 +102,17 @@
                     </StackPanel>
                 </Button>
                 <Border Width="1" Height="24" Background="{DynamicResource SepBrush}" Margin="4,0" />
-                <Button x:Name="QuickNote" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um post-it da última cor no centro do quadro">
-                    <Grid Width="20" Height="20" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform Angle="-5" /></Grid.RenderTransform>
-                        <c:Shadow Layers="0 2 3 0 #33000000" CornerRadius="2" />
-                        <Border Background="#FFE27A" CornerRadius="2" />
-                        <Border Height="5" VerticalAlignment="Top" Background="#0D000000" CornerRadius="2,2,0,0" />
-                    </Grid>
-                </Button>
                 <Button x:Name="QuickPage" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola uma página no centro do quadro">
                     <c:Icon Data="{StaticResource IcPage}" />
                 </Button>
                 <Button x:Name="QuickText" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um texto no centro do quadro">
                     <c:Icon Data="{StaticResource IcText}" />
                 </Button>
-                <Button x:Name="QuickBlock" Style="{StaticResource DockButton}" Margin="1,0,0,0" ToolTip="Cola um bloco de vidro no centro do quadro">
+                <Button x:Name="QuickBlock" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um bloco no centro do quadro">
                     <c:Icon Data="{StaticResource IcBlock}" />
+                </Button>
+                <Button x:Name="QuickShape" Style="{StaticResource DockButton}" Margin="1,0,0,0" ToolTip="Cola uma forma no centro do quadro">
+                    <c:Icon Data="{StaticResource IcShapes}" />
                 </Button>
             </StackPanel>
         </c:GlassPanel>

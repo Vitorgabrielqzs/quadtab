@@ -118,7 +118,8 @@ public class GlassPanel : Decorator
             if (GlowEnabled) GlassGlow.Register(this);
             RefreshBackdrop();
         };
-        Unloaded += (_, _) => GlassGlow.Unregister(this);
+        Loaded += (_, _) => ShadowsChanged += InvalidateVisual;
+        Unloaded += (_, _) => { GlassGlow.Unregister(this); ShadowsChanged -= InvalidateVisual; };
     }
 
     // ---------- árvore visual: [fundo] [vidro] [brilho] conteúdo [borda] [borda viva] ----------
@@ -181,12 +182,35 @@ public class GlassPanel : Decorator
         return s;
     }
 
+    /// <summary>Liga ou desliga a sombra de todos os painéis (a tela cheia desliga).</summary>
+    public static bool ShadowsEnabled
+    {
+        get => _shadowsEnabled;
+        set
+        {
+            if (_shadowsEnabled == value) return;
+            _shadowsEnabled = value;
+            ShadowsChanged?.Invoke();
+        }
+    }
+    static bool _shadowsEnabled = true;
+
+    /// <summary>Itens do quadro (blocos) mantêm a sombra mesmo na tela cheia.</summary>
+    public bool KeepShadow { get; set; }
+    static event Action? ShadowsChanged;
+
     protected override void OnRender(DrawingContext dc)
     {
+        if (!_shadowsEnabled && !KeepShadow) return;
         var layers = ShadowSpec.Parse(ShadowLayers);
         if (layers.Length > 0 && ActualWidth > 0)
             ShadowCache.Draw(dc, new Rect(RenderSize), Radius(RenderSize), layers, hollow: true);
     }
+
+    // O painel só desenha a sombra, que passa das bordas: ela nunca recebe cliques (antes roubava o
+    // clique do botão da cápsula vizinha). Dentro do painel quem responde é a camada de vidro.
+    protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters) => null;
+    protected override GeometryHitTestResult? HitTestCore(GeometryHitTestParameters hitTestParameters) => null;
 
     double Radius(Size s) => Math.Max(0, Math.Min(CornerRadius, Math.Min(s.Width, s.Height) / 2));
 

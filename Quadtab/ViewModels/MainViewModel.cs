@@ -72,6 +72,7 @@ public partial class MainViewModel : ObservableObject
 
         foreach (var m in board.Itens)
         {
+            MigrateNote(m);
             MigratePage(m);
             var vm = new BoardItemViewModel(m);
             vm.PropertyChanged += OnItemChanged;
@@ -114,6 +115,17 @@ public partial class MainViewModel : ObservableObject
         ItemKind.Drawing => "desenho",
         _ => "midia",
     };
+
+    /// <summary>Post-its antigos viram blocos (mesma cor, título e texto), sem alfinete nem inclinação.</summary>
+    static void MigrateNote(BoardItem m)
+    {
+        if (m.Tipo == "bloco" && m.Titulo == "Bloco de vidro") m.Titulo = ""; // título padrão antigo: fica livre
+        if (m.Tipo != "postit") return;
+        m.Tipo = "bloco";
+        if (!m.Pautado) m.Titulo = "";
+        m.Pautado = false;
+        m.Largura ??= 240;
+    }
 
     /// <summary>Páginas antigas (título + texto no quadro) viram arquivos .md no cofre.</summary>
     static void MigratePage(BoardItem m)
@@ -204,8 +216,8 @@ public partial class MainViewModel : ObservableObject
     public string CountLabel => Count == 1 ? "1 item" : $"{Count} itens";
     public string ModelName => Palette.ModelName(Model);
     public int ModelIndex => (int)Model;
-    public string Subtitle => $"{CountLabel} · {ModelName} · editado {EditedAgo()}";
-    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")} · {CountLabel} · {ModelName}";
+    public string Subtitle => $"{CountLabel} · editado {EditedAgo()}";
+    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")} · {CountLabel}";
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
     public string TitleToggleVerb => TitleHidden ? "Mostrar" : "Ocultar";
     public string TitleToggleLabel => TitleToggleVerb + " título";
@@ -385,7 +397,6 @@ public partial class MainViewModel : ObservableObject
     public BoardItemViewModel Add(ItemKind kind, string color, double cx, double cy, NoteStyle? style = null)
     {
         var size = BoardItemViewModel.DefaultSize(kind);
-        double Rnd(double a, double b) => Math.Round(a + Rng.NextDouble() * (b - a), 1);
 
         var m = new BoardItem
         {
@@ -393,18 +404,10 @@ public partial class MainViewModel : ObservableObject
             Cor = color,
             X = Math.Round(cx - size.Width / 2),
             Y = Math.Round(cy - size.Height / 2),
-            Rotacao = kind switch
-            {
-                ItemKind.Block => Rnd(-1.2, 1.2),
-                ItemKind.Page => Rnd(-2, 2),
-                ItemKind.PostIt => Rnd(-4, 4),
-                _ => 0,
-            },
-            Fixacao = kind switch { ItemKind.Page => "fita", ItemKind.PostIt or ItemKind.Block => "alfinete", _ => "nenhuma" },
-            Titulo = kind switch { ItemKind.Block => "Bloco de vidro", _ => "" },
+            Fixacao = "nenhuma",
+            Titulo = "",
             Texto = kind switch
             {
-                ItemKind.Block => "Ideias, resumos e lembretes cabem aqui.",
                 ItemKind.Text => "Texto",
                 ItemKind.TextBox => "Escreva aqui",
                 ItemKind.PostIt => "Nova nota",
@@ -437,7 +440,7 @@ public partial class MainViewModel : ObservableObject
             LastColor = color;
             if (style is { } ns) NewStyle = ns;
         }
-        if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox) BeginEdit(vm, EditField.Text);
+        if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox or ItemKind.Block) BeginEdit(vm, EditField.Text);
         return vm;
     }
 
@@ -477,11 +480,11 @@ public partial class MainViewModel : ObservableObject
         StorageService.SaveState();
     }
 
-    /// <summary>Coloca, centrado no ponto, outro item igual ao último criado (sem molde: um post-it da última cor).</summary>
+    /// <summary>Coloca, centrado no ponto, outro item igual ao último criado (sem molde: uma página).</summary>
     public BoardItemViewModel RepeatLast(Point at)
     {
-        if (StorageService.State.UltimoItem is not { } t)
-            return Add(ItemKind.PostIt, LastColor, at.X, at.Y, NewStyle);
+        if (StorageService.State.UltimoItem is not { } t || t.Tipo == "postit")
+            return Add(ItemKind.Page, "branco", at.X, at.Y);
         var kind = BoardItem.KindFromJson(t.Tipo);
         // Página é um arquivo: repetir cria uma página nova, com a mesma cor.
         if (kind == ItemKind.Page) return Add(ItemKind.Page, t.Cor, at.X, at.Y);
@@ -495,7 +498,7 @@ public partial class MainViewModel : ObservableObject
             center = new Point(m.X + (m.Largura ?? size.Width) / 2, m.Y + (m.Altura ?? size.Height) / 2);
         }
         var vm = PasteModels([m], at - center)[0];
-        if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox) BeginEdit(vm, EditField.Text);
+        if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox or ItemKind.Block) BeginEdit(vm, EditField.Text);
         return vm;
     }
 
@@ -883,6 +886,7 @@ public partial class MainViewModel : ObservableObject
             case nameof(BoardItemViewModel.Lined):
             case nameof(BoardItemViewModel.Z):
             case nameof(BoardItemViewModel.Locked):
+            case nameof(BoardItemViewModel.Spiral):
             case nameof(BoardItemViewModel.Group):
             case nameof(BoardItemViewModel.Description):
             case nameof(BoardItemViewModel.Style):

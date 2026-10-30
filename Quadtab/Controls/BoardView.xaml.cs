@@ -168,6 +168,7 @@ public partial class BoardView : UserControl
         Surface.PreviewMouseDown += OnMouseDown;
         Surface.PreviewMouseMove += OnMouseMove;
         Surface.PreviewMouseUp += OnMouseUp;
+        Surface.PreviewMouseRightButtonDown += OnRightDown;
         Surface.PreviewMouseRightButtonUp += OnRightUp;
         Surface.MouseLeave += (_, _) => { if (_connecting is null) ClearPorts(); };
         Surface.LostMouseCapture += (_, _) =>
@@ -175,7 +176,7 @@ public partial class BoardView : UserControl
             if (_panning) EndPan(fling: false);
             if (_marquee) EndMarquee();
         };
-        Surface.Cursor = BoardCursors.Grab; // mão aberta no vazio
+        Surface.Cursor = BoardCursors.Arrow;
         Surface.AddHandler(Mouse.LostMouseCaptureEvent, new MouseEventHandler((_, _) =>
         {
             if (_drag is not null && !_drag.Grabbed.IsMouseCaptured && !_testing) EndDrag();
@@ -638,38 +639,23 @@ public partial class BoardView : UserControl
 
     // ---------- fundo dos painéis de vidro sobre o quadro ----------
 
-    readonly List<(GlassPanel Panel, ImageBrush Brush)> _glass = [];
+    readonly List<GlassPanel> _glass = [];
 
-    /// <summary>Atrás destes painéis aparece a textura já desfocada, alinhada com a câmera (custa só mover um pincel).</summary>
+    /// <summary>Painéis de vidro que ficam sobre o quadro (dica, status, dock...): enxergam a cor do fundo.</summary>
     public void UseAsGlassBackdrop(params GlassPanel[] panels)
     {
         foreach (var p in panels)
-            _glass.Add((p, new ImageBrush(BoardSurfaces.GlassCork) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Stretch = Stretch.Fill }));
+            _glass.Add(p);
         ApplyGlassModel();
     }
 
+    // Quadro liso (estilo Obsidian): o vidro sobre ele enxerga só a cor do fundo, que segue o tema.
     void ApplyGlassModel()
     {
-        if (_vm is null) return;
-        Brush? solid = _vm.Model == BoardModel.Cortica ? null
-            : ShadowCache.BrushOf(ColorMath.Saturate(BoardSurfaces.AverageColor(_vm.Model), 1.9));
-        foreach (var (p, b) in _glass) p.BackdropBrush = solid ?? b;
-        UpdateGlass();
+        foreach (var p in _glass) p.SetResourceReference(GlassPanel.BackdropBrushProperty, "CanvasBrush");
     }
 
-    void UpdateGlass()
-    {
-        if (_glass.Count == 0 || _vm is not { Model: BoardModel.Cortica }) return;
-        var m = CameraTransform.Matrix;
-        double s = BoardSurfaces.TileOnScreen(BoardSurfaces.CorkTile, _camera.Zoom, out _);
-        foreach (var (p, b) in _glass)
-        {
-            if (!p.IsVisible) continue;
-            var o = p.TranslatePoint(default, Surface);
-            var v = new Rect(Mod(m.OffsetX - o.X, s) - s, Mod(m.OffsetY - o.Y, s) - s, s, s);
-            if (b.Viewport != v) b.Viewport = v;
-        }
-    }
+    static void UpdateGlass() { } // nada a alinhar: o fundo é liso
 
     public void RefreshGlass() => UpdateGlass();
 
@@ -783,7 +769,7 @@ public partial class BoardView : UserControl
         // Quadro vazio
         if (e.ClickCount == 2)
         {
-            Vm.Add(ItemKind.PostIt, Vm.LastColor, world.X, world.Y);
+            Vm.Add(ItemKind.Page, "branco", world.X, world.Y); // 2 cliques no vazio: página nova
             e.Handled = true;
             return;
         }
@@ -865,6 +851,18 @@ public partial class BoardView : UserControl
     void OnMouseMove(object sender, MouseEventArgs e)
     {
         var p = e.GetPosition(Surface);
+        // Botão direito segurado num item e arrastado: vira uma linha nova até onde o mouse soltar.
+        if (_rightStart is { } rs && _connecting is null)
+        {
+            if (e.RightButton != MouseButtonState.Pressed) _rightStart = null;
+            else if ((p - rs.Pointer).Length >= 6)
+            {
+                _connecting = (rs.Item, NearestSide(rs.Item.Box, _camera.ToWorld(p)));
+                _rightDrag = true;
+                ClearPorts();
+                Surface.CaptureMouse();
+            }
+        }
         if (_drag is { } d)
         {
             if (e.LeftButton != MouseButtonState.Pressed) { EndDrag(); return; }
@@ -946,7 +944,7 @@ public partial class BoardView : UserControl
         if (e.ChangedButton != MouseButton.Left) return;
         if (_marquee) { EndMarquee(); e.Handled = true; }
         else if (_handle is not null) { EndHandle(); e.Handled = true; }
-        else if (_connecting is not null) { EndConnector(p, e.OriginalSource as DependencyObject); e.Handled = true; }
+        else if (_connecting is not null && !_rightDrag) { EndConnector(p); e.Handled = true; }
         else if (_stroke is not null) { EndStroke(); e.Handled = true; }
         else if (_erasing) { _erasing = false; ReleaseSurface(); e.Handled = true; }
         else if (_lasso is not null) { EndLasso(); e.Handled = true; }
@@ -1084,7 +1082,7 @@ public partial class BoardView : UserControl
     static readonly Cursor[] HandleCursors =
         [Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE];
 
-    /// <summary>Desenha as alças do item selecionado (8 de tamanho + girar) ou as pontas da linha.</summary>
+    /// <summary>Desenha as 8 alças de tamanho do item selecionado ou as pontas da linha.</summary>
     public void UpdateAdorner()
     {
         if (_vm is null) return;
@@ -1097,7 +1095,7 @@ public partial class BoardView : UserControl
         }
         var it = sel[0];
         var offset = _drag?.Offset ?? default;
-        if (Adorner.Children.Count != (it.Kind == ItemKind.Line ? 2 : 10) || Adorner.Tag != it) BuildAdorner(it);
+        if (Adorner.Children.Count != (it.Kind == ItemKind.Line ? 2 : 8) || Adorner.Tag != it) BuildAdorner(it);
 
         if (it.Kind == ItemKind.Line && it.Line is { } l)
         {
@@ -1112,14 +1110,6 @@ public partial class BoardView : UserControl
         Point S(double fx, double fy) => _camera.ToScreen(rot.Transform(new Point(box.X + box.Width * fx, box.Y + box.Height * fy)));
         var pts = new[] { S(0, 0), S(0.5, 0), S(1, 0), S(1, 0.5), S(1, 1), S(0.5, 1), S(0, 1), S(0, 0.5) };
         for (int i = 0; i < 8; i++) Place(Adorner.Children[i], pts[i]);
-        // alça de girar: acima do meio do topo
-        var up = rot.Transform(new Point(c.X, box.Y)) - rot.Transform(new Point(c.X, box.Y + 1));
-        up.Normalize();
-        Place(Adorner.Children[8], pts[1] + up * 30);
-        var stem = (Line)Adorner.Children[9];
-        var a = pts[1];
-        var b2 = pts[1] + up * 22;
-        stem.X1 = a.X; stem.Y1 = a.Y; stem.X2 = b2.X; stem.Y2 = b2.Y;
     }
 
     void DrawGroupBox(List<BoardItemViewModel> sel)
@@ -1150,11 +1140,8 @@ public partial class BoardView : UserControl
             Adorner.Children.Add(Dot(new HandleTag(it, 10), 14, Cursors.SizeAll));
             return;
         }
+        // Só as 8 alças de tamanho: os itens ficam sempre retos (sem alça de girar).
         for (int i = 0; i < 8; i++) Adorner.Children.Add(Dot(new HandleTag(it, i), 11, HandleCursors[i]));
-        var rotate = Dot(new HandleTag(it, 8), 18, Cursors.Hand);
-        rotate.ToolTip = "Girar (Shift: de 15 em 15°)";
-        Adorner.Children.Add(rotate);
-        Adorner.Children.Add(new Line { Stroke = AccentBrush, StrokeThickness = 1.5, IsHitTestVisible = false });
     }
 
     static Ellipse Dot(object tag, double size, Cursor cursor) => new()
@@ -1308,7 +1295,7 @@ public partial class BoardView : UserControl
         ConnectorPreview.Visibility = Visibility.Visible;
     }
 
-    void EndConnector(Point p, DependencyObject? src)
+    void EndConnector(Point p, bool copyOnEmpty = true)
     {
         if (_connecting is not { } c) return;
         _connecting = null;
@@ -1319,6 +1306,7 @@ public partial class BoardView : UserControl
         var target = ItemAt(p, c.From);
         if (target is null)
         {
+            if (!copyOnEmpty) return;
             // Soltou no vazio: cria uma cópia do item já ligada.
             var copy = Vm.DuplicateMany([c.From], default, select: false)[0];
             var size = c.From.Box.Size;
@@ -1540,8 +1528,28 @@ public partial class BoardView : UserControl
 
     // ---------- botão direito ----------
 
+    // Arraste com o botão direito a partir de um item (cria uma linha até o item onde soltar).
+    (BoardItemViewModel Item, Point Pointer)? _rightStart;
+    bool _rightDrag;
+
+    void OnRightDown(object sender, MouseButtonEventArgs e)
+    {
+        _rightStart = null;
+        if (Tool != BoardTool.Select || _drag is not null || _connecting is not null) return;
+        var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
+        if (item is { Kind: not ItemKind.Line } && item.Editing == EditField.None) _rightStart = (item, e.GetPosition(Surface));
+    }
+
     void OnRightUp(object sender, MouseButtonEventArgs e)
     {
+        _rightStart = null;
+        if (_rightDrag)
+        {
+            _rightDrag = false;
+            EndConnector(e.GetPosition(Surface), copyOnEmpty: false); // soltou no vazio: não cria nada
+            e.Handled = true;
+            return;
+        }
         var src = e.OriginalSource as DependencyObject;
         if (Tree.FindAncestor<TextBox>(src) is not null) return;
         var root = Window.GetWindow(this)?.Content as IInputElement;
@@ -1581,20 +1589,7 @@ public partial class BoardView : UserControl
         {
             dc.PushTransform(new ScaleTransform(scale, scale));
             dc.PushTransform(new TranslateTransform(-area.X, -area.Y));
-            Brush surface = Vm.Model switch
-            {
-                BoardModel.Cortica => new ImageBrush(BoardSurfaces.Cork) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, 384, 384) },
-                BoardModel.Lousa => ShadowCache.BrushOf(Palette.C(0x2C4838)),
-                BoardModel.Pontilhado => ShadowCache.BrushOf(Palette.C(0xFBFBF8)),
-                _ => ShadowCache.BrushOf(Palette.C(0xF9FAFB)),
-            };
-            dc.DrawRectangle(surface, null, area);
-            if (Vm.Model == BoardModel.Pontilhado)
-            {
-                var dots = BoardSurfaces.DotsBrush.Clone();
-                dots.Viewport = new Rect(0, 0, BoardSurfaces.DotTile, BoardSurfaces.DotTile);
-                dc.DrawRectangle(dots, null, area);
-            }
+            dc.DrawRectangle((Brush)FindResource("CanvasBrush"), null, area); // fundo liso do quadro
             dc.DrawRectangle(new VisualBrush(ItemsLayer) { ViewboxUnits = BrushMappingMode.Absolute, Viewbox = area, Stretch = Stretch.Fill }, null, area);
             dc.Pop();
             dc.Pop();

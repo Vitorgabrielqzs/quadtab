@@ -19,12 +19,8 @@ namespace Quadtab;
 
 public partial class MainWindow : Window
 {
-    /// <summary>Quanto da barra lateral aparece (1 aberta, 0 recolhida). Animado com mola.</summary>
-    public static readonly DependencyProperty SideProgressProperty = DependencyProperty.Register(
-        nameof(SideProgress), typeof(double), typeof(MainWindow), new PropertyMetadata(1.0, (d, _) => ((MainWindow)d).ApplySide()));
-
     const double SidebarWidth = 292;
-    const double SidePeekWidth = 18;   // recolhida, a lateral deixa esta faixa à mostra
+    const double SidePeek = 12;        // escondida, a lateral deixa ~12 px à mostra (como o dock)
     const double DockHiddenY = 52;     // escondido, o dock deixa ~14 px à mostra
 
     MainViewModel _vm;
@@ -52,9 +48,10 @@ public partial class MainWindow : Window
 
         // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
         Board.Settled += RefreshBoardGlass;
-        Board.UseAsGlassBackdrop(Hint, Status, Tray.DockGlass, Tray.SheetGlass, GoToContent, FpsPanel, ZoomPanel, SearchBar, PresentBar, Inspector.Glass, Palette.Glass);
+        Board.UseAsGlassBackdrop(Hint, Status, Tray.DockGlass, Tray.SheetGlass, GoToContent, FpsPanel, ZoomPanel, SearchBar, PresentBar, Palette.Glass);
         foreach (var g in new[] { Menu.GlassPanel, Actions.Glass, CtxTray.Glass })
         {
+            g.SetResourceReference(GlassPanel.BackgroundProperty, "MenuGlassBrush");
             g.SetResourceReference(GlassPanel.BackdropBaseProperty, "BgBrush");
             g.BackdropSource = AppRoot;
         }
@@ -66,7 +63,6 @@ public partial class MainWindow : Window
         Tray.RenderTransform = TrayShift;
         Board.MenuRequested += (item, p) => ShowMenu(item, default, p);
         Board.TrayRequested += ShowContextTray;
-        Menu.Board = Board;
         Menu.CloseRequested += CloseMenu;
         Menu.MoreRequested += ShowItemExtras;
         Actions.Closed += CloseActions;
@@ -86,11 +82,11 @@ public partial class MainWindow : Window
             Hint.Visibility = v;
             Status.Visibility = v;
         };
-        Inspector.Wanted = StorageService.State.Abertos.Contains("inspetor") || !StorageService.State.Abertos.Contains("sem-inspetor");
 
         Attach(vm);
-        SideProgress = vm.SidebarOpen ? 1 : 0;
-        ApplySideContent(vm.SidebarOpen, animate: false);
+        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.8) };
+        _sideTimer.Tick += (_, _) => { _sideTimer.Stop(); if (!KeepSide()) RevealSide(false); };
+        ApplySidebar(animate: false);
 
         _chrome = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _chrome.Tick += (_, _) => AutoHideTick();
@@ -119,8 +115,8 @@ public partial class MainWindow : Window
         _dockTimer.Tick += (_, _) => { _dockTimer.Stop(); if (!KeepDock()) SetDock(false); };
         _zoomTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
         _zoomTimer.Tick += (_, _) => { _zoomTimer.Stop(); HideZoom(); };
-        PreviewMouseMove += (_, e) => DockNear(e.GetPosition(BoardArea));
-        MouseLeave += (_, _) => DockNear(new Point(-1, -1));
+        PreviewMouseMove += (_, e) => { DockNear(e.GetPosition(BoardArea)); SideNear(e.GetPosition(WindowRoot)); };
+        MouseLeave += (_, _) => { DockNear(new Point(-1, -1)); SideNear(new Point(9999, -1)); };
         _itemsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _itemsTimer.Tick += (_, _) => { _itemsTimer.Stop(); App.Library.RefreshCurrent(); };
 
@@ -154,8 +150,6 @@ public partial class MainWindow : Window
         Closing += (_, _) => { if (!_closing) SaveAll(); };
     }
 
-    public double SideProgress { get => (double)GetValue(SideProgressProperty); set => SetValue(SideProgressProperty, value); }
-
     /// <summary>Raiz da janela (coordenadas dos menus).</summary>
     public FrameworkElement Root => WindowRoot;
 
@@ -170,7 +164,6 @@ public partial class MainWindow : Window
         vm.Items.CollectionChanged += OnItemsChanged;
         _quietZoomUntil = DateTime.Now.AddSeconds(1); // abrir um quadro não mostra o balão de zoom
         ApplyTitle(animate: false);
-        ApplySegment(animate: false);
         UpdateSearchCount();
     }
 
@@ -185,7 +178,6 @@ public partial class MainWindow : Window
         Board.Tool = BoardTool.Select;
         Attach(vm);
         DataContext = vm;
-        Inspector.Rebuild();
         RefreshBoardGlass();
     }
 
@@ -227,8 +219,7 @@ public partial class MainWindow : Window
         switch (e.PropertyName)
         {
             case nameof(MainViewModel.TitleHidden): ApplyTitle(animate: true); break;
-            case nameof(MainViewModel.Model): ApplySegment(animate: true); break;
-            case nameof(MainViewModel.SidebarOpen): if (!_fullscreen) AnimateSidebar(); break;
+            case nameof(MainViewModel.SidebarOpen): ApplySidebar(animate: true); break;
             case nameof(MainViewModel.BoardSearch): _hit = -1; UpdateSearchCount(); break;
             case nameof(MainViewModel.Zoom): ShowZoom(); break;
             case nameof(MainViewModel.TrayOpen):
@@ -299,43 +290,62 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
-    // ---------- barra lateral (largura 292 → 0, mola de 0.45 s) ----------
+    // ---------- barra lateral: fixa ou escondida na borda (aparece como o dock da bandeja) ----------
 
-    void AnimateSidebar() => ShowSidebar(_vm.SidebarOpen);
+    readonly DispatcherTimer _sideTimer;
+    bool _sideRevealed;
 
-    void ShowSidebar(bool open)
+    /// <summary>A lateral ocupa a coluna dela (fixa) ou flutua escondida sobre o quadro.</summary>
+    bool SideDocked => _vm.SidebarOpen && !_fullscreen;
+
+    double SideMargin => _fullscreen ? 10 : 14;
+
+    /// <summary>Fixa ↔ escondida: o quadro cresce ou encolhe com a mola da lateral.</summary>
+    void ApplySidebar(bool animate)
     {
-        // Fora da tela cheia, recolhida ela continua como uma faixa de vidro (nunca some de vez).
-        SidebarGlass.Visibility = Visibility.Visible;
-        Anim.To(this, SideProgressProperty, open ? 1 : 0, 0.45, Anim.Sidebar, () =>
+        double k = animate ? 1 : 0;
+        Anim.To(MainColumn, MarginProperty, new Thickness(SideDocked ? SidebarWidth + 14 : 0, 0, 0, 0), 0.45 * k, Anim.Sidebar);
+        _sideTimer.Stop();
+        // Quem acabou de esconder com o mouse em cima: ela só sai quando o mouse se afastar.
+        _sideRevealed = !SideDocked && SidebarGlass.IsMouseOver;
+        MoveSide(animate);
+    }
+
+    void MoveSide(bool animate)
+    {
+        bool shown = SideDocked || _sideRevealed;
+        double x = shown ? 0 : -(SidebarWidth + SideMargin - SidePeek);
+        if (animate) Anim.To(SideShift, TranslateTransform.XProperty, x, shown ? 0.55 : 0.4, shown ? Anim.Panel : Anim.Ease);
+        else Anim.Set(SideShift, TranslateTransform.XProperty, x);
+        SidebarView.IsHitTestVisible = shown;
+        Anim.To(SidebarView, OpacityProperty, shown ? 1 : 0, animate ? (shown ? 0.3 : 0.2) : 0, Anim.Ease);
+        // Flutuando sobre o quadro, o vidro fica mais denso; o fundo desfocado acompanha o deslize.
+        SidebarGlass.SetResourceReference(GlassPanel.BackgroundProperty, SideDocked ? "GlassBrush" : "Glass2Brush");
+        TrackGlass(0.6);
+    }
+
+    void RevealSide(bool show)
+    {
+        if (show == _sideRevealed || SideDocked) return;
+        _sideRevealed = show;
+        MoveSide(animate: true);
+    }
+
+    /// <summary>Escondida: aparece com o mouse a menos de ~40 px da borda esquerda e some 0,8 s depois que ele sai.</summary>
+    void SideNear(Point p)
+    {
+        if (SideDocked || _presenting) return;
+        bool near = (p.X >= 0 && p.Y >= 0 && p.X <= SideMargin + SidePeek + 16) || (_sideRevealed && SidebarGlass.IsMouseOver);
+        if (near || KeepSide())
         {
-            if (SideProgress < 0.01 && _fullscreen) SidebarGlass.Visibility = Visibility.Collapsed;
-        });
-        Anim.To(SidebarGlass, OpacityProperty, open || !_fullscreen ? 1 : 0, 0.3, Anim.Ease);
-        ApplySideContent(open, animate: true);
+            _sideTimer.Stop();
+            if (near) RevealSide(true);
+        }
+        else if (_sideRevealed && !_sideTimer.IsEnabled) _sideTimer.Start();
     }
 
-    /// <summary>Conteúdo da lateral (some na faixa recolhida) e a faixa clicável que reabre.</summary>
-    void ApplySideContent(bool open, bool animate)
-    {
-        SidebarView.IsHitTestVisible = open;
-        Anim.To(SidebarView, OpacityProperty, open ? 1 : 0, animate ? (open ? 0.35 : 0.15) : 0, Anim.Ease);
-        SidePeek.Visibility = open || _fullscreen ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    void OnSidePeek(object sender, MouseButtonEventArgs e)
-    {
-        _vm.SidebarOpen = true;
-        e.Handled = true;
-    }
-
-    void ApplySide()
-    {
-        double p = Math.Max(0, SideProgress);
-        double peek = _fullscreen ? 0 : SidePeekWidth;
-        SidebarGlass.Width = peek + (SidebarWidth - peek) * p;
-        SidebarGlass.Margin = new Thickness(0, 0, _fullscreen ? 0 : 10 + 4 * Math.Min(1, p), 0);
-    }
+    // Segura aberta com um menu dela aberto, renomeando algo nela ou com o mouse em cima.
+    bool KeepSide() => _actionsOpen || (Keyboard.FocusedElement is TextBox tb && SidebarView.IsAncestorOf(tb)) || (_sideRevealed && SidebarGlass.IsMouseOver);
 
     // ---------- título grande (recolhe em 0.5 s) e renomear ----------
 
@@ -395,16 +405,6 @@ public partial class MainWindow : Window
 
     void OnTitleLost(object sender, KeyboardFocusChangedEventArgs e) => EndRename(true);
 
-    // ---------- controle segmentado ----------
-
-    void ApplySegment(bool animate) =>
-        Anim.To(SegMove, TranslateTransform.XProperty, (int)_vm.Model * 99, animate ? 0.5 : 0, Anim.Segment);
-
-    void OnPickModel(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: BoardModel m }) _vm.Model = m;
-    }
-
     // ---------- zoom ----------
 
     void OnZoomIn(object sender, RoutedEventArgs e) => Board.ZoomStep(+1);
@@ -446,8 +446,8 @@ public partial class MainWindow : Window
     {
         CloseActions();
         CloseContextTray();
-        if (item is null) Menu.ShowForBoard(boardPoint);
-        else Menu.ShowForItem(item);
+        if (item is null) return;
+        Menu.ShowForItem(item);
         Place(Menu, MenuScale, windowPoint);
         _menuOpen = true;
         Dispatcher.BeginInvoke(Menu.GlassPanel.RefreshBackdrop, DispatcherPriority.Loaded);
@@ -564,7 +564,6 @@ public partial class MainWindow : Window
             new("Copiar estilo", "IcBrush", () => _vm.CopyStyle(item), Separator: true),
         };
         if (_vm.HasStyleClip) list.Add(new("Colar estilo", "IcBrush", _vm.PasteStyle));
-        list.Add(new("Descrição…", "IcDescription", () => { Inspector.Wanted = true; _vm.Selected = item; }));
         if (sel.Count >= 2)
         {
             list.Add(new("Agrupar (Ctrl+G)", "IcGroup", _vm.GroupSelection, Separator: true));
@@ -598,7 +597,6 @@ public partial class MainWindow : Window
             new("Renomear quadro", "IcPencil", StartRename),
             new("Mostrar grade", "IcGrid", () => _vm.ShowGrid = !_vm.ShowGrid, Separator: true, Checked: _vm.ShowGrid),
             new("Modo diagrama", "IcLine", () => _vm.DiagramMode = !_vm.DiagramMode, Checked: _vm.DiagramMode),
-            new("Inspetor", "IcSettings", ToggleInspector, Checked: Inspector.Wanted),
             new(_vm.TitleHidden ? "Mostrar título" : "Ocultar título", "IcTitle", () => _vm.TitleHidden = !_vm.TitleHidden),
             new("Cenas e apresentação…", "IcScenes", () => ShowScenes(p), Separator: true),
             new("Apresentar", "IcPresent", StartPresenting),
@@ -609,13 +607,6 @@ public partial class MainWindow : Window
         if (sel.Count > 0) list.Add(new("Exportar seleção…", "IcExport", () => Export(selectionOnly: true)));
         list.Add(new("Abrir a pasta do cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true));
         ShowActions(p, list, MoreButton);
-    }
-
-    void ToggleInspector()
-    {
-        Inspector.Wanted = !Inspector.Wanted;
-        MainViewModel.SaveOpen("inspetor", Inspector.Wanted);
-        MainViewModel.SaveOpen("sem-inspetor", !Inspector.Wanted);
     }
 
     // ---------- cenas e apresentação ----------
@@ -651,7 +642,7 @@ public partial class MainWindow : Window
         Board.Tool = BoardTool.Select;
         _presentMadeFullscreen = !_fullscreen;
         if (!_fullscreen) SetFullscreen(true);
-        foreach (var el in new UIElement[] { Hint, Tray, Status, Inspector, Palette }) el.Visibility = Visibility.Collapsed;
+        foreach (var el in new UIElement[] { Hint, Tray, Status, Palette }) el.Visibility = Visibility.Collapsed;
         PresentBar.Visibility = Visibility.Visible;
         _scene = 0;
         GoScene(0);
@@ -663,7 +654,6 @@ public partial class MainWindow : Window
         _presenting = false;
         PresentBar.Visibility = Visibility.Collapsed;
         foreach (var el in new UIElement[] { Hint, Tray, Status }) el.Visibility = Visibility.Visible;
-        Inspector.Rebuild();
         if (_presentMadeFullscreen) SetFullscreen(false);
     }
 
@@ -816,8 +806,8 @@ public partial class MainWindow : Window
     Rect _restoreBounds;
     WindowState _restoreState;
     readonly DispatcherTimer _chrome;
-    DateTime _sideAway, _barAway;
-    bool _sideShown, _barShown;
+    DateTime _barAway;
+    bool _barShown;
 
     void SetFullscreen(bool on)
     {
@@ -835,14 +825,11 @@ public partial class MainWindow : Window
             Width = mon.Width; Height = mon.Height;
             ResizeMode = ResizeMode.NoResize;
             AppRoot.Margin = new Thickness(10);
-            // A coluna principal ocupa tudo; lateral e barra flutuam por cima quando aparecem.
-            Grid.SetColumn(MainColumn, 0);
-            Grid.SetColumnSpan(MainColumn, 2);
+            // O quadro ocupa tudo; lateral e barra flutuam por cima quando aparecem.
             Grid.SetRow(Stage, 0);
             Grid.SetRowSpan(Stage, 3);
             Stage.Margin = new Thickness(0);
-            _sideShown = _barShown = false;
-            ShowSidebar(false);
+            _barShown = false;
             Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse);
             _chrome.Start();
         }
@@ -854,16 +841,13 @@ public partial class MainWindow : Window
             Width = _restoreBounds.Width; Height = _restoreBounds.Height;
             WindowState = _restoreState;
             AppRoot.Margin = new Thickness(14);
-            Grid.SetColumn(MainColumn, 1);
-            Grid.SetColumnSpan(MainColumn, 1);
             Grid.SetRow(Stage, 2);
             Grid.SetRowSpan(Stage, 1);
             Stage.Margin = new Thickness(0, 14, 0, 0);
-            ShowSidebar(_vm.SidebarOpen);
             Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse);
         }
-        ApplySide();
-        ApplySideContent(on ? _sideShown : _vm.SidebarOpen, animate: false);
+        ApplySidebar(animate: true);
+        GlassPanel.ShadowsEnabled = !on; // na tela cheia, sem sombras (ficavam cortadas sobre o quadro)
         ApplyTitle(animate: true);
         RefreshBoardGlass();
     }
@@ -873,13 +857,7 @@ public partial class MainWindow : Window
         if (!_fullscreen || _presenting || !IsActive) return;
         var p = Mouse.GetPosition(WindowRoot);
         var now = DateTime.Now;
-        // Lateral: aparece ao encostar na borda esquerda, some 1 s depois que o mouse sai dela.
-        bool nearSide = p.X <= 6 || (_sideShown && p.X <= SidebarWidth + 30);
-        if (nearSide) _sideAway = now;
-        if (nearSide && !_sideShown) { _sideShown = true; ShowSidebar(true); }
-        else if (!nearSide && _sideShown && (now - _sideAway).TotalSeconds > 1 && !SidebarView.IsKeyboardFocusWithin && !_actionsOpen)
-        { _sideShown = false; ShowSidebar(false); }
-        // Barra de ferramentas: o mesmo pela borda de cima.
+        // Barra de ferramentas: aparece ao encostar na borda de cima, some 1 s depois que o mouse sai.
         bool nearBar = p.Y <= 6 || (_barShown && p.Y <= 76);
         if (nearBar) _barAway = now;
         if (nearBar && !_barShown) { _barShown = true; Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse); }
@@ -974,6 +952,7 @@ public partial class MainWindow : Window
     void OnTrackGlass(object? sender, EventArgs e)
     {
         Board.RefreshGlass();
+        SidebarGlass.RefreshBackdrop();
         if (DateTime.Now < _trackUntil) return;
         _tracking = false;
         CompositionTarget.Rendering -= OnTrackGlass;
@@ -1025,7 +1004,6 @@ public partial class MainWindow : Window
                 Sparks.Enabled = s.Faiscas;
                 StorageService.SaveState();
             }, Checked: s.Faiscas) { Tip = "Liga ou desliga as faíscas que saem do ponteiro a cada clique" },
-            new("Inspetor ao selecionar", "IcSettings", ToggleInspector, Checked: Inspector.Wanted) { Tip = "Mostra o painel de propriedades quando algo está selecionado" },
             new("Contador de FPS", "IcGrid", ToggleFps, Checked: FpsPanel.Visibility == Visibility.Visible) { Tip = "Mostra a velocidade do quadro · Ctrl+Shift+F" },
             new("Abrir a pasta Cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true) { Tip = "Abre no Explorador a pasta onde tudo fica guardado" },
         ], owner);

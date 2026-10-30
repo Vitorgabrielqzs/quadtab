@@ -17,20 +17,17 @@ public sealed class PaperElement : FrameworkElement
     public static readonly DependencyProperty KindProperty = DependencyProperty.Register(nameof(Kind), typeof(PaperKind), typeof(PaperElement), new FrameworkPropertyMetadata(PaperKind.Note, R));
     public static readonly DependencyProperty PaperProperty = DependencyProperty.Register(nameof(Paper), typeof(Color), typeof(PaperElement), new FrameworkPropertyMetadata(Colors.White, R));
     public static readonly DependencyProperty InkProperty = DependencyProperty.Register(nameof(Ink), typeof(Color), typeof(PaperElement), new FrameworkPropertyMetadata(Colors.Black, R));
+    public static readonly DependencyProperty SpiralProperty = DependencyProperty.Register(nameof(Spiral), typeof(bool), typeof(PaperElement), new FrameworkPropertyMetadata(true, R));
 
     public PaperKind Kind { get => (PaperKind)GetValue(KindProperty); set => SetValue(KindProperty, value); }
     public Color Paper { get => (Color)GetValue(PaperProperty); set => SetValue(PaperProperty, value); }
     public Color Ink { get => (Color)GetValue(InkProperty); set => SetValue(InkProperty, value); }
+    public bool Spiral { get => (bool)GetValue(SpiralProperty); set => SetValue(SpiralProperty, value); }
 
     // Pincéis fixos, criados uma vez.
     static readonly Brush Band = ColorMath.Brush(Color.FromArgb(13, 0, 0, 0));            // faixa adesiva: preto 5%
     static readonly Brush BandLine = ColorMath.Brush(Color.FromArgb(102, 255, 255, 255)); // brilho: branco 40%
-    static readonly Brush MarginLine = ColorMath.Brush(Color.FromArgb(128, 0xE4, 0x50, 0x50));
-    static readonly Brush Rule = ColorMath.Brush(Color.FromArgb(56, 0x46, 0x6E, 0xBE));
-    static readonly Brush HoleLight = ColorMath.Brush(Color.FromArgb(153, 255, 255, 255));
     static readonly Brush Curl = CreateCurl();
-    static readonly Brush Hole = CreateHole();
-    static readonly ShadowLayer[] FoldShadow = ShadowSpec.Parse("-2 2 3 0 #1F000000");
 
     public PaperElement()
     {
@@ -82,52 +79,55 @@ public sealed class PaperElement : FrameworkElement
         dc.Pop();
     }
 
+    // Espiral de caderno: arame metálico, brilho por cima e furos no papel.
+    static readonly Brush Wire = CreateWire();
+    static readonly Pen WirePen = Frozen(new Pen(Wire, 2.4) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round });
+    static readonly Pen WireShine = Frozen(new Pen(ColorMath.Brush(Color.FromArgb(120, 255, 255, 255)), 0.8));
+    static readonly Brush SpiralHole = ColorMath.Brush(Color.FromArgb(150, 0x3A, 0x34, 0x2E));
+    static readonly Brush SpiralShade = CreateSpiralShade();
+    const double RingStep = 26;
+
+    /// <summary>
+    /// Folha de caderno espiral (como a foto de referência): papel liso, sem pautas, margem, furos de
+    /// fichário nem orelha; só os anéis de arame na lateral esquerda.
+    /// </summary>
     void RenderPage(DrawingContext dc, double w, double h)
     {
-        const double fold = 28;
-        var shape = new StreamGeometry();
-        using (var c = shape.Open())
+        var sheet = new Rect(0, 0, w, h);
+        var paper = ColorMath.Mix(Paper, 0.16, Colors.White);
+        dc.DrawRoundedRectangle(ShadowCache.BrushOf(paper), null, sheet, 3, 3);
+        if (!Spiral) return; // folha solta: só o papel
+        dc.DrawRectangle(SpiralShade, null, new Rect(0, 0, 26, h)); // sombra suave que os anéis fazem no papel
+
+        for (double y = 20; y <= h - 16; y += RingStep)
         {
-            c.BeginFigure(new Point(0, 0), true, true);
-            c.LineTo(new Point(w - fold, 0), false, false);
-            c.LineTo(new Point(w, fold), false, false);
-            c.LineTo(new Point(w, h), false, false);
-            c.LineTo(new Point(0, h), false, false);
+            dc.DrawEllipse(SpiralHole, null, new Point(15, y + 2), 3.3, 2.7);
+            // O anel sai do furo, passa por cima da borda e volta por trás da folha.
+            var ring = new Rect(-12, y - 5, 28, 8);
+            dc.DrawRoundedRectangle(null, WirePen, ring, 4, 4);
+            dc.DrawLine(WireShine, new Point(-8, y - 4.2), new Point(12, y - 4.2));
         }
-        shape.Freeze();
+    }
 
-        var paper = ColorMath.Mix(Paper, 0.32, Color.FromRgb(0xFF, 0xFE, 0xFA));
-        dc.DrawGeometry(ShadowCache.BrushOf(paper), null, shape);
-        dc.DrawGeometry(BoardSurfaces.GrainBrush, null, shape);
-        dc.PushClip(shape);
+    static Pen Frozen(Pen p) { p.Freeze(); return p; }
 
-        dc.DrawRectangle(MarginLine, null, new Rect(30, 0, 1, h));                      // margem vermelha
-        for (double y = 88; y < h - 1; y += 28) dc.DrawRectangle(Rule, null, new Rect(0, y, w, 1)); // pautas azuis
+    static Brush CreateWire()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xB4, 0xB2, 0xAE), 0));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0x4E, 0x4B, 0x47), 0.55));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0x8C, 0x89, 0x84), 1));
+        g.Freeze();
+        return g;
+    }
 
-        // 3 furos de caderno: x = 9, de y = 54 até 54 px do fim.
-        double top = 54, bottom = h - 54 - 12;
-        foreach (var y in new[] { top, (top + bottom) / 2, bottom })
-        {
-            dc.DrawEllipse(HoleLight, null, new Point(15, y + 7), 6, 6);
-            dc.DrawEllipse(Hole, null, new Point(15, y + 6), 6, 6);
-        }
-
-        // Orelha dobrada: sombra das pernas do triângulo + o triângulo mais escuro.
-        var box = new Rect(w - fold, 0, fold, fold);
-        dc.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(0, 0, w, h)), new RectangleGeometry(box)));
-        ShadowCache.Draw(dc, box, 0, FoldShadow);
-        dc.Pop();
-        dc.Pop();
-
-        var tri = new StreamGeometry();
-        using (var c = tri.Open())
-        {
-            c.BeginFigure(new Point(w - fold, 0), true, true);
-            c.LineTo(new Point(w - fold, fold), false, false);
-            c.LineTo(new Point(w, fold), false, false);
-        }
-        tri.Freeze();
-        dc.DrawGeometry(ShadowCache.BrushOf(ColorMath.Mix(Paper, 0.25, Color.FromRgb(0xE6, 0xE0, 0xD2))), null, tri);
+    static Brush CreateSpiralShade()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(26, 0x50, 0x46, 0x3C), 0));
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0x50, 0x46, 0x3C), 1));
+        g.Freeze();
+        return g;
     }
 
     /// <summary>Retângulo com cantos de cima e de baixo diferentes.</summary>
@@ -162,14 +162,4 @@ public sealed class PaperElement : FrameworkElement
         return g;
     }
 
-    static Brush CreateHole()
-    {
-        var baseC = Color.FromArgb(153, 120, 78, 34);
-        var g = new RadialGradientBrush { GradientOrigin = new Point(0.6, 0.68), Center = new Point(0.55, 0.6), RadiusX = 0.62, RadiusY = 0.62 };
-        g.GradientStops.Add(new GradientStop(baseC, 0));
-        g.GradientStops.Add(new GradientStop(baseC, 0.55));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(215, 60, 38, 16), 1));
-        g.Freeze();
-        return g;
-    }
 }

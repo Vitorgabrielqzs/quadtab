@@ -64,7 +64,7 @@
         <!-- Uma linha: quadro, página, item, título, pasta ou arquivo (e os filhos recuados, quando aberta) -->
         <DataTemplate DataType="{x:Type vm:SideNode}">
             <StackPanel>
-                <Button x:Name="Row" Tag="{Binding}" ToolTip="{Binding Tip}" AllowDrop="True"
+                <Button x:Name="Row" Tag="{Binding}" ToolTip="{Binding Tip}" AllowDrop="True" Focusable="True" FocusVisualStyle="{x:Null}"
                         Click="OnNodeClick" MouseDoubleClick="OnNodeDoubleClick" PreviewMouseRightButtonUp="OnNodeRightClick"
                         PreviewMouseLeftButtonDown="OnNodeMouseDown" PreviewMouseMove="OnNodeMouseMove" Drop="OnNodeDrop" KeyDown="OnNodeKey">
                     <Button.Style>
@@ -212,12 +212,6 @@
                         <TextBlock Text="Procurar" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Style="{StaticResource SideRow}" Click="OnNewPage" ToolTip="Cria uma página nova e abre ao lado do quadro">
-                    <StackPanel Orientation="Horizontal">
-                        <c:Icon Data="{StaticResource IcPage}" Size="17" Margin="0,0,10,0" />
-                        <TextBlock Text="Nova página" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
                 <Button Style="{StaticResource SideRow}" Click="OnTrash" ToolTip="Mostra os quadros apagados nos últimos 30 dias">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Right" Text="{Binding Library.TrashCount}" FontSize="12.5" Foreground="{DynamicResource Ink3Brush}"
@@ -259,19 +253,6 @@
                         <ItemsControl ItemsSource="{Binding Library.Important}" Focusable="False" />
                     </c:Fold>
                 </StackPanel>
-
-                <!-- Páginas -->
-                <Button Style="{StaticResource SectionHead}" Command="{Binding Library.TogglePagesSectionCommand}" ToolTip="Mostra ou esconde as páginas">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Páginas" VerticalAlignment="Center" />
-                        <c:Icon Data="{StaticResource IcChevronDown}" Size="12" Margin="4,1,0,0" RenderTransformOrigin="0.5,0.5" Foreground="{DynamicResource Ink3Brush}">
-                            <c:Icon.RenderTransform><RotateTransform Angle="{Binding Library.PagesArrow}" /></c:Icon.RenderTransform>
-                        </c:Icon>
-                    </StackPanel>
-                </Button>
-                <c:Fold IsOpen="{Binding Library.PagesOpen}">
-                    <ItemsControl ItemsSource="{Binding Library.Pages}" Focusable="False" />
-                </c:Fold>
 
                 <!-- Cofre: a pasta Documentos\Cofre -->
                 <Button Style="{StaticResource SectionHead}" Command="{Binding Library.ToggleVaultSectionCommand}" ToolTip="Mostra ou esconde os arquivos da pasta Cofre">

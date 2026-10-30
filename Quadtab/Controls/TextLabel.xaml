@@ -3,13 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:Quadtab.Controls"
              xmlns:b="clr-namespace:Quadtab.Behaviors"
-             FontFamily="{StaticResource Nunito}">
+             FontFamily="{StaticResource Inter}">
     <Grid Margin="10,2">
-        <c:TrackedText x:Name="Label" b:UI.Field="text" Text="{Binding Text}" FontSize="{Binding FontSizeValue}" FontWeight="Black"
-                       Tracking="0.03" Wrap="False"
+        <c:TrackedText x:Name="Label" b:UI.Field="text" Text="{Binding Text}" FontSize="{Binding FontSizeValue}" FontWeight="ExtraBold"
+                       Tracking="-0.02" Wrap="False"
                        Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
         <TextBox x:Name="Editor" Style="{StaticResource EditBox}" b:EditBox.Mode="line" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
-                 MinWidth="420" FontSize="{Binding FontSizeValue}" FontWeight="Black" TextWrapping="NoWrap"
+                 MinWidth="420" FontSize="{Binding FontSizeValue}" FontWeight="ExtraBold" Background="Transparent" TextWrapping="NoWrap"
                  Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
     </Grid>
 </UserControl>

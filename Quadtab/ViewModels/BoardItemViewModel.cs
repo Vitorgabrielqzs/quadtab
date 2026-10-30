@@ -28,21 +28,24 @@ public partial class BoardItemViewModel : ObservableObject
     /// <summary>Copia os dados salvos para este item (usado também por desfazer/refazer).</summary>
     public void Load(BoardItem m)
     {
-        Rotation = m.Rotacao;
+        Rotation = 0; // nada fica inclinado: todos os itens ficam retos
         ColorKey = Palette.Get(m.Cor).Key;
         X = m.X;
         Y = m.Y;
         Z = m.Z;
         W = m.Largura;
         H = m.Altura;
-        Fastening = Kind is ItemKind.PostIt or ItemKind.Page or ItemKind.Block ? BoardItem.FasteningFromJson(m.Fixacao) : Fastening.None;
+        Fastening = Fastening.None; // sem alfinetes nem fitas (visual do Canvas do Obsidian)
         Lined = Kind == ItemKind.PostIt && m.Pautado;
+        Spiral = !m.SemEspiral;
         Locked = m.Bloqueado;
         Group = m.Grupo;
         Description = m.Descricao ?? "";
         Title = m.Titulo ?? "";
         Text = m.Texto ?? "";
         Style = m.Estilo?.Clone() ?? DefaultStyle(Kind);
+        // Linhas antigas no preto padrão sumiam no quadro escuro: passam para o cinza das linhas.
+        if (Kind == ItemKind.Line && Style.Borda == "#FF1D2130") Style.Borda = LineGray;
         ShapeKey = m.Forma ?? "retangulo-arredondado";
         Line = m.Linha;
         Strokes = m.Tracos;
@@ -88,6 +91,9 @@ public partial class BoardItemViewModel : ObservableObject
     public partial bool Lined { get; set; }
 
     [ObservableProperty] public partial bool Locked { get; set; }
+
+    /// <summary>Página com a espiral de caderno à esquerda (pode ser tirada pelo menu).</summary>
+    [ObservableProperty] public partial bool Spiral { get; set; }
     [ObservableProperty] public partial int? Group { get; set; }
 
     [ObservableProperty]
@@ -273,13 +279,24 @@ public partial class BoardItemViewModel : ObservableObject
         }
     }
 
+    /// <summary>Cor padrão das linhas: cinza médio, visível no quadro claro e no escuro (como no Obsidian).</summary>
+    public const string LineGray = "#FF8A8F98";
+
+    /// <summary>Cores para linhas e setas (menu do botão direito).</summary>
+    public static readonly (string Name, string Hex)[] LineColors =
+    [
+        ("Cinza", LineGray), ("Preto", "#FF15171C"), ("Branco", "#FFF4F4F2"), ("Juta", "#FFC2A06E"),
+        ("Vermelho", "#FFE5484D"), ("Laranja", "#FFF76B15"), ("Amarelo", "#FFFFC53D"), ("Verde", "#FF30A46C"),
+        ("Azul", "#FF0A84FF"), ("Roxo", "#FF8E4EC6"), ("Rosa", "#FFE93D82"),
+    ];
+
     /// <summary>Tamanho padrão de cada tipo de item.</summary>
     public static Size DefaultSize(ItemKind kind) => kind switch
     {
-        ItemKind.Page => new Size(236, 300),
-        ItemKind.Block => new Size(290, 170),
+        ItemKind.Page => new Size(280, 360),
+        ItemKind.Block => new Size(290, 140),
         ItemKind.Text => new Size(240, 60),
-        ItemKind.TextBox => new Size(260, 80),
+        ItemKind.TextBox => new Size(260, 100),
         ItemKind.Shape => new Size(160, 160),
         ItemKind.Line => new Size(200, 4),
         ItemKind.Drawing => new Size(100, 100),
@@ -294,7 +311,7 @@ public partial class BoardItemViewModel : ObservableObject
     public static ItemStyle DefaultStyle(ItemKind kind) => kind switch
     {
         ItemKind.Shape => new ItemStyle { Preenchimento = "#FFA6D3FF", Borda = "#FF1B5DA8", Espessura = 2, Tamanho = 16, Alinhamento = "centro", CorTexto = "#FF1D2130" },
-        ItemKind.Line => new ItemStyle { Borda = "#FF1D2130", Espessura = 2.5 },
+        ItemKind.Line => new ItemStyle { Borda = LineGray, Espessura = 2.5 },
         ItemKind.TextBox => new ItemStyle { Tamanho = 20, CorTexto = "#FF1D2130" },
         ItemKind.Table => new ItemStyle { Preenchimento = "#F2FFFFFF", Borda = "#331D2130", Espessura = 1, Tamanho = 14, CorTexto = "#FF1D2130" },
         ItemKind.Text => new ItemStyle { Tamanho = 50, Fonte = "Nunito" },
@@ -334,11 +351,12 @@ public partial class BoardItemViewModel : ObservableObject
         X = Math.Round(X, 1),
         Y = Math.Round(Y, 1),
         Z = Z,
-        Rotacao = Math.Round(Rotation, 2),
+        Rotacao = 0,
         Largura = W is { } w ? Math.Round(w, 1) : null,
         Altura = H is { } h ? Math.Round(h, 1) : null,
         Fixacao = BoardItem.FasteningToJson(Fastening),
         Pautado = Lined,
+        SemEspiral = Kind == ItemKind.Page && !Spiral,
         Bloqueado = Locked,
         Grupo = Group,
         Descricao = string.IsNullOrWhiteSpace(Description) ? null : Description,

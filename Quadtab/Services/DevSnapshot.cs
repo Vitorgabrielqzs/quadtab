@@ -24,7 +24,7 @@ public static class DevSnapshot
             {
                 switch (action)
                 {
-                    case "menu": window.ShowMenuAt(null, new Point(760, 330), new Point(900, 420)); break;
+                    case "menu": window.ShowContextTrayAt(new Point(900, 420)); break;
                     case "menu-item": window.ShowMenuAt(vm.Items.First(i => i.Id == 3), default, new Point(1000, 300)); break;
                     case "bandeja": vm.TrayOpen = true; break;
                     case "titulo": vm.TitleHidden = true; break;

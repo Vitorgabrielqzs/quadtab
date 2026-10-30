@@ -19,8 +19,6 @@ public sealed record TrayPayload(ItemKind Kind, string? Color, NoteStyle? Style 
 /// </summary>
 public partial class Tray : UserControl
 {
-    static readonly double[] Rotations = [-5, 3, -2, 4, -3, 2, -4, 5];
-
     MainViewModel? _vm;
 
     // arrastar da bandeja
@@ -50,19 +48,18 @@ public partial class Tray : UserControl
     public Tray()
     {
         InitializeComponent();
-        BuildMiniNotes();
 
-        Draggable(CardPin, new TrayPayload(ItemKind.PostIt, "amarelo", NoteStyle.Pin));
-        Draggable(CardTape, new TrayPayload(ItemKind.PostIt, "rosa", NoteStyle.Tape));
-        Draggable(CardLined, new TrayPayload(ItemKind.PostIt, "azul", NoteStyle.Lined));
         Draggable(CardPage, new TrayPayload(ItemKind.Page, "branco"));
+        Draggable(CardBlock, new TrayPayload(ItemKind.Block, "branco"));
         Draggable(CardText, new TrayPayload(ItemKind.Text, "branco"));
-        Draggable(CardBlock, new TrayPayload(ItemKind.Block, "azul"));
+        Draggable(CardBox, new TrayPayload(ItemKind.TextBox, "branco"));
+        Draggable(CardShape, new TrayPayload(ItemKind.Shape, "azul"));
+        Draggable(CardTable, new TrayPayload(ItemKind.Table, "branco"));
 
-        QuickNote.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.PostIt, null));
         QuickPage.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Page, "branco"));
         QuickText.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Text, "branco"));
-        QuickBlock.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Block, "azul"));
+        QuickBlock.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Block, "branco"));
+        QuickShape.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Shape, "azul"));
 
         DataContextChanged += (_, e) =>
         {
@@ -132,81 +129,6 @@ public partial class Tray : UserControl
         }
     }
 
-    // ---------- mini post-its (56×56, girados, sobem com o mouse em cima) ----------
-
-    void BuildMiniNotes()
-    {
-        var colors = Palette.Colors;
-        for (int i = 0; i < colors.Length; i++)
-        {
-            var c = colors[i];
-            var scale = new ScaleTransform();
-            var lift = new TranslateTransform();
-            var rotate = new RotateTransform(Rotations[i]);
-            var note = new Grid
-            {
-                Width = 56,
-                Height = 56,
-                Margin = new Thickness(0, 0, i < colors.Length - 1 ? 14 : 0, 0),
-                RenderTransformOrigin = new Point(0.5, 0.5),
-                RenderTransform = new TransformGroup { Children = { scale, lift, rotate } },
-                Cursor = BoardCursors.Grab,
-                ToolTip = "Cola um post-it " + c.Name.ToLowerInvariant() + " (clique ou arraste para o quadro)",
-                Background = Brushes.Transparent,
-            };
-            note.Children.Add(new Shadow { Layers = "0 1 1 0 #1A000000, 0 8 10 -5 #73321900", CornerRadius = 2.5 });
-            note.Children.Add(new Border { Background = c.PaperBrush, CornerRadius = new CornerRadius(2, 2, 3, 3) });
-            note.Children.Add(new Border { Background = MiniBand, CornerRadius = new CornerRadius(2, 2, 3, 3) });
-            note.Children.Add(new Ellipse
-            {
-                Width = 9,
-                Height = 9,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 2, 0, 0),
-                Fill = MiniPin(Palette.PinColors[i % Palette.PinColors.Length]),
-            });
-
-            double r = Rotations[i];
-            note.MouseEnter += (_, _) => Hover(true);
-            note.MouseLeave += (_, _) => Hover(false);
-            void Hover(bool on)
-            {
-                Anim.To(rotate, RotateTransform.AngleProperty, on ? 0 : r, 0.45, Anim.Mini);
-                Anim.To(lift, TranslateTransform.YProperty, on ? -5 : 0, 0.45, Anim.Mini);
-                Anim.To(scale, ScaleTransform.ScaleXProperty, on ? 1.1 : 1, 0.45, Anim.Mini);
-                Anim.To(scale, ScaleTransform.ScaleYProperty, on ? 1.1 : 1, 0.45, Anim.Mini);
-            }
-
-            Draggable(note, new TrayPayload(ItemKind.PostIt, c.Key));
-            NoteRow.Children.Add(note);
-        }
-    }
-
-    static readonly Brush MiniBand = CreateMiniBand();
-
-    static Brush CreateMiniBand()
-    {
-        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(13, 0, 0, 0), 0));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(13, 0, 0, 0), 10 / 56.0));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(115, 255, 255, 255), 10 / 56.0));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(115, 255, 255, 255), 11 / 56.0));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 11 / 56.0));
-        g.GradientStops.Add(new GradientStop(Color.FromArgb(10, 0, 0, 0), 1));
-        g.Freeze();
-        return g;
-    }
-
-    static Brush MiniPin(Color c)
-    {
-        var g = new RadialGradientBrush { GradientOrigin = new Point(0.35, 0.3), Center = new Point(0.35, 0.3), RadiusX = 0.28, RadiusY = 0.28 };
-        g.GradientStops.Add(new GradientStop(Colors.White, 0));
-        g.GradientStops.Add(new GradientStop(Colors.White, 0.4));
-        g.GradientStops.Add(new GradientStop(c, 1));
-        g.Freeze();
-        return g;
-    }
-
     // ---------- clicar ou arrastar ----------
 
     void Draggable(FrameworkElement el, TrayPayload payload)
@@ -250,8 +172,6 @@ public partial class Tray : UserControl
             Fill = new VisualBrush(el) { Stretch = Stretch.None },
             Opacity = 0.9,
             IsHitTestVisible = false,
-            RenderTransformOrigin = new Point(0.5, 0.5),
-            RenderTransform = new RotateTransform(-3),
         };
         Overlay.Children.Add(_ghost);
         el.Cursor = BoardCursors.Grabbing;
@@ -275,7 +195,7 @@ public partial class Tray : UserControl
         }
         if (src is not null)
         {
-            src.Cursor = src is Button ? Cursors.Hand : BoardCursors.Grab;
+            src.Cursor = BoardCursors.Arrow;
             if (src.IsMouseCaptured) src.ReleaseMouseCapture();
         }
     }

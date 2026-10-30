@@ -88,7 +88,7 @@ public sealed class BoardItemContainer : ContentControl
         Anim.Set(_scale, ScaleTransform.ScaleXProperty, 1.0);
         Anim.Set(_scale, ScaleTransform.ScaleYProperty, 1.0);
         Anim.Set(_lift, TranslateTransform.YProperty, 0.0);
-        Anim.Set(_rotate, RotateTransform.AngleProperty, vm.Rotation);
+        Anim.Set(_rotate, RotateTransform.AngleProperty, 0.0);
         DragOffset.X = DragOffset.Y = 0;
         Anim.Set(this, OpacityProperty, vm.IsDimmed ? 0.16 : 1.0);
         Cursor = BoardCursors.Grab;
@@ -105,8 +105,6 @@ public sealed class BoardItemContainer : ContentControl
     {
         if (e.PropertyName == nameof(BoardItemViewModel.IsDimmed) && _vm is not null)
             Anim.To(this, OpacityProperty, _vm.IsDimmed ? 0.16 : 1, 0.3, Anim.Ease);
-        if (e.PropertyName == nameof(BoardItemViewModel.Rotation) && _vm is not null && !_hover && !_dragging)
-            Anim.Set(_rotate, RotateTransform.AngleProperty, _vm.Rotation);
     }
 
     protected override void OnMouseEnter(MouseEventArgs e)
@@ -131,26 +129,7 @@ public sealed class BoardItemContainer : ContentControl
         UpdatePose();
     }
 
-    void UpdatePose()
-    {
-        double r = _vm?.Rotation ?? 0;
-        if (_dragging)
-        {
-            // Arrastando: sem atraso, escala 1.05 e rotação a 30%.
-            Anim.Set(_scale, ScaleTransform.ScaleXProperty, 1.05);
-            Anim.Set(_scale, ScaleTransform.ScaleYProperty, 1.05);
-            Anim.Set(_lift, TranslateTransform.YProperty, 0.0);
-            Anim.Set(_rotate, RotateTransform.AngleProperty, r * 0.3);
-        }
-        else
-        {
-            // Mouse em cima: rotação a 60%, sobe 3 px e cresce para 1.015 (mola de item).
-            double s = _hover ? 1.015 : 1;
-            Anim.To(_scale, ScaleTransform.ScaleXProperty, s, 0.45, Anim.Item);
-            Anim.To(_scale, ScaleTransform.ScaleYProperty, s, 0.45, Anim.Item);
-            Anim.To(_lift, TranslateTransform.YProperty, _hover ? -3 : 0, 0.45, Anim.Item);
-            Anim.To(_rotate, RotateTransform.AngleProperty, _hover ? r * 0.6 : r, 0.45, Anim.Item);
-        }
-        LiftChanged?.Invoke(IsLifted);
-    }
+    // Visual do Canvas do Obsidian: o item não se inclina, não cresce nem "descola" ao passar o mouse
+    // ou arrastar; fica reto e firme (o contorno de seleção mostra o estado).
+    void UpdatePose() => LiftChanged?.Invoke(IsLifted);
 }

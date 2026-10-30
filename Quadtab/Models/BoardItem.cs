@@ -18,6 +18,9 @@ public sealed class BoardItem
     public string Fixacao { get; set; } = "alfinete";
     public bool Pautado { get; set; }
 
+    /// <summary>Página sem a espiral de caderno (o usuário tirou pelo menu).</summary>
+    public bool SemEspiral { get; set; }
+
     /// <summary>Item bloqueado não se move (arrastar em cima dele move a câmera).</summary>
     public bool Bloqueado { get; set; }
 
@@ -142,6 +145,7 @@ public sealed class LineData
     public LineEnd De { get; set; } = new();
     public LineEnd Para { get; set; } = new() { Ponta = "seta" };
     public string Tipo { get; set; } = "reta"; // reta | curva | angulo
+    public string Traco { get; set; } = "solido"; // solido | barbante
 }
 
 public sealed class InkStroke

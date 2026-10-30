@@ -53,7 +53,6 @@ public partial class Sidebar : UserControl
 
     void OnNewBoard(object sender, RoutedEventArgs e) => Lib.NewBoard();
     void OnSearch(object sender, RoutedEventArgs e) => Shell?.ShowSearch();
-    void OnNewPage(object sender, RoutedEventArgs e) => Lib.NewPage();
     void OnTrash(object sender, RoutedEventArgs e) => Lib.ShowGalleryCommand.Execute("apagados");
 
     // ---------- linhas ----------

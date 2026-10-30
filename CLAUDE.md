@@ -13,6 +13,22 @@ Este arquivo descreve **todo o design que o app deve ter agora**. O objetivo do 
 
 Quando houver dúvida entre este arquivo e o protótipo, o protótipo vence.
 
+> **Atenção — mudanças de design pedidas depois do protótipo (valem por cima das seções 3 a 13):**
+>
+> - **Visual do Canvas do Obsidian.** O quadro é um painel liso (raio 16, fio de 1 px `CanvasEdge`) com fundo `Canvas` e pontinhos `CanvasDot` a cada 22 px (seguem o tema; grade opcional). **Não há** moldura de madeira, cortiça, lousa nem modelos de quadro (o controle segmentado e o menu de modelos foram removidos; `modelo` no JSON é ignorado). O vidro sobre o quadro enxerga a cor lisa do fundo.
+> - **Sem post-its.** Não se cria post-it em lugar nenhum. Post-its antigos viram **blocos** ao abrir (mesma cor; o título do pautado vira título).
+> - **Nada inclinado.** Todos os itens ficam retos (rotação 0, sem alça de girar). Mouse em cima ou arrastando não inclina, não cresce e não "descola".
+> - **Página** = folha de **caderno espiral**: papel liso branco, sem pautas, margem, furos ou orelha; anéis de arame na esquerda. A espiral pode ser tirada/posta por página (botão direito → "Tirar a espiral"; `semEspiral` no JSON). **2 cliques no vazio criam uma página.** As páginas ficam só no quadro: a lateral não tem mais a seção "Páginas" nem "Nova página".
+> - **Bloco** (antes "bloco de vidro"): mantém o visual de vidro, mas sem título padrão e sem a bolinha antes do título. Título vazio mostra "Título" clarinho; 2 cliques nele escrevem.
+> - **Caixa de texto** = cartão no estilo Obsidian (`CardView`): retângulo com raio 10, borda de 2 px na cor (cinza `CardBorder` quando "branco"), fundo `CardBg` com 10% da cor.
+> - **Linhas e setas:** ligam qualquer item. Botão direito numa linha: **cor da linha** (11 cores, inclui juta), **traço** Cor sólida ou **Barbante** (corda torcida na cor escolhida; `traco` no JSON), direção (sem seta / uma / duas / inverter), reta/curva/ângulo, rótulo com 2 cliques. Cor padrão `#8A8F98`. **Segurar o botão direito num item e arrastar até outro cria uma linha** (soltar no vazio não cria nada).
+> - **Lateral:** fixa (ocupa a coluna) ou escondida pelo botão do topo dela. Escondida, flutua sobre o quadro deixando ~12 px à mostra na borda esquerda (como o dock) e desliza para fora quando o mouse chega a ~40 px da borda; some 0,8 s depois que ele sai. Flutuando usa o vidro denso.
+> - **Bandeja e dock:** só elementos (Página, Bloco, Texto, Caixa de texto, Forma, Tabela; dock: Página, Texto, Bloco, Forma). Bandeja do botão direito: sem post-its.
+> - **Sem inspetor** (painel e opções removidos). **Sem mãozinhas:** o ponteiro é sempre a seta personalizada (texto e redimensionar mantêm os seus).
+> - **Tela cheia sem sombras** nos painéis de vidro (`GlassPanel.ShadowsEnabled`).
+> - **Cliques:** a sombra dos painéis de vidro nunca recebe cliques (antes roubava o clique do botão vizinho). Botões não prendem o foco do teclado ao clicar.
+> - Menus e bandejas que abrem por cima do quadro usam `MenuGlassBrush` (quase opaco).
+
 ---
 
 ## 1. Como trabalhar com o usuário

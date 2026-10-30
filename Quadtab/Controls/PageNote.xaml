@@ -3,37 +3,40 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:Quadtab.Controls"
              xmlns:b="clr-namespace:Quadtab.Behaviors"
-             Width="{Binding ItemWidth}" FontFamily="{StaticResource Nunito}">
-    <Grid x:Name="Root" MinHeight="{Binding ItemMinHeight}">
-        <c:Shadow x:Name="PageShadow" Layers="0 14 12 0 #523C230A, 0 1 1 0 #1F000000" />
-        <c:PaperElement Kind="Page" Paper="{Binding PaperColor}" />
+             Width="{Binding ItemWidth}" FontFamily="{StaticResource Inter}">
+    <!-- Folha de caderno espiral: papel liso (sem pautas nem marcas) e anéis de arame à esquerda -->
+    <Grid MinHeight="{Binding ItemMinHeight}">
+        <c:Shadow Layers="0 6 14 0 #2E28190A, 0 1 2 0 #1F000000" CornerRadius="3" />
+        <c:PaperElement Kind="Page" Paper="{Binding PaperColor}" Spiral="{Binding Spiral}" />
 
-        <StackPanel Margin="40,30,18,20">
-            <Grid Margin="0,0,0,9">
-                <c:TrackedText b:UI.Field="title" Text="{Binding Title}" FontSize="18" FontWeight="Black" LineHeight="22"
+        <StackPanel>
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Margin" Value="40,26,22,22" />
+                    <Style.Triggers>
+                        <!-- sem a espiral, o texto chega mais perto da borda -->
+                        <DataTrigger Binding="{Binding Spiral}" Value="False">
+                            <Setter Property="Margin" Value="24,26,22,22" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
+            <Grid Margin="0,0,0,10">
+                <c:TrackedText b:UI.Field="title" Text="{Binding Title}" FontSize="19" FontWeight="Bold" Tracking="-0.02" LineHeight="24"
                                Foreground="{StaticResource PageTitleBrush}"
                                Visibility="{Binding IsEditingTitle, Converter={StaticResource Hidden}}" />
                 <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="line" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="18" FontWeight="Black" Foreground="{StaticResource PageTitleBrush}" TextWrapping="NoWrap"
+                         FontSize="19" FontWeight="Bold" Foreground="{StaticResource PageTitleBrush}" TextWrapping="NoWrap"
                          Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
             </Grid>
             <Grid>
-                <TextBlock b:UI.Field="text" Text="{Binding PreviewText}" FontSize="14" FontWeight="Bold" LineHeight="28"
+                <TextBlock b:UI.Field="text" Text="{Binding PreviewText}" FontSize="14.5" LineHeight="24"
                            LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{StaticResource PageBodyBrush}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
                 <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="14" FontWeight="Bold" Foreground="{StaticResource PageBodyBrush}"
+                         FontSize="14.5" Foreground="{StaticResource PageBodyBrush}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>
         </StackPanel>
-
-        <c:PinElement Color="{Binding PinColor}" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,5,0,0"
-                      Visibility="{Binding HasPin, Converter={StaticResource Visible}}" />
-        <c:TapeElement Color="{Binding PinColor}" VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,-13,0,0"
-                       RenderTransformOrigin="0.5,0.5" Visibility="{Binding HasTape, Converter={StaticResource Visible}}">
-            <c:TapeElement.RenderTransform>
-                <RotateTransform Angle="-5" />
-            </c:TapeElement.RenderTransform>
-        </c:TapeElement>
     </Grid>
 </UserControl>

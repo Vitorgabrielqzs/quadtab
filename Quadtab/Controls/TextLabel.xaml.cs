@@ -1,12 +1,11 @@
 using System.ComponentModel;
 using System.Windows.Controls;
-using Quadtab.Models;
-using Quadtab.Rendering;
+using Quadtab.Services;
 using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Texto solto: só letras grandes, com relevo. Na lousa vira "giz" (cor do papel).</summary>
+/// <summary>Texto solto: só letras grandes, direto no quadro. A cor acompanha o tema para continuar legível.</summary>
 public partial class TextLabel : UserControl
 {
     BoardItemViewModel? _vm;
@@ -22,8 +21,8 @@ public partial class TextLabel : UserControl
             if (_vm is not null) _vm.PropertyChanged += OnVm;
             Apply();
         };
-        Loaded += (_, _) => { BoardSurfaces.Changed += Apply; Apply(); };
-        Unloaded += (_, _) => BoardSurfaces.Changed -= Apply;
+        Loaded += (_, _) => { ThemeService.Changed += Apply; Apply(); };
+        Unloaded += (_, _) => ThemeService.Changed -= Apply;
     }
 
     void OnVm(object? sender, PropertyChangedEventArgs e)
@@ -31,18 +30,13 @@ public partial class TextLabel : UserControl
         if (e.PropertyName == nameof(BoardItemViewModel.ColorKey)) Apply();
     }
 
+    /// <summary>"Branco" = cor do texto do tema; as outras: tinta forte no claro e papel claro no escuro.</summary>
     void Apply()
     {
         if (_vm is null) return;
-        var model = BoardSurfaces.Model;
-        var brush = model == BoardModel.Lousa ? _vm.PaperBrush : _vm.InkBrush;
-        Label.Foreground = brush;
-        Editor.Foreground = model == BoardModel.Lousa ? _vm.InkBrush : brush;
-        Label.TextShadows = model switch
-        {
-            BoardModel.Lousa => "0 0 2 0 #66FFFFFF",
-            BoardModel.Branco or BoardModel.Pontilhado => "0 1 1 0 #1F000000",
-            _ => "0 1 0 0 #59FFFFFF, 0 3 4 0 #4D281400",
-        };
+        if (_vm.ColorKey == "branco") Label.SetResourceReference(TrackedText.ForegroundProperty, "CardTextBrush");
+        else Label.Foreground = ThemeService.IsDark ? _vm.PaperBrush : _vm.InkBrush;
+        Editor.SetResourceReference(ForegroundProperty, "CardTextBrush");
+        Label.TextShadows = null;
     }
 }

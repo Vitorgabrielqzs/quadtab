@@ -244,6 +244,28 @@ public sealed class LineView : ItemViewBase
         return g;
     }
 
+    /// <summary>As duas pontas e, para cada uma, o ponto de onde a linha chega (direção da seta).</summary>
+    static (Point Start, Point StartFrom, Point End, Point EndFrom) Tips(LineData l, Vector origin)
+    {
+        var (a, b) = Ends(l);
+        a -= origin; b -= origin;
+        switch (l.Tipo)
+        {
+            case "curva":
+                double d = Math.Max(40, (b - a).Length / 2.5);
+                return (a, a + Normal(l.De.Lado, b - a) * d, b, b + Normal(l.Para.Lado, a - b) * d);
+            case "angulo":
+                bool horizontal = l.De.Lado is "esquerda" or "direita" || (l.De.Lado is null && Math.Abs(b.X - a.X) > Math.Abs(b.Y - a.Y));
+                Point c1, c2;
+                if (horizontal) { double mx = (a.X + b.X) / 2; c1 = new Point(mx, a.Y); c2 = new Point(mx, b.Y); }
+                else { double my = (a.Y + b.Y) / 2; c1 = new Point(a.X, my); c2 = new Point(b.X, my); }
+                // Trecho do meio pode ter tamanho zero: usa o canto anterior que estiver longe da ponta.
+                return (a, (c1 - a).Length > 0.5 ? c1 : c2, b, (c2 - b).Length > 0.5 ? c2 : c1);
+            default:
+                return (a, b, b, a);
+        }
+    }
+
     static Vector Normal(string? side, Vector fallback) => side switch
     {
         "cima" => new Vector(0, -1),
@@ -282,31 +304,50 @@ public sealed class LineView : ItemViewBase
             var origin = new Vector(_item.X, _item.Y);
             var geo = Build(l, origin);
             var brush = _item.StrokeBrush;
-            double w = Math.Max(1, _item.StrokeWidth);
-            var pen = new Pen(brush, w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
-            pen.Freeze();
+            bool twine = l.Traco == "barbante";
+            double w = Math.Max(twine ? 3.5 : 1, _item.StrokeWidth + (twine ? 1.5 : 0));
             // Faixa invisível larga para ficar fácil de clicar.
             var hit = new Pen(Brushes.Transparent, Math.Max(14, w + 10));
             hit.Freeze();
             dc.DrawGeometry(null, hit, geo);
             dc.PushOpacity(_item.ItemOpacity);
-            dc.DrawGeometry(null, pen, geo);
+            if (twine) DrawTwine(dc, geo, brush, w);
+            else dc.DrawGeometry(null, RoundPen(brush, w), geo);
 
-            var flat = geo.GetFlattenedPathGeometry();
-            var fig = flat.Figures.FirstOrDefault();
-            if (fig is not null)
-            {
-                var pts = new List<Point> { fig.StartPoint };
-                foreach (var seg in fig.Segments)
-                    if (seg is PolyLineSegment pl) pts.AddRange(pl.Points);
-                    else if (seg is LineSegment ls) pts.Add(ls.Point);
-                if (pts.Count >= 2)
-                {
-                    Head(dc, l.Para.Ponta, pts[^1], pts[^2], brush, w);
-                    Head(dc, l.De.Ponta, pts[0], pts[1], brush, w);
-                }
-            }
+            var (start, startFrom, end, endFrom) = Tips(l, origin);
+            Head(dc, l.Para.Ponta, end, endFrom, brush, w);
+            Head(dc, l.De.Ponta, start, startFrom, brush, w);
             dc.Pop();
+        }
+
+        static Pen RoundPen(Brush b, double w, DashStyle? dash = null)
+        {
+            var p = new Pen(b, w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round, DashCap = PenLineCap.Flat };
+            if (dash is not null) p.DashStyle = dash;
+            p.Freeze();
+            return p;
+        }
+
+        static readonly DashStyle TwistDash = Frozen(new DashStyle([0.45, 0.8], 0));
+        static readonly DashStyle FiberDash = Frozen(new DashStyle([1.6, 2.4], 0.6));
+        static readonly Brush TwineShadow = ShadowCache.BrushOf(Color.FromArgb(46, 0, 0, 0));
+        static readonly Brush FiberLight = ShadowCache.BrushOf(Color.FromArgb(90, 255, 255, 255));
+
+        static DashStyle Frozen(DashStyle d) { d.Freeze(); return d; }
+
+        /// <summary>
+        /// Barbante: corda torcida na cor da linha. Uma sombrinha embaixo, a cor base, listras escuras
+        /// curtas (as voltas do fio) e fiapos claros por cima.
+        /// </summary>
+        static void DrawTwine(DrawingContext dc, Geometry geo, Brush brush, double w)
+        {
+            var color = brush is SolidColorBrush s ? s.Color : Colors.Gray;
+            dc.PushTransform(new TranslateTransform(0.8, 1.4));
+            dc.DrawGeometry(null, RoundPen(TwineShadow, w + 1), geo);
+            dc.Pop();
+            dc.DrawGeometry(null, RoundPen(brush, w), geo);
+            dc.DrawGeometry(null, RoundPen(ShadowCache.BrushOf(ColorMath.Mix(color, 0.62, Colors.Black)), w, TwistDash), geo);
+            dc.DrawGeometry(null, RoundPen(FiberLight, Math.Max(0.8, w * 0.3), FiberDash), geo);
         }
 
         static void Head(DrawingContext dc, string kind, Point tip, Point prev, Brush brush, double w)

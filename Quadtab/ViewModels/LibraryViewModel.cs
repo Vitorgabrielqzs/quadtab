@@ -290,8 +290,7 @@ public partial class LibraryViewModel : ObservableObject
         var important = Marked(StorageService.State.Favoritos);
         Fill(Important, important.Take(MaxPinned).Select(p => Node(p, 0, "importantes")), important.Count > MaxPinned ? "importantes" : null, "importantes");
 
-        var pages = StorageService.PageFiles().OrderBy(NameOf, StringComparer.CurrentCultureIgnoreCase).ToList();
-        Fill(Pages, pages.Take(MaxPages).Select(p => Node(p, 0, "paginas")), pages.Count > MaxPages ? "paginas" : null, "paginas");
+        // As páginas ficam só no quadro: a lateral não as lista (nem lê os arquivos à toa).
 
         Vault.Clear();
         foreach (var n in FolderEntries(StorageService.Root, 0)) Vault.Add(n);
