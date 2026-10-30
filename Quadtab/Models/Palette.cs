@@ -59,6 +59,14 @@ public static class Palette
         new("indigo", "Índigo", C(0xB8C3FF), C(0x2F3FA8)),
         new("lilas", "Lilás", C(0xF2C4F0), C(0x8E2C87)),
         new("cinza", "Cinza", C(0xDADDE3), C(0x4B5263)),
+        new("coral", "Coral", C(0xFFB59E), C(0xB23C17)),
+        new("framboesa", "Framboesa", C(0xF7A8C8), C(0x9C1452)),
+        new("lavanda", "Lavanda", C(0xDCD3FF), C(0x4F3E99)),
+        new("ceu", "Céu", C(0xCFEAFF), C(0x1D6FB8)),
+        new("petroleo", "Petróleo", C(0xA9D8D2), C(0x1F5E58)),
+        new("salvia", "Sálvia", C(0xCFE3CF), C(0x3E6B45)),
+        new("oliva", "Oliva", C(0xD5DDA8), C(0x55611D)),
+        new("chocolate", "Chocolate", C(0xE3C7B0), C(0x6B3F22)),
     ];
 
     /// <summary>Cores dos alfinetes e fitas, escolhidas por id % 5.</summary>

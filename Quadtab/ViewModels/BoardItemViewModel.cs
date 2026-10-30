@@ -211,7 +211,7 @@ public partial class BoardItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(Number))]
     public partial int NoteNumber { get; set; }
 
-    public string Number => NoteNumber > 0 ? NoteNumber.ToString(CultureInfo.InvariantCulture) : "";
+    public string Number => NoteNumber > 0 ? "#" + NoteNumber.ToString("00", CultureInfo.InvariantCulture) : "";
     public string DateLabel => $"{Created.Day} {Months[Created.Month - 1]}";
     public object? Tooltip => string.IsNullOrWhiteSpace(Description) ? null : Description;
 
@@ -294,6 +294,8 @@ public partial class BoardItemViewModel : ObservableObject
         ("Cinza", LineGray), ("Preto", "#FF15171C"), ("Branco", "#FFF4F4F2"), ("Juta", "#FFC2A06E"),
         ("Vermelho", "#FFE5484D"), ("Laranja", "#FFF76B15"), ("Amarelo", "#FFFFC53D"), ("Verde", "#FF30A46C"),
         ("Azul", "#FF0A84FF"), ("Roxo", "#FF8E4EC6"), ("Rosa", "#FFE93D82"),
+        ("Ciano", "#FF32ADE6"), ("Menta", "#FF2BB89A"), ("Oliva", "#FF7A8B2E"), ("Mostarda", "#FFD4A017"),
+        ("Marrom", "#FF8B5A2B"), ("Vinho", "#FF8E1B3C"), ("Marinho", "#FF1F3A93"),
     ];
 
     /// <summary>Tamanho padrão de cada tipo de item.</summary>
