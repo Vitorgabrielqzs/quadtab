@@ -71,7 +71,7 @@
                         <TextBlock x:Name="EditText" Text="Editar texto" VerticalAlignment="Center" />
                     </DockPanel>
                 </Button>
-                <Button x:Name="SpiralRow" Style="{StaticResource MenuRow}" Click="OnSpiral" ToolTip="Tira ou põe a espiral de caderno nesta página">
+                <Button x:Name="SpiralRow" Style="{StaticResource MenuRow}" Click="OnSpiral" ToolTip="Tira ou põe a espiral de caderno nesta nota">
                     <DockPanel>
                         <c:Icon DockPanel.Dock="Right" Data="{StaticResource IcPage}" Foreground="{DynamicResource Ink2Brush}" />
                         <TextBlock x:Name="SpiralText" Text="Tirar a espiral" VerticalAlignment="Center" />

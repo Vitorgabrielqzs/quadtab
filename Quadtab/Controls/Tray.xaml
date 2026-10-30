@@ -43,44 +43,51 @@
                 <TextBlock Text="Elementos" Style="{StaticResource SectionLabel}" />
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition />
+                        <ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition /><ColumnDefinition Width="10" />
+                        <ColumnDefinition /><ColumnDefinition Width="10" /><ColumnDefinition />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition /><RowDefinition />
                     </Grid.RowDefinitions>
-                    <Button x:Name="CardPage" Grid.Column="0" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola uma folha de caderno (clique ou arraste para o quadro)">
+                    <Button x:Name="CardPage" Grid.Column="0" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola uma nota (clique ou arraste para o quadro)">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcPage}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
-                            <TextBlock Text="Página" VerticalAlignment="Center" />
+                            <c:Icon Data="{StaticResource IcPage}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
+                            <TextBlock Text="Nota" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="CardBlock" Grid.Column="2" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um bloco com título livre e texto">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcBlock}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <c:Icon Data="{StaticResource IcBlock}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
                             <TextBlock Text="Bloco" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="CardText" Grid.Column="4" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um texto grande e solto">
+                    <Button x:Name="CardNote" Grid.Column="4" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um post-it da última cor e estilo usados">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcText}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <c:Icon Data="{StaticResource IcNote}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
+                            <TextBlock Text="Post-it" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="CardText" Grid.Column="6" Grid.Row="0" Style="{StaticResource TrayCard}" ToolTip="Cola um texto grande e solto">
+                        <StackPanel Orientation="Horizontal">
+                            <c:Icon Data="{StaticResource IcText}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
                             <TextBlock Text="Texto" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="CardBox" Grid.Column="0" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola uma caixa só com texto" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcTextBox}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
-                            <TextBlock Text="Caixa de texto" VerticalAlignment="Center" />
+                            <c:Icon Data="{StaticResource IcTextBox}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
+                            <TextBlock Text="Caixa" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="CardShape" Grid.Column="2" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Abre a biblioteca de formas para escolher uma" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcShapes}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <c:Icon Data="{StaticResource IcShapes}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
                             <TextBlock Text="Forma" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="CardTable" Grid.Column="4" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola uma tabela" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <c:Icon Data="{StaticResource IcTable}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,12,0" />
+                            <c:Icon Data="{StaticResource IcTable}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
                             <TextBlock Text="Tabela" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -105,7 +112,7 @@
                     </StackPanel>
                 </Button>
                 <Border Width="1" Height="24" Background="{DynamicResource SepBrush}" Margin="4,0" />
-                <Button x:Name="QuickPage" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola uma página no centro do quadro">
+                <Button x:Name="QuickPage" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola uma nota no centro do quadro">
                     <c:Icon Data="{StaticResource IcPage}" />
                 </Button>
                 <Button x:Name="QuickText" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um texto no centro do quadro">

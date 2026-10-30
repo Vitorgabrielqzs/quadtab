@@ -147,9 +147,38 @@ public sealed class LineView : ItemViewBase
     readonly TextBlock _labelText;
     readonly TextBox _labelEdit;
 
+    // Física do barbante: um clique "belisca" a corda, que balança e vai parando (mola amortecida).
+    readonly System.Diagnostics.Stopwatch _pluck = new();
+    double _pluckAmp;
+    bool _plucking;
+
+    void Pluck()
+    {
+        if (Item?.Line is not { Traco: "barbante" } l) return;
+        var (a, b) = Ends(l);
+        _pluckAmp = Math.Clamp((b - a).Length * 0.06, 8, 24);
+        _pluck.Restart();
+        if (_plucking) return;
+        _plucking = true;
+        CompositionTarget.Rendering += OnPluckFrame;
+    }
+
+    void OnPluckFrame(object? sender, EventArgs e)
+    {
+        double t = _pluck.Elapsed.TotalSeconds;
+        bool done = t > 1.6 || !IsLoaded;
+        _visual.Sway = done ? 0 : _pluckAmp * Math.Exp(-t / 0.38) * Math.Sin(2 * Math.PI * 3.4 * t);
+        _visual.InvalidateVisual();
+        if (!done) return;
+        _plucking = false;
+        CompositionTarget.Rendering -= OnPluckFrame;
+    }
+
     public LineView()
     {
         Children.Add(_visual);
+        // O quadro trata o clique antes (arrastar/selecionar); a corda balança mesmo assim.
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler((_, _) => Pluck()), handledEventsToo: true);
         _labelText = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = LabelInk, TextAlignment = TextAlignment.Center, MaxWidth = 220, TextWrapping = TextWrapping.Wrap };
         UI.SetField(_labelText, "text");
         _labelText.SetBinding(TextBlock.TextProperty, "Text");
@@ -203,10 +232,11 @@ public sealed class LineView : ItemViewBase
     public static (Point A, Point B) Ends(LineData l) => (new Point(l.De.X, l.De.Y), new Point(l.Para.X, l.Para.Y));
 
     /// <summary>Caminho da linha (reta, curva ou ângulo) em coordenadas locais.</summary>
-    public static Geometry Build(LineData l, Vector origin)
+    public static Geometry Build(LineData l, Vector origin, double sway = 0)
     {
         var (a, b) = Ends(l);
         a -= origin; b -= origin;
+        var bend = Bend(a, b, sway);
         var g = new StreamGeometry();
         using (var c = g.Open())
         {
@@ -217,7 +247,7 @@ public sealed class LineView : ItemViewBase
                     var na = Normal(l.De.Lado, b - a);
                     var nb = Normal(l.Para.Lado, a - b);
                     double d = Math.Max(40, (b - a).Length / 2.5);
-                    c.BezierTo(a + na * d, b + nb * d, b, true, true);
+                    c.BezierTo(a + na * d + bend / 0.75, b + nb * d + bend / 0.75, b, true, true);
                     break;
                 case "angulo":
                     bool horizontal = l.De.Lado is "esquerda" or "direita" || (l.De.Lado is null && Math.Abs(b.X - a.X) > Math.Abs(b.Y - a.Y));
@@ -236,7 +266,8 @@ public sealed class LineView : ItemViewBase
                     c.LineTo(b, true, true);
                     break;
                 default:
-                    c.LineTo(b, true, true);
+                    if (sway == 0) c.LineTo(b, true, true);
+                    else c.QuadraticBezierTo(new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2) + bend * 2, b, true, true); // corda balançando
                     break;
             }
         }
@@ -244,16 +275,27 @@ public sealed class LineView : ItemViewBase
         return g;
     }
 
+    /// <summary>Deslocamento do meio da linha, na perpendicular (barbante balançando).</summary>
+    static Vector Bend(Point a, Point b, double sway)
+    {
+        if (sway == 0) return default;
+        var n = new Vector(-(b.Y - a.Y), b.X - a.X);
+        if (n.Length < 0.01) return default;
+        n.Normalize();
+        return n * sway;
+    }
+
     /// <summary>As duas pontas e, para cada uma, o ponto de onde a linha chega (direção da seta).</summary>
-    static (Point Start, Point StartFrom, Point End, Point EndFrom) Tips(LineData l, Vector origin)
+    static (Point Start, Point StartFrom, Point End, Point EndFrom) Tips(LineData l, Vector origin, double sway = 0)
     {
         var (a, b) = Ends(l);
         a -= origin; b -= origin;
+        var bend = Bend(a, b, sway);
         switch (l.Tipo)
         {
             case "curva":
                 double d = Math.Max(40, (b - a).Length / 2.5);
-                return (a, a + Normal(l.De.Lado, b - a) * d, b, b + Normal(l.Para.Lado, a - b) * d);
+                return (a, a + Normal(l.De.Lado, b - a) * d + bend / 0.75, b, b + Normal(l.Para.Lado, a - b) * d + bend / 0.75);
             case "angulo":
                 bool horizontal = l.De.Lado is "esquerda" or "direita" || (l.De.Lado is null && Math.Abs(b.X - a.X) > Math.Abs(b.Y - a.Y));
                 Point c1, c2;
@@ -262,7 +304,9 @@ public sealed class LineView : ItemViewBase
                 // Trecho do meio pode ter tamanho zero: usa o canto anterior que estiver longe da ponta.
                 return (a, (c1 - a).Length > 0.5 ? c1 : c2, b, (c2 - b).Length > 0.5 ? c2 : c1);
             default:
-                return (a, b, b, a);
+                if (sway == 0) return (a, b, b, a);
+                var mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2) + bend * 2;
+                return (a, mid, b, mid);
         }
     }
 
@@ -278,6 +322,9 @@ public sealed class LineView : ItemViewBase
     sealed class LineVisual : FrameworkElement
     {
         BoardItemViewModel? _item;
+
+        /// <summary>Quanto o meio do barbante está deslocado agora (0 = parado).</summary>
+        public double Sway;
 
         public void SetItem(BoardItemViewModel? item)
         {
@@ -302,7 +349,7 @@ public sealed class LineView : ItemViewBase
         {
             if (_item?.Line is not { } l) return;
             var origin = new Vector(_item.X, _item.Y);
-            var geo = Build(l, origin);
+            var geo = Build(l, origin, Sway);
             var brush = _item.StrokeBrush;
             bool twine = l.Traco == "barbante";
             double w = Math.Max(twine ? 3.5 : 1, _item.StrokeWidth + (twine ? 1.5 : 0));
@@ -314,7 +361,7 @@ public sealed class LineView : ItemViewBase
             if (twine) DrawTwine(dc, geo, brush, w);
             else dc.DrawGeometry(null, RoundPen(brush, w), geo);
 
-            var (start, startFrom, end, endFrom) = Tips(l, origin);
+            var (start, startFrom, end, endFrom) = Tips(l, origin, Sway);
             Head(dc, l.Para.Ponta, end, endFrom, brush, w);
             Head(dc, l.De.Ponta, start, startFrom, brush, w);
             dc.Pop();

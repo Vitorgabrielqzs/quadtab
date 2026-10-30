@@ -54,6 +54,7 @@ public partial class Tray : UserControl
 
         Draggable(CardPage, new TrayPayload(ItemKind.Page, "branco"));
         Draggable(CardBlock, new TrayPayload(ItemKind.Block, "branco"));
+        Draggable(CardNote, new TrayPayload(ItemKind.PostIt, null)); // última cor e estilo usados
         Draggable(CardText, new TrayPayload(ItemKind.Text, "branco"));
         Draggable(CardBox, new TrayPayload(ItemKind.TextBox, "branco"));
         CardShape.Click += (_, _) => ShapesRequested?.Invoke();

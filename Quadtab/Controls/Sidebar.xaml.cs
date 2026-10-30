@@ -148,11 +148,11 @@ public partial class Sidebar : UserControl
         ],
         SideKind.Page =>
         [
-            new("Abrir", "IcPage", () => App.OpenPage(n.Path)) { Tip = "Abre a página ao lado do quadro" },
-            new("Renomear", "IcPencil", () => Lib.StartRename(n.Path)) { Tip = "Muda o nome da página e dos links para ela · F2" },
+            new("Abrir", "IcPage", () => App.OpenPage(n.Path)) { Tip = "Abre a nota ao lado do quadro" },
+            new("Renomear", "IcPencil", () => Lib.StartRename(n.Path)) { Tip = "Muda o nome da nota e dos links para ela · F2" },
             new(n.IsPinned ? "Desafixar" : "Fixar", "IcPin", () => Lib.TogglePinned(n.Path)) { Tip = n.PinTip },
             new(n.IsImportant ? "Tirar dos importantes" : "Marcar como importante", "IcStar", () => Lib.ToggleFavorite(n.Path)) { Tip = n.StarTip },
-            new("Excluir", "IcTrash", () => StorageService.TrashPage(n.Path), Danger: true, Separator: true) { Tip = "Manda a página para a lixeira" },
+            new("Excluir", "IcTrash", () => StorageService.TrashPage(n.Path), Danger: true, Separator: true) { Tip = "Manda a nota para a lixeira" },
         ],
         SideKind.Folder =>
         [
@@ -231,6 +231,22 @@ public partial class Sidebar : UserControl
         Anim.To(ThemeScale, ScaleTransform.ScaleXProperty, 1, 0.5, Anim.Tap);
         Anim.To(ThemeScale, ScaleTransform.ScaleYProperty, 1, 0.5, Anim.Tap);
     }
+
+    // ---------- página do Cofre ----------
+
+    /// <summary>Troca a lista pela página do Cofre (e volta, clicando de novo ou no "‹").</summary>
+    void OnVault(object sender, RoutedEventArgs e)
+    {
+        bool open = VaultPage.Visibility != Visibility.Visible;
+        VaultPage.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        MainPage.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        if (open) Lib.Refresh();
+        // Com a página aberta, o botão fica marcado (pílula de destaque).
+        if (open) VaultButton.SetResourceReference(BackgroundProperty, "Fill2Brush");
+        else VaultButton.Background = Brushes.Transparent;
+    }
+
+    void OnVaultExplorer(object sender, RoutedEventArgs e) => ItemViewBase.OpenExternal(StorageService.Root);
 
     void OnSettings(object sender, RoutedEventArgs e)
     {

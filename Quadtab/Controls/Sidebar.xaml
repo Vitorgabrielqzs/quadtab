@@ -166,18 +166,18 @@
             <Button Style="{StaticResource TopButton}" ToolTip="Esconde a barra lateral" Command="{Binding ToggleSidebarCommand}">
                 <c:Icon Data="{StaticResource IcSidebar}" Size="18" />
             </Button>
-            <Button Style="{StaticResource TopButton}" Margin="4,0,0,0" ToolTip="Volta para o quadro ou página anterior · Alt+←"
+            <Button Style="{StaticResource TopButton}" Margin="4,0,0,0" ToolTip="Volta para o quadro ou nota anterior · Alt+←"
                     Command="{Binding Library.GoBackCommand}" IsEnabled="{Binding Library.CanGoBack}">
                 <c:Icon Data="{StaticResource IcChevronLeft}" Size="18" />
             </Button>
-            <Button Style="{StaticResource TopButton}" ToolTip="Avança para o próximo quadro ou página · Alt+→"
+            <Button Style="{StaticResource TopButton}" ToolTip="Avança para o próximo quadro ou nota · Alt+→"
                     Command="{Binding Library.GoForwardCommand}" IsEnabled="{Binding Library.CanGoForward}">
                 <c:Icon Data="{StaticResource IcChevronRight}" Size="18" />
             </Button>
             <Border />
         </DockPanel>
 
-        <!-- Rodapé: tema claro/escuro e Ajustes -->
+        <!-- Rodapé: tema claro/escuro, Ajustes e Cofre (abre a página do cofre) -->
         <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Button x:Name="ThemeButton" Style="{StaticResource TopButton}" Click="OnTheme" ToolTip="Alterna entre o tema claro e o escuro">
                 <c:Icon x:Name="ThemeIcon" Data="{StaticResource IcMoon}" Size="18" RenderTransformOrigin="0.5,0.5">
@@ -189,6 +189,13 @@
                     </c:Icon.RenderTransform>
                 </c:Icon>
             </Button>
+            <Button x:Name="VaultButton" DockPanel.Dock="Right" Style="{StaticResource SideRow}" Margin="4,0,0,0" Click="OnVault"
+                    ToolTip="Abre a página do Cofre (todos os arquivos guardados) · clique de novo para voltar">
+                <StackPanel Orientation="Horizontal">
+                    <c:Icon Data="{StaticResource IcFolder}" Size="17" Foreground="{DynamicResource Ink2Brush}" Margin="0,0,8,0" />
+                    <TextBlock Text="Cofre" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
             <Button Style="{StaticResource SideRow}" Margin="6,0,0,0" Click="OnSettings" ToolTip="Abre os ajustes do app">
                 <StackPanel Orientation="Horizontal">
                     <c:Icon Data="{StaticResource IcSettings}" Size="17" Foreground="{DynamicResource Ink2Brush}" Margin="0,0,10,0" />
@@ -197,7 +204,23 @@
             </Button>
         </DockPanel>
 
-        <ScrollViewer Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <!-- Página do Cofre: a árvore da pasta Documentos\Cofre (no lugar da lista, até voltar) -->
+        <DockPanel x:Name="VaultPage" Visibility="Collapsed">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <Button Style="{StaticResource TopButton}" Click="OnVault" ToolTip="Volta para a lista de quadros">
+                    <c:Icon Data="{StaticResource IcChevronLeft}" Size="18" />
+                </Button>
+                <Button DockPanel.Dock="Right" Style="{StaticResource TopButton}" Click="OnVaultExplorer" ToolTip="Abre a pasta do Cofre no Explorador">
+                    <c:Icon Data="{StaticResource IcExport}" Size="17" />
+                </Button>
+                <c:TrackedText Text="Cofre" FontSize="20" FontWeight="Bold" Tracking="-0.025" Wrap="False" VerticalAlignment="Center" Margin="6,0,0,0" />
+            </DockPanel>
+            <ScrollViewer Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ItemsControl ItemsSource="{Binding Library.Vault}" Focusable="False" Margin="0,0,0,8" />
+            </ScrollViewer>
+        </DockPanel>
+
+        <ScrollViewer x:Name="MainPage" Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel>
                 <!-- Ações -->
                 <Button Style="{StaticResource SideRow}" Click="OnNewBoard" ToolTip="Cria um quadro novo · Ctrl+N">
@@ -206,7 +229,7 @@
                         <TextBlock Text="Novo quadro" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Style="{StaticResource SideRow}" Click="OnSearch" ToolTip="Procura em quadros, páginas e textos · Ctrl+K">
+                <Button Style="{StaticResource SideRow}" Click="OnSearch" ToolTip="Procura em quadros, notas e textos · Ctrl+K">
                     <StackPanel Orientation="Horizontal">
                         <c:Icon Data="{StaticResource IcSearch}" Size="17" Margin="0,0,10,0" />
                         <TextBlock Text="Procurar" VerticalAlignment="Center" />
@@ -254,18 +277,6 @@
                     </c:Fold>
                 </StackPanel>
 
-                <!-- Cofre: a pasta Documentos\Cofre -->
-                <Button Style="{StaticResource SectionHead}" Command="{Binding Library.ToggleVaultSectionCommand}" ToolTip="Mostra ou esconde os arquivos da pasta Cofre">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Cofre" VerticalAlignment="Center" />
-                        <c:Icon Data="{StaticResource IcChevronDown}" Size="12" Margin="4,1,0,0" RenderTransformOrigin="0.5,0.5" Foreground="{DynamicResource Ink3Brush}">
-                            <c:Icon.RenderTransform><RotateTransform Angle="{Binding Library.VaultArrow}" /></c:Icon.RenderTransform>
-                        </c:Icon>
-                    </StackPanel>
-                </Button>
-                <c:Fold IsOpen="{Binding Library.VaultOpen}">
-                    <ItemsControl ItemsSource="{Binding Library.Vault}" Focusable="False" Margin="0,0,0,8" />
-                </c:Fold>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

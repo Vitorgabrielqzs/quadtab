@@ -84,9 +84,10 @@ public sealed class ContextTray : ContentControl
             b.Click += (_, _) => run();
             grid.Children.Add(b);
         }
-        Tile("Página", "IcPage", () => { Vm.Add(ItemKind.Page, "branco", _world.X, _world.Y); Done(); }, "Cola uma folha de caderno aqui");
+        Tile("Nota", "IcPage", () => { Vm.Add(ItemKind.Page, "branco", _world.X, _world.Y); Done(); }, "Cola uma nota aqui");
         Tile("Texto", "IcText", () => { Vm.Add(ItemKind.Text, "branco", _world.X, _world.Y); Done(); }, "Cola um texto grande aqui");
         Tile("Bloco", "IcBlock", () => { Vm.Add(ItemKind.Block, "branco", _world.X, _world.Y); Done(); }, "Cola um bloco com título livre aqui");
+        Tile("Post-it", "IcNote", () => { Vm.Add(ItemKind.PostIt, Vm.LastColor, _world.X, _world.Y, Vm.NewStyle); Done(); }, "Cola um post-it da última cor e estilo usados");
         Tile("Caixa", "IcTextBox", () => { Vm.Add(ItemKind.TextBox, "branco", _world.X, _world.Y); Done(); }, "Cola uma caixa de texto aqui");
         Tile("Formas", "IcShapes", ShowShapes, "Mostra a biblioteca de formas");
         Tile("Linha", "IcLinePlain", () => { Done(); DrawSettings.ArrowEnd = false; Board!.Tool = BoardTool.Line; }, "Desenha uma linha (de um item a outro para ligar)");

@@ -71,17 +71,17 @@ public partial class MainWindow : Window
         Palette.Board = Board;
         Tray.Overlay = Overlay;
         Tray.Root = WindowRoot;
-        Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style);
+        // Post-it da bandeja: última cor e último estilo usados.
+        Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Tray.ShapesRequested += ShowShapePicker;
-        Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style);
+        Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Editor.CloseRequested += ClosePage;
         Editor.ExpandChanged += ApplyEditorLayout;
         // Quadro estreito (página aberta ao lado): a dica e o status saem para não cobrir o dock.
         BoardArea.SizeChanged += (_, e) =>
         {
-            var v = e.NewSize.Width < 1000 || _presenting ? Visibility.Collapsed : Visibility.Visible;
-            Hint.Visibility = v;
-            Status.Visibility = v;
+            Status.Visibility = e.NewSize.Width < 1000 || _presenting ? Visibility.Collapsed : Visibility.Visible;
+            UpdateHint();
         };
 
         Attach(vm);
@@ -295,7 +295,7 @@ public partial class MainWindow : Window
     bool _sideRevealed;
 
     /// <summary>A lateral ocupa a coluna dela (fixa) ou flutua escondida sobre o quadro.</summary>
-    bool SideDocked => _vm.SidebarOpen && !_fullscreen;
+    bool SideDocked => _vm.SidebarOpen; // fixa também na tela cheia, até clicar para esconder
 
     double SideMargin => _fullscreen ? 0 : 14;
 
@@ -352,6 +352,7 @@ public partial class MainWindow : Window
     {
         bool hidden = _vm.TitleHidden;
         LayoutStage();
+        UpdateHint();
         double k = animate ? 1 : 0;
         Anim.To(TitleCollapse, CollapsePanel.ProgressProperty, hidden ? 0 : 1, 0.5 * k, Anim.Collapse);
         Anim.To(BigTitle, OpacityProperty, hidden ? 0 : 1, 0.3 * k, Anim.Ease);
@@ -369,6 +370,11 @@ public partial class MainWindow : Window
     /// Onde fica o quadro: abaixo do título (normal) ou de borda a borda (tela cheia sem título).
     /// Na tela cheia a seta continua funcionando: com o título à mostra, o quadro começa abaixo dele.
     /// </summary>
+    /// <summary>A pílula com o nome do quadro só aparece quando o título grande está escondido.</summary>
+    void UpdateHint() =>
+        Hint.Visibility = _vm.TitleHidden && !_presenting && SearchBar.Visibility != Visibility.Visible && BoardArea.ActualWidth >= 700
+            ? Visibility.Visible : Visibility.Collapsed;
+
     void LayoutStage()
     {
         bool full = _fullscreen && _vm.TitleHidden;
@@ -504,6 +510,8 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(CtxTray.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
     }
 
+    NoteStyle? NoteStyleFor(ItemKind kind) => kind == ItemKind.PostIt ? _vm.NewStyle : null;
+
     /// <summary>Biblioteca de formas acima do dock: a forma escolhida nasce no centro da tela.</summary>
     void ShowShapePicker()
     {
@@ -563,6 +571,10 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+        // Renomeando (na lateral ou no título) e clicou fora do campo: termina e grava o nome.
+        if (Keyboard.FocusedElement is TextBox renaming && !renaming.IsMouseOver
+            && (renaming == TitleEditor || SidebarView.IsAncestorOf(renaming)))
+            Keyboard.ClearFocus();
         // Clicar fora fecha os menus (o clique continua valendo para o que estiver embaixo).
         _ctxWasOpen = _ctxOpen && !CtxTray.IsMouseOver && e.ChangedButton == MouseButton.Right;
         _ownerJustClosed = _actionsOpen && _actionsOwner is { IsMouseOver: true } ? _actionsOwner : null;
@@ -673,7 +685,8 @@ public partial class MainWindow : Window
     {
         _presenting = false;
         PresentBar.Visibility = Visibility.Collapsed;
-        foreach (var el in new UIElement[] { Hint, Tray, Status }) el.Visibility = Visibility.Visible;
+        foreach (var el in new UIElement[] { Tray, Status }) el.Visibility = Visibility.Visible;
+        UpdateHint();
         if (_presentMadeFullscreen) SetFullscreen(false);
     }
 
@@ -701,7 +714,7 @@ public partial class MainWindow : Window
     void OpenSearch()
     {
         SearchBar.Visibility = Visibility.Visible;
-        Hint.Visibility = Visibility.Collapsed;
+        UpdateHint();
         Dispatcher.BeginInvoke(() => { SearchBox.Focus(); SearchBox.SelectAll(); }, DispatcherPriority.Input);
         RefreshBoardGlass();
     }
@@ -710,7 +723,7 @@ public partial class MainWindow : Window
     {
         if (SearchBar.Visibility != Visibility.Visible) return;
         SearchBar.Visibility = Visibility.Collapsed;
-        if (BoardArea.ActualWidth >= 1000) Hint.Visibility = Visibility.Visible;
+        UpdateHint();
         _vm.BoardSearch = "";
         Board.Focus();
     }
@@ -1000,7 +1013,7 @@ public partial class MainWindow : Window
 
     // ---------- Procurar (Ctrl+K) e Ajustes ----------
 
-    /// <summary>Caixa de busca de vidro no centro: quadros, páginas e textos.</summary>
+    /// <summary>Caixa de busca de vidro no centro: quadros, notas e textos.</summary>
     public void ShowSearch()
     {
         CloseActions();

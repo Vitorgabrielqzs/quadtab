@@ -5,7 +5,7 @@
              xmlns:m="clr-namespace:Quadtab.Models">
     <UserControl.Resources>
         <c:ItemTemplateSelector x:Key="ItemTemplates">
-            <c:ItemTemplateSelector.PostIt><DataTemplate><c:GlassBlock /></DataTemplate></c:ItemTemplateSelector.PostIt>
+            <c:ItemTemplateSelector.PostIt><DataTemplate><c:PostIt /></DataTemplate></c:ItemTemplateSelector.PostIt>
             <c:ItemTemplateSelector.Page><DataTemplate><c:PageNote /></DataTemplate></c:ItemTemplateSelector.Page>
             <c:ItemTemplateSelector.Block><DataTemplate><c:GlassBlock /></DataTemplate></c:ItemTemplateSelector.Block>
             <c:ItemTemplateSelector.Text><DataTemplate><c:TextLabel /></DataTemplate></c:ItemTemplateSelector.Text>

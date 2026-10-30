@@ -9,7 +9,8 @@ namespace Quadtab.Behaviors;
 /// Campo de edição dos itens. Modos:
 /// "note"  = Enter termina, Shift+Enter quebra a linha (texto do post-it);
 /// "line"  = Enter termina (títulos e texto solto);
-/// "multi" = Enter quebra a linha (corpo de página, bloco e pautado). Esc sempre termina.
+/// "multi" = Enter quebra a linha (corpo de nota, bloco e pautado). Esc sempre termina.
+/// Tab: do título passa para o texto de baixo; no texto, termina.
 /// Ao aparecer, ganha foco com o texto selecionado; ao perder o foco, termina a edição.
 /// </summary>
 public static class EditBox
@@ -48,6 +49,15 @@ public static class EditBox
         if (e.Key == Key.Escape)
         {
             App.ViewModel.EndEdit();
+            e.Handled = true;
+            return;
+        }
+        // Tab: do título vai para o texto de baixo; no texto, termina a edição (sai do item).
+        if (e.Key == Key.Tab)
+        {
+            var vm = App.ViewModel;
+            if (vm.EditingItem is { Editing: ViewModels.EditField.Title } item) vm.BeginEdit(item, ViewModels.EditField.Text);
+            else vm.EndEdit();
             e.Handled = true;
             return;
         }

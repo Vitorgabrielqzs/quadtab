@@ -63,7 +63,7 @@ public sealed class Board
             Itens =
             [
                 P(1, "pagina", "branco", 40, 40, "Bem-vindo ao Quadtab",
-                  "Dê 2 cliques no vazio para criar outro item igual ao último que você criou (no começo, uma página).\n\nO botão direito abre a bandeja de elementos.\n\n" +
+                  "Dê 2 cliques no vazio para criar outro item igual ao último que você criou (no começo, uma nota).\n\nO botão direito abre a bandeja de elementos.\n\n" +
                   "Segure o botão direito num item e arraste até outro para ligar os dois com uma linha."),
                 P(2, "bloco", "azul", 420, 40, "Ideias", "Anote aqui o que vier à cabeça.", 260),
                 P(3, "bloco", "verde", 420, 250, "Tarefas", "- Organizar o quadro\n- Revisar as metas", 260),

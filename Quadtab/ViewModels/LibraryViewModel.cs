@@ -64,9 +64,9 @@ public partial class SideNode : ObservableObject
     public string Tip => Kind switch
     {
         SideKind.Board => IsCurrent ? "Este é o quadro aberto" : "Abre este quadro",
-        SideKind.Page => "Abre esta página ao lado do quadro",
+        SideKind.Page => "Abre esta nota ao lado do quadro",
         SideKind.Item => "Leva a câmera até este item",
-        SideKind.Heading => "Abre a página deste título",
+        SideKind.Heading => "Abre a nota deste título",
         SideKind.Folder => "Abre ou fecha esta pasta",
         SideKind.File => "Abre este arquivo",
         _ => "Mostra a lista completa",
@@ -507,7 +507,7 @@ public partial class LibraryViewModel : ObservableObject
 
     public void NewPage()
     {
-        var path = StorageService.CreatePage("Nova página", "# Nova página\n\n");
+        var path = StorageService.CreatePage("Nova nota", "# Nova nota\n\n");
         PagesOpen = true;
         Refresh();
         App.OpenPage(path);
@@ -584,6 +584,10 @@ public partial class LibraryViewModel : ObservableObject
     {
         bool isCurrent = App.ViewModel is { } cur && string.Equals(cur.FilePath, path, StringComparison.OrdinalIgnoreCase);
         if (isCurrent) App.ViewModel!.Close();
+        // As notas ficam só no quadro: vão para a lixeira junto com ele (restaurar o quadro as recria).
+        foreach (var it in StorageService.LoadBoard(path).Itens)
+            if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(StorageService.Full(rel)))
+                try { StorageService.TrashPage(StorageService.Full(rel)); } catch (IOException) { }
         StorageService.TrashBoard(path);
         if (isCurrent)
         {

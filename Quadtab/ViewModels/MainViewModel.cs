@@ -102,7 +102,7 @@ public partial class MainViewModel : ObservableObject
 
     static readonly (string Key, string Name)[] GroupNames =
     [
-        ("postit", "Post-its"), ("pagina", "Páginas"), ("bloco", "Blocos de vidro"), ("texto", "Textos"),
+        ("postit", "Post-its"), ("pagina", "Notas"), ("bloco", "Blocos de vidro"), ("texto", "Textos"),
         ("forma", "Formas e linhas"), ("desenho", "Desenhos"), ("midia", "Imagens e arquivos"),
     ];
 
@@ -117,15 +117,10 @@ public partial class MainViewModel : ObservableObject
         _ => "midia",
     };
 
-    /// <summary>Post-its antigos viram blocos (mesma cor, título e texto), sem alfinete nem inclinação.</summary>
+    /// <summary>Blocos com o título padrão antigo ("Bloco de vidro") ficam com o título livre.</summary>
     static void MigrateNote(BoardItem m)
     {
-        if (m.Tipo == "bloco" && m.Titulo == "Bloco de vidro") m.Titulo = ""; // título padrão antigo: fica livre
-        if (m.Tipo != "postit") return;
-        m.Tipo = "bloco";
-        if (!m.Pautado) m.Titulo = "";
-        m.Pautado = false;
-        m.Largura ??= 240;
+        if (m.Tipo == "bloco" && m.Titulo == "Bloco de vidro") m.Titulo = "";
     }
 
     /// <summary>Páginas antigas (título + texto no quadro) viram arquivos .md no cofre.</summary>
@@ -139,7 +134,7 @@ public partial class MainViewModel : ObservableObject
             m.Texto = Markdown.StripTitle(text, m.Titulo);
             return;
         }
-        var name = string.IsNullOrWhiteSpace(m.Titulo) ? "Nova página" : m.Titulo;
+        var name = string.IsNullOrWhiteSpace(m.Titulo) ? "Nova nota" : m.Titulo;
         var existing = StorageService.FindPage(name);
         var path = existing ?? StorageService.CreatePage(name, $"# {name}\n\n{m.Texto}\n");
         m.Arquivo = StorageService.Rel(path);
@@ -405,13 +400,13 @@ public partial class MainViewModel : ObservableObject
             Cor = color,
             X = Math.Round(cx - size.Width / 2),
             Y = Math.Round(cy - size.Height / 2),
-            Fixacao = "nenhuma",
+            Fixacao = kind == ItemKind.PostIt ? "alfinete" : "nenhuma",
             Titulo = "",
             Texto = kind switch
             {
                 ItemKind.Text => "Texto",
                 ItemKind.TextBox => "Escreva aqui",
-                ItemKind.PostIt => "Nova nota",
+                ItemKind.PostIt => "Lembrete",
                 _ => "",
             },
         };
@@ -419,7 +414,7 @@ public partial class MainViewModel : ObservableObject
         if (kind == ItemKind.Page)
         {
             m.SemEspiral = true; // a página nasce sem espiral (o menu do botão direito põe)
-            var path = StorageService.CreatePage("Nova página", "# Nova página\n\nEscreva aqui…\n");
+            var path = StorageService.CreatePage("Nova nota", "# Nova nota\n\nEscreva aqui…\n");
             m.Arquivo = StorageService.Rel(path);
             m.Titulo = Path.GetFileNameWithoutExtension(path);
             m.Texto = "Escreva aqui…";
@@ -485,7 +480,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Coloca, centrado no ponto, outro item igual ao último criado (sem molde: uma página).</summary>
     public BoardItemViewModel RepeatLast(Point at)
     {
-        if (StorageService.State.UltimoItem is not { } t || t.Tipo == "postit")
+        if (StorageService.State.UltimoItem is not { } t)
             return Add(ItemKind.Page, "branco", at.X, at.Y);
         var kind = BoardItem.KindFromJson(t.Tipo);
         // Página é um arquivo: repetir cria uma página nova, com a mesma cor.

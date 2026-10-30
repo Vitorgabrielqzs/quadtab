@@ -105,7 +105,7 @@ public static class ActionTips
         ["Distribuir na vertical"] = "Deixa o mesmo espaço entre os itens, de cima para baixo",
         ["Desfazer (Ctrl+Z)"] = "Desfaz a última mudança · Ctrl+Z",
         ["Refazer (Ctrl+Shift+Z)"] = "Refaz o que foi desfeito · Ctrl+Shift+Z",
-        ["Procurar (Ctrl+K)"] = "Procura em quadros, páginas e textos · Ctrl+K",
+        ["Procurar (Ctrl+K)"] = "Procura em quadros, notas e textos · Ctrl+K",
         ["Buscar no quadro (Ctrl+F)"] = "Destaca os itens deste quadro que têm o texto buscado · Ctrl+F",
         ["Ajustar o quadro à tela"] = "Enquadra todos os itens na tela · Ctrl+1",
         ["Renomear quadro"] = "Muda o nome deste quadro",

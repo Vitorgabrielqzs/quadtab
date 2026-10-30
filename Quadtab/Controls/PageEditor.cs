@@ -66,17 +66,17 @@ public sealed partial class PageEditor : Grid
 
         var bar = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         DockPanel.SetDock(bar, Dock.Top);
-        var close = UiKit.IconButton("IcClose", "Fecha a página (ela já fica salva)", () => CloseRequested?.Invoke(), 34, 14);
+        var close = UiKit.IconButton("IcClose", "Fecha a nota (ela já fica salva)", () => CloseRequested?.Invoke(), 34, 14);
         DockPanel.SetDock(close, Dock.Right);
         bar.Children.Add(close);
-        expandButton = UiKit.IconButton("IcExpand", "Abre a página na área toda", () => { Expanded = !Expanded; UpdateExpand(); ExpandChanged?.Invoke(); }, 34, 16);
+        expandButton = UiKit.IconButton("IcExpand", "Abre a nota na área toda", () => { Expanded = !Expanded; UpdateExpand(); ExpandChanged?.Invoke(); }, 34, 16);
         DockPanel.SetDock(expandButton, Dock.Right);
         bar.Children.Add(expandButton);
         modeButton = UiKit.Pill("Ler", () => SetMode(!Editing), "IcPage");
         DockPanel.SetDock(modeButton, Dock.Right);
         modeButton.VerticalAlignment = VerticalAlignment.Center;
         bar.Children.Add(modeButton);
-        var crumb = UiKit.Label("Página", 12.5);
+        var crumb = UiKit.Label("Nota", 12.5);
         bar.Children.Add(crumb);
         dock.Children.Add(bar);
 
@@ -173,14 +173,14 @@ public sealed partial class PageEditor : Grid
     void UpdateExpand()
     {
         _expandButton.Content = new Icon { Data = UiKit.G(Expanded ? "IcCollapse" : "IcExpand"), Size = 16 };
-        _expandButton.ToolTip = Expanded ? "Divide a área com o quadro de novo" : "Abre a página na área toda";
+        _expandButton.ToolTip = Expanded ? "Divide a área com o quadro de novo" : "Abre a nota na área toda";
     }
 
     void SetMode(bool edit)
     {
         _editor.Visibility = edit ? Visibility.Visible : Visibility.Collapsed;
         _reader.Visibility = edit ? Visibility.Collapsed : Visibility.Visible;
-        _modeButton.ToolTip = edit ? "Mostra a página formatada · Esc" : "Edita o texto da página · 2 cliques";
+        _modeButton.ToolTip = edit ? "Mostra a nota formatada · Esc" : "Edita o texto da nota · 2 cliques";
         _modeButton.Content = UiKit.Row(new Icon { Data = UiKit.G(edit ? "IcPage" : "IcPencil"), Size = 15 },
             new TextBlock { Text = edit ? "Ler" : "Editar", Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         HideSuggest();
@@ -445,7 +445,7 @@ public sealed partial class PageEditor : Grid
                 if (!exists)
                 {
                     link.Foreground = new SolidColorBrush(Color.FromArgb(120, 0x0A, 0x84, 0xFF)); // link para página que ainda não existe
-                    link.ToolTip = "Página ainda não existe: clique para criar";
+                    link.ToolTip = "Nota ainda não existe: clique para criar";
                 }
                 link.Click += (_, _) => FollowLink(target);
                 inlines.Add(link);

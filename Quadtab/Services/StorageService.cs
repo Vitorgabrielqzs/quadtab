@@ -45,7 +45,9 @@ public static class StorageService
 
     public static string Root { get; private set; } = "";
     public static string BoardsDir => Path.Combine(Root, "Quadros");
-    public static string PagesDir => Path.Combine(Root, "Páginas");
+    /// <summary>Notas (.md). A pasta se chamava "Páginas"; é renomeada ao abrir.</summary>
+    public static string PagesDir => Path.Combine(Root, "Notas");
+    static string OldPagesDir => Path.Combine(Root, "Páginas");
     public static string AttachDir => Path.Combine(Root, "Anexos");
     public static string TrashDir => Path.Combine(Root, ".lixeira");
     public static string MetaDir => Path.Combine(Root, ".quadtab");
@@ -79,6 +81,8 @@ public static class StorageService
         if (!string.IsNullOrEmpty(State.Cofre) && Directory.Exists(State.Cofre)) Root = State.Cofre;
         else State.Cofre = null;
 
+        Directory.CreateDirectory(MetaDir);
+        MigratePagesFolder();
         foreach (var d in new[] { BoardsDir, PagesDir, AttachDir, TrashDir, MetaDir }) Directory.CreateDirectory(d);
         try { File.SetAttributes(TrashDir, FileAttributes.Directory | FileAttributes.Hidden); } catch { }
         try { File.SetAttributes(MetaDir, FileAttributes.Directory | FileAttributes.Hidden); } catch { }
@@ -86,6 +90,31 @@ public static class StorageService
         MigrateOldBoard();
         if (!BoardFiles().Any()) CreateBoard("", "Meu quadro", Board.CreateDefault());
         PurgeTrash();
+    }
+
+    /// <summary>
+    /// "Páginas" vira "Notas". Também apaga as cópias "*.md.erro-*" que uma versão anterior criava por
+    /// engano (tentava abrir notas como se fossem quadros; as cópias são idênticas às notas).
+    /// </summary>
+    static void MigratePagesFolder()
+    {
+        try
+        {
+            if (Directory.Exists(OldPagesDir) && !Directory.Exists(PagesDir))
+            {
+                Directory.Move(OldPagesDir, PagesDir);
+                // Recentes, fixados e importantes guardam caminhos relativos: acompanham o novo nome.
+                foreach (var list in new[] { State.Recentes, State.Fixados, State.Favoritos })
+                    for (int i = 0; i < list.Count; i++)
+                        if (list[i].StartsWith("Páginas", StringComparison.Ordinal)) list[i] = "Notas" + list[i][7..];
+                SaveState();
+            }
+            if (Directory.Exists(PagesDir))
+                foreach (var f in Directory.EnumerateFiles(PagesDir, "*.md.erro-*", SearchOption.AllDirectories).ToList())
+                    File.Delete(f);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>Troca a pasta do cofre (Ajustes).</summary>
@@ -132,7 +161,14 @@ public static class StorageService
     // ---------- caminhos ----------
 
     public static string Rel(string full) => Path.GetRelativePath(Root, full);
-    public static string Full(string rel) => Path.IsPathRooted(rel) ? rel : Path.Combine(Root, rel);
+    public static string Full(string rel)
+    {
+        if (Path.IsPathRooted(rel)) return rel;
+        // Quadros antigos guardam "Páginas\nota.md": a pasta agora se chama "Notas".
+        if (rel.StartsWith("Páginas\\", StringComparison.Ordinal) || rel.StartsWith("Páginas/", StringComparison.Ordinal))
+            rel = "Notas" + rel[7..];
+        return Path.Combine(Root, rel);
+    }
 
     public static string SafeName(string name)
     {
@@ -159,6 +195,8 @@ public static class StorageService
 
     public static Board LoadBoard(string path)
     {
+        // Só arquivos de quadro: uma nota (.md) nunca é lida como quadro (nem gera cópia de erro).
+        if (!path.EndsWith(BoardExt, StringComparison.OrdinalIgnoreCase)) return new Board { Titulo = Path.GetFileNameWithoutExtension(path) };
         var b = ReadJson(path, Json.Board);
         if (b is not null) return b;
         if (File.Exists(path))
@@ -376,8 +414,8 @@ public static class StorageService
 
     public static void TrashPage(string path)
     {
-        Directory.CreateDirectory(Path.Combine(TrashDir, "Páginas"));
-        File.Move(path, Path.Combine(TrashDir, "Páginas", $"{DateTime.Now:yyyyMMddHHmmss}__{Path.GetFileName(path)}"), true);
+        Directory.CreateDirectory(Path.Combine(TrashDir, "Notas"));
+        File.Move(path, Path.Combine(TrashDir, "Notas", $"{DateTime.Now:yyyyMMddHHmmss}__{Path.GetFileName(path)}"), true);
         NotifyLibrary();
     }
 

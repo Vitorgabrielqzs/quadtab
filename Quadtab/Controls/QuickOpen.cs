@@ -40,7 +40,7 @@ public sealed class QuickOpen : Grid
         sep.Margin = new Thickness(-14, 0, -14, 6);
         stack.Children.Add(sep);
         stack.Children.Add(_list);
-        var hint = UiKit.Label("Procura em quadros, páginas e textos · Enter abre · ↑↓ escolhe · Esc fecha", 12);
+        var hint = UiKit.Label("Procura em quadros, notas e textos · Enter abre · ↑↓ escolhe · Esc fecha", 12);
         hint.Margin = new Thickness(8, 8, 0, 0);
         stack.Children.Add(hint);
 
@@ -108,7 +108,7 @@ public sealed class QuickOpen : Grid
             if (i == _pick) row.SetResourceReference(Border.BackgroundProperty, "Accent14Brush");
             else row.Background = Brushes.Transparent;
             var dock = new DockPanel();
-            var kind = UiKit.Label(e.IsPage ? "Página" : e.ItemId is not null ? "Item" : "Quadro", 12.5);
+            var kind = UiKit.Label(e.IsPage ? "Nota" : e.ItemId is not null ? "Item" : "Quadro", 12.5);
             DockPanel.SetDock(kind, Dock.Right);
             dock.Children.Add(kind);
             var ic = new Icon { Data = UiKit.G(e.IsPage ? "IcPage" : e.ItemId is not null ? "IcTarget" : "IcBoard"), Size = 17, Margin = new Thickness(0, 0, 10, 0) };
@@ -130,7 +130,7 @@ public sealed class QuickOpen : Grid
         }
         if (_shown.Count == 0 && _box.Text.Trim().Length > 0)
         {
-            var create = UiKit.Label($"Criar a página \"{_box.Text.Trim()}\" (Enter)", 14);
+            var create = UiKit.Label($"Criar a nota \"{_box.Text.Trim()}\" (Enter)", 14);
             create.Margin = new Thickness(12, 8, 0, 8);
             _list.Children.Add(create);
         }

@@ -81,8 +81,8 @@ public static class UiKit
         ["Desagrupar"] = "Separa o grupo em itens soltos · Ctrl+Shift+G",
         ["Copiar estilo"] = "Guarda a cor e o estilo deste item",
         ["Colar estilo"] = "Aplica o estilo copiado nos selecionados",
-        ["Ler"] = "Mostra a página formatada · Esc",
-        ["Editar"] = "Edita o texto da página",
+        ["Ler"] = "Mostra a nota formatada · Esc",
+        ["Editar"] = "Edita o texto da nota",
     };
 
     static string? ChipTip(string text) => Tips.GetValueOrDefault(text);

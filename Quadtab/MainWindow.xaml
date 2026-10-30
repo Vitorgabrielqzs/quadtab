@@ -61,7 +61,7 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- Mostrar / ocultar o título grande: sempre à mostra (a seta gira) -->
-                        <c:GlassPanel x:Name="TitleCap" Grid.Column="3" CornerRadius="21" Padding="4" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="TitleCap" ShadowLayers="" Grid.Column="3" CornerRadius="21" Padding="4" Margin="10,0,0,0">
                             <Button x:Name="TitleButton" Style="{StaticResource BarButton}" Command="{Binding ToggleTitleCommand}"
                                     ToolTip="Mostra ou esconde o título grande do quadro">
                                 <c:Icon Size="15" Data="{StaticResource IcChevronUp}" RenderTransformOrigin="0.5,0.5">
@@ -74,14 +74,14 @@
 
 
                         <!-- Mais opções (clicar de novo fecha) -->
-                        <c:GlassPanel x:Name="MoreCap" Grid.Column="4" CornerRadius="21" Padding="4" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="MoreCap" ShadowLayers="" Grid.Column="4" CornerRadius="21" Padding="4" Margin="10,0,0,0">
                             <Button x:Name="MoreButton" Style="{StaticResource BarButton}" ToolTip="Mostra mais opções: busca, cenas, tela cheia, exportar e outras" Click="OnMore">
                                 <c:Icon Size="19" StrokeThickness="2.4" Data="{StaticResource IcEllipsis}" />
                             </Button>
                         </c:GlassPanel>
 
                         <!-- Janela: minimizar, maximizar, fechar -->
-                        <c:GlassPanel x:Name="WindowCap" Grid.Column="5" CornerRadius="21" Padding="4" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="WindowCap" ShadowLayers="" Grid.Column="5" CornerRadius="21" Padding="4" Margin="10,0,0,0">
                             <StackPanel Orientation="Horizontal">
                                 <Button Style="{StaticResource BarButton}" ToolTip="Minimiza a janela" Click="OnMinimize">
                                     <c:Icon Size="15" Data="{StaticResource IcWinMin}" />

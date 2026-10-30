@@ -35,7 +35,8 @@ public partial class BoardItemViewModel : ObservableObject
         Z = m.Z;
         W = m.Largura;
         H = m.Altura;
-        Fastening = Fastening.None; // sem alfinetes nem fitas (visual do Canvas do Obsidian)
+        // Só post-its têm alfinete ou fita; notas e blocos ficam sem nada.
+        Fastening = Kind == ItemKind.PostIt ? BoardItem.FasteningFromJson(m.Fixacao) : Fastening.None;
         Lined = Kind == ItemKind.PostIt && m.Pautado;
         Spiral = !m.SemEspiral;
         Locked = m.Bloqueado;
@@ -243,7 +244,7 @@ public partial class BoardItemViewModel : ObservableObject
 
     public string TypeLabel => Kind switch
     {
-        ItemKind.Page => "Página",
+        ItemKind.Page => "Nota",
         ItemKind.Block => "Bloco",
         ItemKind.Text => "Texto",
         ItemKind.TextBox => "Caixa de texto",

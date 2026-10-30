@@ -48,8 +48,7 @@ public sealed class PaperElement : FrameworkElement
     void RenderNote(DrawingContext dc, double w, double h, bool lined)
     {
         var shape = Rounded(w, h, 2, 3);
-        dc.DrawGeometry(ShadowCache.BrushOf(Paper), null, shape);
-        dc.DrawGeometry(BoardSurfaces.GrainBrush, null, shape);
+        dc.DrawGeometry(ShadowCache.BrushOf(Paper), null, shape); // papel liso, sem textura granulada
         dc.PushClip(shape);
 
         dc.DrawRectangle(Band, null, new Rect(0, 0, w, 26));
