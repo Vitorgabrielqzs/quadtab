@@ -43,7 +43,7 @@ public partial class MainWindow : Window
         // O vidro sobre o fundo enxerga uma cópia saturada das manchas (saturate 190%, sem custo de efeito).
         ApplyGlassBackdropColors();
         WindowRoot.SizeChanged += (_, e) => LayoutGlassBackdrop(e.NewSize);
-        foreach (var g in new[] { SidebarGlass, TitleCap, UndoCap, MoreCap, WindowCap, Editor.Glass, Quick.Glass })
+        foreach (var g in new[] { SidebarGlass, TitleCap, MoreCap, WindowCap, Editor.Glass, Quick.Glass })
             g.BackdropSource = _glassBackdrop;
 
         // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
@@ -72,6 +72,7 @@ public partial class MainWindow : Window
         Tray.Overlay = Overlay;
         Tray.Root = WindowRoot;
         Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style);
+        Tray.ShapesRequested += ShowShapePicker;
         Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style);
         Editor.CloseRequested += ClosePage;
         Editor.ExpandChanged += ApplyEditorLayout;
@@ -84,7 +85,7 @@ public partial class MainWindow : Window
         };
 
         Attach(vm);
-        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.8) };
+        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _sideTimer.Tick += (_, _) => { _sideTimer.Stop(); if (!KeepSide()) RevealSide(false); };
         ApplySidebar(animate: false);
 
@@ -233,8 +234,6 @@ public partial class MainWindow : Window
     }
 
     void OnGoToContent(object sender, RoutedEventArgs e) => Board.Fit();
-    void OnUndo(object sender, RoutedEventArgs e) => _vm.Undo();
-    void OnRedo(object sender, RoutedEventArgs e) => _vm.Redo();
 
     // ---------- contador de FPS (Ctrl+Shift+F) ----------
 
@@ -298,7 +297,7 @@ public partial class MainWindow : Window
     /// <summary>A lateral ocupa a coluna dela (fixa) ou flutua escondida sobre o quadro.</summary>
     bool SideDocked => _vm.SidebarOpen && !_fullscreen;
 
-    double SideMargin => _fullscreen ? 10 : 14;
+    double SideMargin => _fullscreen ? 0 : 14;
 
     /// <summary>Fixa ↔ escondida: o quadro cresce ou encolhe com a mola da lateral.</summary>
     void ApplySidebar(bool animate)
@@ -331,7 +330,7 @@ public partial class MainWindow : Window
         MoveSide(animate: true);
     }
 
-    /// <summary>Escondida: aparece com o mouse a menos de ~40 px da borda esquerda e some 0,8 s depois que ele sai.</summary>
+    /// <summary>Escondida: aparece com o mouse a menos de ~30 px da borda esquerda e some 2 s depois que ele sai.</summary>
     void SideNear(Point p)
     {
         if (SideDocked || _presenting) return;
@@ -351,7 +350,8 @@ public partial class MainWindow : Window
 
     void ApplyTitle(bool animate)
     {
-        bool hidden = _vm.TitleHidden || _fullscreen;
+        bool hidden = _vm.TitleHidden;
+        LayoutStage();
         double k = animate ? 1 : 0;
         Anim.To(TitleCollapse, CollapsePanel.ProgressProperty, hidden ? 0 : 1, 0.5 * k, Anim.Collapse);
         Anim.To(BigTitle, OpacityProperty, hidden ? 0 : 1, 0.3 * k, Anim.Ease);
@@ -363,11 +363,19 @@ public partial class MainWindow : Window
         // A seta da barra (sempre à mostra) aponta para baixo quando o título está escondido.
         Anim.To(TitleArrow, RotateTransform.AngleProperty, hidden ? 180 : 0, 0.5 * k, Anim.Tap);
         TitleButton.ToolTip = hidden ? "Mostra o título grande do quadro" : "Esconde o título grande e aumenta o quadro";
-        TitleCap.Visibility = _fullscreen ? Visibility.Collapsed : Visibility.Visible;
+    }
 
-        // O título pequeno da barra surge subindo 8 px.
-        Anim.To(InlineTitle, OpacityProperty, hidden ? 1 : 0, 0.35 * k, Anim.Ease);
-        Anim.To(InlineMove, TranslateTransform.YProperty, hidden ? 0 : 8, 0.45 * k, Anim.Inline);
+    /// <summary>
+    /// Onde fica o quadro: abaixo do título (normal) ou de borda a borda (tela cheia sem título).
+    /// Na tela cheia a seta continua funcionando: com o título à mostra, o quadro começa abaixo dele.
+    /// </summary>
+    void LayoutStage()
+    {
+        bool full = _fullscreen && _vm.TitleHidden;
+        Grid.SetRow(Stage, full ? 0 : 2);
+        Grid.SetRowSpan(Stage, full ? 3 : 1);
+        Stage.Margin = new Thickness(0, full ? 0 : 14, 0, 0);
+        BigTitle.Margin = new Thickness(_fullscreen ? 24 : 10, 14, 10, 0);
     }
 
     void OnTitleDown(object sender, MouseButtonEventArgs e)
@@ -492,6 +500,18 @@ public partial class MainWindow : Window
         if (_ctxWasOpen) { _ctxWasOpen = false; return; }
         CtxTray.Show(world);
         Place(CtxTray, TrayScale, windowPoint);
+        _ctxOpen = true;
+        Dispatcher.BeginInvoke(CtxTray.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Biblioteca de formas acima do dock: a forma escolhida nasce no centro da tela.</summary>
+    void ShowShapePicker()
+    {
+        CloseMenu();
+        CloseActions();
+        CtxTray.ShowShapesAt(Board.ViewCenter);
+        var dock = Tray.DockGlass;
+        Place(CtxTray, TrayScale, dock.TranslatePoint(new Point(dock.ActualWidth / 2 - 186, -440), WindowRoot));
         _ctxOpen = true;
         Dispatcher.BeginInvoke(CtxTray.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
     }
@@ -824,11 +844,9 @@ public partial class MainWindow : Window
             if (!DevMode) { Left = mon.Left; Top = mon.Top; } // no modo de conferência a janela fica fora da tela
             Width = mon.Width; Height = mon.Height;
             ResizeMode = ResizeMode.NoResize;
-            AppRoot.Margin = new Thickness(10);
-            // O quadro ocupa tudo; lateral e barra flutuam por cima quando aparecem.
-            Grid.SetRow(Stage, 0);
-            Grid.SetRowSpan(Stage, 3);
-            Stage.Margin = new Thickness(0);
+            // Tela realmente cheia: o quadro vai de borda a borda; lateral e barra flutuam por cima.
+            AppRoot.Margin = new Thickness(0);
+            Board.FullBleed = true;
             _barShown = false;
             Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 0, 0.35, Anim.Collapse);
             _chrome.Start();
@@ -841,9 +859,7 @@ public partial class MainWindow : Window
             Width = _restoreBounds.Width; Height = _restoreBounds.Height;
             WindowState = _restoreState;
             AppRoot.Margin = new Thickness(14);
-            Grid.SetRow(Stage, 2);
-            Grid.SetRowSpan(Stage, 1);
-            Stage.Margin = new Thickness(0, 14, 0, 0);
+            Board.FullBleed = false;
             Anim.To(ToolbarCollapse, CollapsePanel.ProgressProperty, 1, 0.35, Anim.Collapse);
         }
         ApplySidebar(animate: true);

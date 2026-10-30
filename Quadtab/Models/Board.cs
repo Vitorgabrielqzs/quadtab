@@ -20,9 +20,10 @@ public sealed class Scene
 /// <summary>Um quadro inteiro, como fica salvo em Quadros\*.quadtab.</summary>
 public sealed class Board
 {
-    public int Versao { get; set; } = 3;
+    /// <summary>4 = já tem o modelo "liso" (quadros da versão 3 abrem como liso, que era o visual deles).</summary>
+    public int Versao { get; set; } = 4;
     public string Titulo { get; set; } = "Meu quadro";
-    public string Modelo { get; set; } = "cortica";
+    public string Modelo { get; set; } = "liso";
 
     /// <summary>Câmera da última vez. Null = nunca aberto (usa "Ajustar").</summary>
     public Camera? Camera { get; set; }
@@ -43,7 +44,7 @@ public sealed class Board
         BoardItem P(int id, string tipo, string cor, double x, double y, string titulo, string texto, double? largura = null) => new()
         {
             Id = id, Tipo = tipo, Cor = cor, X = x, Y = y, Z = id, Fixacao = "nenhuma", Titulo = titulo, Texto = texto,
-            Largura = largura, Criado = hoje,
+            Largura = largura, Criado = hoje, SemEspiral = true,
         };
         BoardItem L(int id, int from, string fromSide, int to, string toSide, string cor, string traco) => new()
         {
@@ -62,7 +63,7 @@ public sealed class Board
             Itens =
             [
                 P(1, "pagina", "branco", 40, 40, "Bem-vindo ao Quadtab",
-                  "Dê 2 cliques no vazio para criar uma página.\n\nO botão direito abre a bandeja de elementos.\n\n" +
+                  "Dê 2 cliques no vazio para criar outro item igual ao último que você criou (no começo, uma página).\n\nO botão direito abre a bandeja de elementos.\n\n" +
                   "Segure o botão direito num item e arraste até outro para ligar os dois com uma linha."),
                 P(2, "bloco", "azul", 420, 40, "Ideias", "Anote aqui o que vier à cabeça.", 260),
                 P(3, "bloco", "verde", 420, 250, "Tarefas", "- Organizar o quadro\n- Revisar as metas", 260),

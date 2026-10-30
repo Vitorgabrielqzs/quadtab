@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Windows.Controls;
+using Quadtab.Models;
+using Quadtab.Rendering;
 using Quadtab.Services;
 using Quadtab.ViewModels;
 
@@ -21,8 +23,8 @@ public partial class TextLabel : UserControl
             if (_vm is not null) _vm.PropertyChanged += OnVm;
             Apply();
         };
-        Loaded += (_, _) => { ThemeService.Changed += Apply; Apply(); };
-        Unloaded += (_, _) => ThemeService.Changed -= Apply;
+        Loaded += (_, _) => { ThemeService.Changed += Apply; BoardSurfaces.Changed += Apply; Apply(); };
+        Unloaded += (_, _) => { ThemeService.Changed -= Apply; BoardSurfaces.Changed -= Apply; };
     }
 
     void OnVm(object? sender, PropertyChangedEventArgs e)
@@ -34,8 +36,10 @@ public partial class TextLabel : UserControl
     void Apply()
     {
         if (_vm is null) return;
-        if (_vm.ColorKey == "branco") Label.SetResourceReference(TrackedText.ForegroundProperty, "CardTextBrush");
-        else Label.Foreground = ThemeService.IsDark ? _vm.PaperBrush : _vm.InkBrush;
+        // Na lousa (escura) e no tema escuro do liso, a cor clara do papel; na lousa vira "giz".
+        bool darkSurface = BoardSurfaces.Model == BoardModel.Lousa || (BoardSurfaces.Model == BoardModel.Liso && ThemeService.IsDark);
+        if (_vm.ColorKey == "branco" && BoardSurfaces.Model == BoardModel.Liso) Label.SetResourceReference(TrackedText.ForegroundProperty, "CardTextBrush");
+        else Label.Foreground = darkSurface ? _vm.PaperBrush : _vm.InkBrush;
         Editor.SetResourceReference(ForegroundProperty, "CardTextBrush");
         Label.TextShadows = null;
     }

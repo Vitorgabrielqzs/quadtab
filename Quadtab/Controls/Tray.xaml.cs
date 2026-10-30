@@ -30,6 +30,9 @@ public partial class Tray : UserControl
     /// <summary>Clique: criar no centro da área visível.</summary>
     public event Action<TrayPayload>? AddRequested;
 
+    /// <summary>Clicou em "Forma": abrir a biblioteca de formas para escolher.</summary>
+    public event Action? ShapesRequested;
+
     /// <summary>Soltou em algum ponto (relativo a Root). Retorna se criou.</summary>
     public event Func<TrayPayload, Point, bool>? DropRequested;
 
@@ -53,13 +56,13 @@ public partial class Tray : UserControl
         Draggable(CardBlock, new TrayPayload(ItemKind.Block, "branco"));
         Draggable(CardText, new TrayPayload(ItemKind.Text, "branco"));
         Draggable(CardBox, new TrayPayload(ItemKind.TextBox, "branco"));
-        Draggable(CardShape, new TrayPayload(ItemKind.Shape, "azul"));
+        CardShape.Click += (_, _) => ShapesRequested?.Invoke();
         Draggable(CardTable, new TrayPayload(ItemKind.Table, "branco"));
 
         QuickPage.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Page, "branco"));
         QuickText.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Text, "branco"));
         QuickBlock.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Block, "branco"));
-        QuickShape.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Shape, "azul"));
+        QuickShape.Click += (_, _) => ShapesRequested?.Invoke();
 
         DataContextChanged += (_, e) =>
         {
@@ -86,6 +89,7 @@ public partial class Tray : UserControl
         Anim.To(ChevronTurn, RotateTransform.AngleProperty, open ? 180 : 0, 0.45 * dur, Anim.Item);
         if (open)
         {
+            BuildModels();
             Sheet.Visibility = Visibility.Visible;
             Sheet.IsHitTestVisible = true;
             Anim.To(Sheet, OpacityProperty, 1, 0.25 * dur, Anim.Ease);
@@ -105,6 +109,12 @@ public partial class Tray : UserControl
             Anim.To(SheetMove, TranslateTransform.YProperty, 18, 0.55 * dur, Anim.Panel);
         }
         TrackBackdrop(0.6 * dur);
+    }
+
+    /// <summary>Modelo do quadro, primeiro na bandeja (a marcação acompanha a escolha).</summary>
+    void BuildModels()
+    {
+        if (_vm is not null) ModelRow.Content = ContextTray.ModelChips(_vm, BuildModels);
     }
 
     // Durante a animação o vidro precisa reposicionar o fundo desfocado a cada quadro.

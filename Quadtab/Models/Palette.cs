@@ -6,7 +6,8 @@ public enum ItemKind { PostIt, Page, Block, Text, TextBox, Shape, Line, Drawing,
 
 public enum Fastening { Pin, Tape, None }
 
-public enum BoardModel { Cortica, Branco, Lousa, Pontilhado }
+/// <summary>Fundo do quadro. Liso = estilo Canvas do Obsidian (fundo do tema com pontinhos).</summary>
+public enum BoardModel { Cortica, Branco, Lousa, Pontilhado, Liso }
 
 /// <summary>Estilo escolhido no menu para os próximos post-its.</summary>
 public enum NoteStyle { Pin, Tape, None, Lined }
@@ -22,8 +23,8 @@ public sealed class NoteColor
         Ink = ink;
         PaperBrush = Freeze(new SolidColorBrush(paper));
         InkBrush = Freeze(new SolidColorBrush(ink));
-        // Bloco de vidro: color-mix(in srgb, cor 34%, branco 42%)
-        BlockFill = Freeze(new SolidColorBrush(Rendering.ColorMath.Mix(paper, 0.34, Color.FromArgb(107, 255, 255, 255))));
+        // Bloco de vidro: cor forte (75% da cor com um pouco de branco), quase opaca, para o texto preto ler bem.
+        BlockFill = Freeze(new SolidColorBrush(Rendering.ColorMath.Mix(paper, 0.75, Color.FromArgb(200, 255, 255, 255))));
     }
 
     public string Key { get; }
@@ -69,7 +70,11 @@ public static class Palette
         (BoardModel.Branco, "branco", "Branco"),
         (BoardModel.Lousa, "lousa", "Lousa"),
         (BoardModel.Pontilhado, "pontilhado", "Pontilhado"),
+        (BoardModel.Liso, "liso", "Liso"),
     ];
+
+    /// <summary>Ordem em que os modelos aparecem nas bandejas (Liso primeiro).</summary>
+    public static readonly BoardModel[] ModelOrder = [BoardModel.Liso, BoardModel.Cortica, BoardModel.Branco, BoardModel.Lousa, BoardModel.Pontilhado];
 
     public static string ModelName(BoardModel m) => Models[(int)m].Name;
     public static string ModelKey(BoardModel m) => Models[(int)m].Key;
@@ -78,7 +83,7 @@ public static class Palette
     {
         foreach (var m in Models)
             if (m.Key == key) return m.Model;
-        return BoardModel.Cortica;
+        return BoardModel.Liso;
     }
 
     public static Color C(uint rgb, byte a = 255) =>

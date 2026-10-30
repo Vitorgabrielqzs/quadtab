@@ -152,9 +152,7 @@ public partial class BoardView : UserControl
 
         Surface.SizeChanged += (_, e) =>
         {
-            var g = new RectangleGeometry(new Rect(e.NewSize), SurfaceBackground.Radius, SurfaceBackground.Radius);
-            g.Freeze();
-            Surface.Clip = g;
+            ApplyFrame();
             // O centro da câmera não muda: o que estava no meio continua no meio.
             _camera.Viewport = e.NewSize;
             if (!_cameraReady && e.NewSize.Width > 0) StartCamera();
@@ -289,6 +287,7 @@ public partial class BoardView : UserControl
         {
             case nameof(MainViewModel.Model):
                 BoardSurfaces.Update(Vm.Model, _camera.Zoom);
+                ApplyFrame();
                 ApplyGlassModel();
                 Settle();
                 break;
@@ -649,10 +648,39 @@ public partial class BoardView : UserControl
         ApplyGlassModel();
     }
 
-    // Quadro liso (estilo Obsidian): o vidro sobre ele enxerga só a cor do fundo, que segue o tema.
+    // O vidro sobre o quadro enxerga a cor do fundo: a do tema no liso, a cor média nos outros modelos.
     void ApplyGlassModel()
     {
-        foreach (var p in _glass) p.SetResourceReference(GlassPanel.BackdropBrushProperty, "CanvasBrush");
+        if (_vm is null) return;
+        if (_vm.Model == BoardModel.Liso)
+            foreach (var p in _glass) p.SetResourceReference(GlassPanel.BackdropBrushProperty, "CanvasBrush");
+        else
+        {
+            var solid = ShadowCache.BrushOf(ColorMath.Saturate(BoardSurfaces.AverageColor(_vm.Model), 1.9));
+            foreach (var p in _glass) p.BackdropBrush = solid;
+        }
+    }
+
+    bool _fullBleed;
+
+    /// <summary>Tela cheia: o quadro vai de borda a borda, sem moldura, cantos ou sombras.</summary>
+    public bool FullBleed
+    {
+        get => _fullBleed;
+        set { _fullBleed = value; ApplyFrame(); }
+    }
+
+    /// <summary>Batente da moldura e cantos da superfície conforme o modelo (e a tela cheia).</summary>
+    void ApplyFrame()
+    {
+        var model = _vm?.Model ?? BoardModel.Liso;
+        FrameBg.FullBleed = SurfaceBg.FullBleed = _fullBleed;
+        Surface.Margin = new Thickness(FrameBackground.Inset(model, _fullBleed));
+        double r = SurfaceBackground.CornerRadius(model, _fullBleed);
+        var size = Surface.RenderSize;
+        var g = new RectangleGeometry(new Rect(size), r, r);
+        g.Freeze();
+        Surface.Clip = g;
     }
 
     static void UpdateGlass() { } // nada a alinhar: o fundo é liso
@@ -769,7 +797,7 @@ public partial class BoardView : UserControl
         // Quadro vazio
         if (e.ClickCount == 2)
         {
-            Vm.Add(ItemKind.Page, "branco", world.X, world.Y); // 2 cliques no vazio: página nova
+            Vm.RepeatLast(world); // 2 cliques no vazio: outro item igual ao último criado (sem nenhum ainda: página)
             e.Handled = true;
             return;
         }

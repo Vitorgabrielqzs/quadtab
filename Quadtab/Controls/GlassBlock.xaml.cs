@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using Quadtab.Models;
+using Quadtab.Rendering;
 using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
@@ -13,7 +15,6 @@ public partial class GlassBlock : UserControl
     public GlassBlock()
     {
         InitializeComponent();
-        Glass.SetResourceReference(GlassPanel.BackdropBrushProperty, "CanvasBrush");
         Glass.KeepShadow = true;
         // O item pode ser reaproveitado para outro bloco (virtualização): acompanha a troca de DataContext.
         DataContextChanged += (_, e) =>
@@ -22,12 +23,24 @@ public partial class GlassBlock : UserControl
             _vm = e.NewValue as BoardItemViewModel;
             if (_vm is not null) _vm.PropertyChanged += OnVm;
             ApplyPlaceholder();
+            UpdateBackdrop();
         };
+        Loaded += (_, _) => { BoardSurfaces.Changed += UpdateBackdrop; UpdateBackdrop(); };
+        Unloaded += (_, _) => BoardSurfaces.Changed -= UpdateBackdrop;
+    }
+
+    /// <summary>Através do vidro aparece o fundo do quadro: a cor do tema no liso, a cortiça desfocada etc.</summary>
+    void UpdateBackdrop()
+    {
+        if (_vm is null) return;
+        if (BoardSurfaces.Model == BoardModel.Liso) Glass.SetResourceReference(GlassPanel.BackdropBrushProperty, "CanvasBrush");
+        else Glass.BackdropBrush = BoardSurfaces.BlurredSurfaceFor(BoardSurfaces.Model, _vm.X, _vm.Y);
     }
 
     void OnVm(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(BoardItemViewModel.Title) or nameof(BoardItemViewModel.Editing)) ApplyPlaceholder();
+        else if (e.PropertyName is nameof(BoardItemViewModel.X) or nameof(BoardItemViewModel.Y) && BoardSurfaces.Model == BoardModel.Cortica) UpdateBackdrop();
     }
 
     /// <summary>"Título" clarinho só quando o título está vazio e ninguém está escrevendo nele.</summary>

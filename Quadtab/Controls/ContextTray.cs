@@ -45,6 +45,13 @@ public sealed class ContextTray : ContentControl
 
     void Done() => CloseRequested?.Invoke();
 
+    /// <summary>Abre direto na biblioteca de formas (a forma escolhida nasce em "world").</summary>
+    public void ShowShapesAt(Point world)
+    {
+        _world = world;
+        ShowShapes();
+    }
+
     // ---------- página principal ----------
 
     void ShowMain()
@@ -56,6 +63,10 @@ public sealed class ContextTray : ContentControl
         head.Children.Add(close);
         head.Children.Add(new TextBlock { Text = "Adicionar aqui", FontSize = 17, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
         root.Children.Add(head);
+
+        // Fundo do quadro (primeiro, como em todas as bandejas)
+        root.Children.Add(UiKit.Section("Quadro"));
+        root.Children.Add(ModelChips(Vm, ShowMain));
 
         // Elementos e ferramentas
         root.Children.Add(UiKit.Section("Elementos"));
@@ -94,6 +105,15 @@ public sealed class ContextTray : ContentControl
         foot.Margin = new Thickness(-3, 4, 0, 0);
         root.Children.Add(foot);
         _page.Content = root;
+    }
+
+    /// <summary>Chips dos modelos do quadro (Liso, Cortiça, Branco, Lousa, Pontilhado). Usado pelas duas bandejas.</summary>
+    public static WrapPanel ModelChips(MainViewModel vm, Action changed)
+    {
+        var row = new WrapPanel();
+        foreach (var m in Palette.ModelOrder)
+            row.Children.Add(UiKit.Chip(Palette.ModelName(m), vm.Model == m, () => { vm.Model = m; changed(); }));
+        return row;
     }
 
     void AddTable()

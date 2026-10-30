@@ -50,7 +50,7 @@
 
                 <!-- Barra de ferramentas (também serve para arrastar a janela) -->
                 <c:CollapsePanel x:Name="ToolbarCollapse" Panel.ZIndex="35">
-                    <Grid x:Name="Toolbar" Height="50" Background="Transparent" MouseLeftButtonDown="OnDragArea">
+                    <Grid x:Name="Toolbar" Height="42" Background="Transparent" MouseLeftButtonDown="OnDragArea">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -58,21 +58,13 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <c:TrackedText x:Name="InlineTitle" Grid.Column="0" Text="{Binding BoardTitle}" FontSize="17" FontWeight="Bold"
-                                       Tracking="-0.022" Wrap="False" Margin="8,0" VerticalAlignment="Center" Opacity="0" IsHitTestVisible="False">
-                            <c:TrackedText.RenderTransform>
-                                <TranslateTransform x:Name="InlineMove" Y="8" />
-                            </c:TrackedText.RenderTransform>
-                        </c:TrackedText>
-
                         <!-- Mostrar / ocultar o título grande: sempre à mostra (a seta gira) -->
-                        <c:GlassPanel x:Name="TitleCap" Grid.Column="3" CornerRadius="25" Padding="5" Margin="10,0,0,0">
-                            <Button x:Name="TitleButton" Style="{StaticResource CapButton}" Command="{Binding ToggleTitleCommand}"
+                        <c:GlassPanel x:Name="TitleCap" Grid.Column="3" CornerRadius="21" Padding="4" Margin="10,0,0,0">
+                            <Button x:Name="TitleButton" Style="{StaticResource BarButton}" Command="{Binding ToggleTitleCommand}"
                                     ToolTip="Mostra ou esconde o título grande do quadro">
-                                <c:Icon Data="{StaticResource IcChevronUp}" RenderTransformOrigin="0.5,0.5">
+                                <c:Icon Size="15" Data="{StaticResource IcChevronUp}" RenderTransformOrigin="0.5,0.5">
                                     <c:Icon.RenderTransform>
                                         <RotateTransform x:Name="TitleArrow" />
                                     </c:Icon.RenderTransform>
@@ -80,37 +72,26 @@
                             </Button>
                         </c:GlassPanel>
 
-                        <!-- Desfazer / refazer -->
-                        <c:GlassPanel x:Name="UndoCap" Grid.Column="4" CornerRadius="25" Padding="5" Margin="10,0,0,0">
-                            <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource CapButton}" ToolTip="Desfaz a última mudança · Ctrl+Z" Click="OnUndo" IsEnabled="{Binding CanUndo}">
-                                    <c:Icon Data="{StaticResource IcUndo}" />
-                                </Button>
-                                <Button Style="{StaticResource CapButton}" Margin="2,0,0,0" ToolTip="Refaz o que foi desfeito · Ctrl+Shift+Z" Click="OnRedo" IsEnabled="{Binding CanRedo}">
-                                    <c:Icon Data="{StaticResource IcRedo}" />
-                                </Button>
-                            </StackPanel>
-                        </c:GlassPanel>
 
                         <!-- Mais opções (clicar de novo fecha) -->
-                        <c:GlassPanel x:Name="MoreCap" Grid.Column="5" CornerRadius="25" Padding="5" Margin="10,0,0,0">
-                            <Button x:Name="MoreButton" Style="{StaticResource CapButton}" ToolTip="Mostra mais opções: busca, cenas, tela cheia, exportar e outras" Click="OnMore">
-                                <c:Icon Data="{StaticResource IcEllipsis}" />
+                        <c:GlassPanel x:Name="MoreCap" Grid.Column="4" CornerRadius="21" Padding="4" Margin="10,0,0,0">
+                            <Button x:Name="MoreButton" Style="{StaticResource BarButton}" ToolTip="Mostra mais opções: busca, cenas, tela cheia, exportar e outras" Click="OnMore">
+                                <c:Icon Size="19" StrokeThickness="2.4" Data="{StaticResource IcEllipsis}" />
                             </Button>
                         </c:GlassPanel>
 
                         <!-- Janela: minimizar, maximizar, fechar -->
-                        <c:GlassPanel x:Name="WindowCap" Grid.Column="6" CornerRadius="25" Padding="5" Margin="10,0,0,0">
+                        <c:GlassPanel x:Name="WindowCap" Grid.Column="5" CornerRadius="21" Padding="4" Margin="10,0,0,0">
                             <StackPanel Orientation="Horizontal">
-                                <Button Style="{StaticResource CapButton}" ToolTip="Minimiza a janela" Click="OnMinimize">
-                                    <c:Icon Data="{StaticResource IcWinMin}" />
+                                <Button Style="{StaticResource BarButton}" ToolTip="Minimiza a janela" Click="OnMinimize">
+                                    <c:Icon Size="15" Data="{StaticResource IcWinMin}" />
                                 </Button>
-                                <Button Style="{StaticResource CapButton}" Margin="2,0" ToolTip="Maximiza ou restaura a janela" Click="OnMaximize">
-                                    <c:Icon x:Name="MaxIcon" Data="{StaticResource IcWinMax}" />
+                                <Button Style="{StaticResource BarButton}" Margin="2,0" ToolTip="Maximiza ou restaura a janela" Click="OnMaximize">
+                                    <c:Icon x:Name="MaxIcon" Size="15" Data="{StaticResource IcWinMax}" />
                                 </Button>
                                 <Button x:Name="CloseButton" ToolTip="Fecha o Quadtab (tudo já fica salvo)" Click="OnClose">
                                     <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource CapButton}">
+                                        <Style TargetType="Button" BasedOn="{StaticResource BarButton}">
                                             <Setter Property="b:UI.HoverBackground" Value="{DynamicResource DangerBrush}" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -119,7 +100,7 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Button.Style>
-                                    <c:Icon Data="{StaticResource IcClose}" />
+                                    <c:Icon Size="15" Data="{StaticResource IcClose}" />
                                 </Button>
                             </StackPanel>
                         </c:GlassPanel>
@@ -165,10 +146,11 @@
 
                         <c:GlassPanel x:Name="Hint" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="30,30,0,0" Height="36"
                                       CornerRadius="18" Padding="12,0,15,0" Panel.ZIndex="20" IsHitTestVisible="False">
+                            <!-- Nome do quadro aberto (no lugar da antiga dica de uso) -->
                             <StackPanel Orientation="Horizontal">
-                                <c:Icon Data="{StaticResource IcMouse}" Size="17" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
-                                <TextBlock Text="2 cliques no vazio criam uma página · botão direito para adicionar" FontSize="13" FontWeight="Medium"
-                                           Foreground="{DynamicResource Ink2Brush}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                <c:Icon Data="{StaticResource IcBoard}" Size="16" Foreground="{DynamicResource Ink2Brush}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding BoardTitle}" FontSize="13.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource InkBrush}" Margin="8,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </c:GlassPanel>
 

@@ -21,8 +21,8 @@
     <SolidColorBrush x:Key="White50Brush" Color="#80FFFFFF" />
     <SolidColorBrush x:Key="EditBackBrush" Color="#99FFFFFF" />
     <SolidColorBrush x:Key="SelectionBrush" Color="#590A84FF" />
-    <SolidColorBrush x:Key="BlockInkBrush" Color="#1D2130" />
-    <SolidColorBrush x:Key="BlockBodyBrush" Color="#333849" />
+    <SolidColorBrush x:Key="BlockInkBrush" Color="#000000" />
+    <SolidColorBrush x:Key="BlockBodyBrush" Color="#000000" />
     <SolidColorBrush x:Key="NoteTextBrush" Color="#E01C1812" />
     <SolidColorBrush x:Key="LinedTextBrush" Color="#D91C1812" />
     <SolidColorBrush x:Key="PageTitleBrush" Color="#23262F" />

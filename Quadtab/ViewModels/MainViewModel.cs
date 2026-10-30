@@ -57,7 +57,8 @@ public partial class MainViewModel : ObservableObject
     {
         FilePath = path;
         BoardTitle = Path.GetFileNameWithoutExtension(path);
-        Model = Palette.ParseModel(board.Modelo);
+        // Quadros salvos antes dos modelos voltarem já estavam no visual liso: continuam liso.
+        Model = board.Versao < 4 ? BoardModel.Liso : Palette.ParseModel(board.Modelo);
         Camera = board.Camera;
         Zoom = board.Camera?.Zoom ?? 1;
         TitleHidden = board.TituloOculto;
@@ -417,6 +418,7 @@ public partial class MainViewModel : ObservableObject
 
         if (kind == ItemKind.Page)
         {
+            m.SemEspiral = true; // a página nasce sem espiral (o menu do botão direito põe)
             var path = StorageService.CreatePage("Nova página", "# Nova página\n\nEscreva aqui…\n");
             m.Arquivo = StorageService.Rel(path);
             m.Titulo = Path.GetFileNameWithoutExtension(path);

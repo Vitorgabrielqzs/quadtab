@@ -15,10 +15,11 @@
     <SolidColorBrush x:Key="InkBrush" Color="#0F1115" />
     <SolidColorBrush x:Key="Ink2Brush" Color="#4F5563" />
     <SolidColorBrush x:Key="Ink3Brush" Color="#646A79" />
-    <SolidColorBrush x:Key="GlassBrush" Color="#8FFFFFFF" />
-    <SolidColorBrush x:Key="Glass2Brush" Color="#D6FFFFFF" />
+    <!-- Vidro com um leve tom azulado: separa a lateral, a bandeja e os painéis do quadro branco -->
+    <SolidColorBrush x:Key="GlassBrush" Color="#C7E4ECFA" />
+    <SolidColorBrush x:Key="Glass2Brush" Color="#E8E9EFFB" />
     <!-- Menus e bandejas que abrem por cima do quadro: quase opacos, para nada aparecer atrás -->
-    <SolidColorBrush x:Key="MenuGlassBrush" Color="#F5FFFFFF" />
+    <SolidColorBrush x:Key="MenuGlassBrush" Color="#F7EEF3FC" />
     <SolidColorBrush x:Key="FillBrush" Color="#1F767C91" />
     <SolidColorBrush x:Key="Fill2Brush" Color="#33767C91" />
     <SolidColorBrush x:Key="SepBrush" Color="#173C425A" />
