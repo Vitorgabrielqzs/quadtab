@@ -56,6 +56,7 @@ public static class ShadowCache
     static readonly Dictionary<(int, int, uint, bool), Slices> SliceCache = new();
     static readonly Dictionary<(int, int, int, int, uint, bool), (BitmapSource Bmp, int Pad)> ExactCache = new();
     static readonly Dictionary<uint, SolidColorBrush> BrushCache = new();
+    const int MaxExact = 128;
 
     public static void Draw(DrawingContext dc, Rect box, double radius, ShadowLayer[] layers, bool hollow = false)
     {
@@ -253,6 +254,7 @@ public static class ShadowCache
         int cw = (int)Math.Ceiling(w) + 2 * P, ch = (int)Math.Ceiling(h) + 2 * P;
         var field = Field(cw, ch, P, P, w, h, r, sigma, inset);
         e = (ToBitmap(field, cw, ch, color), P);
+        if (ExactCache.Count >= MaxExact) ExactCache.Clear(); // cada tamanho novo de item criaria mais um bitmap
         ExactCache[key] = e;
         return e;
     }

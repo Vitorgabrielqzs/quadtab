@@ -12,9 +12,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\Quadtab.ico</ApplicationIcon>
     <Product>Quadtab</Product>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
-    <TieredPGO>true</TieredPGO>
+    <!-- Menos memória: sem instrumentação do JIT e sem a linha extra do coletor de lixo -->
+    <TieredPGO>false</TieredPGO>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
   </PropertyGroup>
 
   <!-- Publicação: um único .exe, já compilado para iniciar rápido (ReadyToRun) -->

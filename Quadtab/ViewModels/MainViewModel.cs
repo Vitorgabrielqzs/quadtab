@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -44,8 +46,9 @@ public partial class MainViewModel : ObservableObject
     bool _restoring;
 
     // desfazer / refazer: fotos dos itens antes de cada mudança
-    readonly List<string> _undo = [];
-    readonly List<string> _redo = [];
+    const long MaxUndoBytes = 32 * 1024 * 1024;
+    readonly List<byte[]> _undo = [];
+    readonly List<byte[]> _redo = [];
     string? _lastSnapshot;
     DateTime _lastCheckpoint;
 
@@ -980,6 +983,20 @@ public partial class MainViewModel : ObservableObject
     string Snapshot() => StorageService.SerializeItems(Items.OrderBy(i => i.Id).Select(i => i.ToModel()).ToList())
                          + "|" + Palette.ModelKey(Model);
 
+    static byte[] Pack(string text)
+    {
+        using var output = new MemoryStream();
+        using (var zip = new DeflateStream(output, CompressionLevel.Fastest)) zip.Write(Encoding.UTF8.GetBytes(text));
+        return output.ToArray();
+    }
+
+    static string Unpack(byte[] data)
+    {
+        using var zip = new DeflateStream(new MemoryStream(data), CompressionMode.Decompress);
+        using var reader = new StreamReader(zip, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
     /// <summary>
     /// Guarda o estado atual antes de uma mudança. coalesce = mudanças seguidas (inspetor, digitação)
     /// viram um único passo de desfazer.
@@ -989,10 +1006,16 @@ public partial class MainViewModel : ObservableObject
         if (_restoring) return;
         if (coalesce && (DateTime.Now - _lastCheckpoint).TotalMilliseconds < 800) { _lastCheckpoint = DateTime.Now; return; }
         _lastCheckpoint = DateTime.Now;
-        var snap = Snapshot();
-        if (snap == _undo.LastOrDefault()) return;
+        var snap = Pack(Snapshot());
+        if (_undo.Count > 0 && snap.AsSpan().SequenceEqual(_undo[^1])) return;
         _undo.Add(snap);
-        if (_undo.Count > 500) _undo.RemoveAt(0);
+        // Cada passo é o quadro inteiro: comprimido e com teto, para o histórico não crescer sem parar.
+        long total = _undo.Sum(s => (long)s.Length);
+        while (_undo.Count > 1 && total > MaxUndoBytes)
+        {
+            total -= _undo[0].Length;
+            _undo.RemoveAt(0);
+        }
         _redo.Clear();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
@@ -1002,17 +1025,17 @@ public partial class MainViewModel : ObservableObject
     public void Undo() { if (!ReadOnly) Travel(_undo, _redo); }
     public void Redo() { if (!ReadOnly) Travel(_redo, _undo); }
 
-    void Travel(List<string> from, List<string> to)
+    void Travel(List<byte[]> from, List<byte[]> to)
     {
         EndEdit();
-        var current = Snapshot();
+        var current = Pack(Snapshot());
         // Pula fotos iguais ao estado atual.
-        while (from.Count > 0 && from[^1] == current) from.RemoveAt(from.Count - 1);
+        while (from.Count > 0 && from[^1].AsSpan().SequenceEqual(current)) from.RemoveAt(from.Count - 1);
         if (from.Count == 0) return;
         var snap = from[^1];
         from.RemoveAt(from.Count - 1);
         to.Add(current);
-        Restore(snap);
+        Restore(Unpack(snap));
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
     }

@@ -601,6 +601,7 @@ public sealed class ImageView : ItemViewBase
 {
     readonly Border _img = new();
     readonly ImageBrush _brush = new() { Stretch = Stretch.Fill, ViewboxUnits = BrushMappingMode.RelativeToBoundingBox };
+    int _decoded;
 
     public ImageView()
     {
@@ -612,10 +613,14 @@ public sealed class ImageView : ItemViewBase
         SetBinding(OpacityProperty, "ItemOpacity");
     }
 
+    // Decodifica no tamanho que o item precisa (3× a largura, para o zoom), em passos para não repetir ao redimensionar.
+    static int DecodeWidth(double itemWidth) => (int)Math.Clamp(Math.Ceiling(itemWidth * 3 / 400) * 400, 800, 1600);
+
     protected override void Rebuild()
     {
-        if (Item is null) return;
-        _brush.ImageSource = Load(Item.FileFullPath, 1600);
+        if (Item is null) { _brush.ImageSource = null; return; } // item guardado: solta a imagem da memória
+        _decoded = DecodeWidth(Item.ItemWidth);
+        _brush.ImageSource = Load(Item.FileFullPath, _decoded);
         Apply();
     }
 
@@ -623,6 +628,7 @@ public sealed class ImageView : ItemViewBase
     {
         if (p is nameof(BoardItemViewModel.Crop) or nameof(BoardItemViewModel.Radius)) Apply();
         if (p == nameof(BoardItemViewModel.FilePath)) Rebuild();
+        if (p == nameof(BoardItemViewModel.ItemWidth) && Item is not null && DecodeWidth(Item.ItemWidth) > _decoded) Rebuild();
     }
 
     void Apply()
@@ -643,12 +649,24 @@ public sealed class ImageView : ItemViewBase
             img.BeginInit();
             img.CacheOption = BitmapCacheOption.OnLoad;
             img.UriSource = new Uri(path);
-            img.DecodePixelWidth = decodeWidth;
+            // Imagem menor que o pedido fica no tamanho real: ampliar só gastaria memória.
+            int natural = NaturalWidth(path);
+            if (natural == 0 || natural > decodeWidth) img.DecodePixelWidth = decodeWidth;
             img.EndInit();
             img.Freeze();
             return img;
         }
         catch { return null; }
+    }
+
+    static int NaturalWidth(string path)
+    {
+        try
+        {
+            using var file = File.OpenRead(path);
+            return BitmapDecoder.Create(file, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None).Frames[0].PixelWidth;
+        }
+        catch { return 0; }
     }
 }
 
@@ -687,7 +705,16 @@ public sealed class VideoView : ItemViewBase
 
     protected override void Rebuild()
     {
-        if (Item?.FileFullPath is { } p && File.Exists(p)) _media.Source = new Uri(p);
+        if (Item is null)
+        {
+            // Item guardado: fecha o vídeo e libera o decodificador.
+            _media.Close();
+            _media.Source = null;
+            _playing = false;
+            _play.Opacity = 1;
+            return;
+        }
+        if (Item.FileFullPath is { } p && File.Exists(p)) _media.Source = new Uri(p);
     }
 }
 
@@ -718,7 +745,7 @@ public sealed class FileView : ItemViewBase
 
     protected override void Rebuild()
     {
-        if (Item is null) return;
+        if (Item is null) { _preview.Background = null; return; }
         _name.Text = Item.FileName;
         _ext.Text = Item.FileExtension.Length > 0 ? Item.FileExtension : "ARQ";
         var img = ImageView.Load(Item.PreviewImageFull, 600);
@@ -762,7 +789,7 @@ public sealed class LinkView : ItemViewBase
 
     protected override void Rebuild()
     {
-        if (Item is null) return;
+        if (Item is null) { _image.Background = null; return; }
         _title.Text = string.IsNullOrWhiteSpace(Item.Title) ? Item.Url : Item.Title;
         _site.Text = Item.Site ?? Item.Url;
         var img = ImageView.Load(Item.PreviewImageFull, 700);

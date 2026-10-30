@@ -90,13 +90,6 @@ public static partial class HelpTips
         return null;
     }
 
-    /// <summary>Mostra o balão de um elemento agora (conferência).</summary>
-    internal static void ShowFor(FrameworkElement target)
-    {
-        _target = target;
-        Show(force: true);
-    }
-
     static void Show(bool force = false)
     {
         if (_target is not { ToolTip: string tip } || (!force && !_target.IsMouseOver) || _layer is null || _balloon is null || _text is null) return;

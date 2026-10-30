@@ -98,6 +98,7 @@ public partial class MainWindow : Window
         {
             ThemeService.ApplyToWindow(this);
             GlassGlow.Attach(this);
+            MemoryService.Attach(this);
             // Rolagem horizontal do touchpad (o WPF não entrega essa mensagem sozinho).
             HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
             BoardCursors.SetScale(VisualTreeHelper.GetDpi(this).DpiScaleX);

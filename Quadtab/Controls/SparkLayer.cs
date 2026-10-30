@@ -31,6 +31,7 @@ public sealed class SparkLayer : Canvas
 
     static readonly Random Rng = new();
     static readonly Brush[] Colors = CreateColors();
+    static int _lastColor;
     readonly Burst[] _bursts = Enumerable.Range(0, MaxBursts).Select(_ => new Burst()).ToArray();
     bool _running;
     TimeSpan _last;
@@ -49,13 +50,24 @@ public sealed class SparkLayer : Canvas
     /// <summary>Ligado em Ajustes; o Windows com "efeitos de animação" desligado também desliga.</summary>
     public bool Enabled { get; set; } = true;
 
-    // Variações claras da cor de destaque (azul), com um brilho mais branco no meio.
+    // 15 cores: cada clique sorteia uma, sempre diferente da anterior.
     static Brush[] CreateColors()
     {
-        var list = new[] { "#FF5AB0FF", "#FF8CC8FF", "#FFB8DCFF", "#FF3D9BFF", "#FFE3F1FF" }
+        var list = new[]
+            {
+                "#FFFF453A", "#FFFF7A66", "#FFFF9F0A", "#FFFFD60A", "#FFA4E635",
+                "#FF30D158", "#FF5FE3C0", "#FF40C8E0", "#FF5AC8FA", "#FF0A84FF",
+                "#FF5E5CE6", "#FFBF5AF2", "#FFD6A4FF", "#FFFF6FB1", "#FFFF2D55",
+            }
             .Select(h => (Brush)new SolidColorBrush((Color)ColorConverter.ConvertFromString(h))).ToArray();
         foreach (var b in list) b.Freeze();
         return list;
+    }
+
+    static Brush NextColor()
+    {
+        _lastColor = (_lastColor + 1 + Rng.Next(Colors.Length - 1)) % Colors.Length;
+        return Colors[_lastColor];
     }
 
     public void Fire(Point at)
@@ -67,6 +79,7 @@ public sealed class SparkLayer : Canvas
         burst.Age = 0;
         burst.Count = Rng.Next(8, 13);
         double turn = Rng.NextDouble() * Math.PI * 2;
+        var color = NextColor();
         for (int i = 0; i < MaxSparks; i++)
         {
             var s = burst.Sparks[i];
@@ -75,7 +88,7 @@ public sealed class SparkLayer : Canvas
             s.Speed = 26 + Rng.NextDouble() * 18;   // distância percorrida (px)
             s.Length = 7 + Rng.NextDouble() * 5;
             s.Width = 2.6 + Rng.NextDouble() * 0.9;
-            s.Shape.Stroke = Colors[Rng.Next(Colors.Length)];
+            s.Shape.Stroke = color;
             s.Shape.Visibility = Visibility.Visible;
         }
         Step(burst);

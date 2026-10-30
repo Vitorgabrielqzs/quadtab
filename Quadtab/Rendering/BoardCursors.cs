@@ -52,22 +52,6 @@ public static class BoardCursors
         return c;
     }
 
-    /// <summary>Folha com todos os cursores desenhados (conferência).</summary>
-    internal static BitmapSource Preview(double scale)
-    {
-        var names = new[] { "seta", "mao", "mao-fechada", "texto", "ns", "we", "nwse", "nesw", "todos" };
-        int size = (int)Math.Round(32 * scale);
-        var dv = new DrawingVisual();
-        using (var dc = dv.RenderOpen())
-        {
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0xC8, 0xA0, 0x70)), null, new Rect(0, 0, size * names.Length + 8 * names.Length, size + 8));
-            for (int i = 0; i < names.Length; i++) dc.DrawImage(Draw(names[i], size, out _), new Rect(4 + i * (size + 8), 4, size, size));
-        }
-        var bmp = new RenderTargetBitmap(size * names.Length + 8 * names.Length, size + 8, 96, 96, PixelFormats.Pbgra32);
-        bmp.Render(dv);
-        return bmp;
-    }
-
     static Cursor Create(string name)
     {
         try

@@ -25,22 +25,6 @@ public partial class Sidebar : UserControl
         ThemeService.Changed += () => ApplyThemeIcon(animate: true);
     }
 
-    /// <summary>Primeira linha de quadro (conferência dos balões).</summary>
-    internal FrameworkElement FindFirstRow()
-    {
-        static FrameworkElement? Walk(DependencyObject d)
-        {
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(d); i++)
-            {
-                var c = VisualTreeHelper.GetChild(d, i);
-                if (c is Button { Tag: SideNode { Kind: SideKind.Board } } b) return b;
-                if (Walk(c) is { } r) return r;
-            }
-            return null;
-        }
-        return Walk(this) ?? this;
-    }
-
     MainWindow? Shell => Window.GetWindow(this) as MainWindow;
     LibraryViewModel Lib => App.Library;
 

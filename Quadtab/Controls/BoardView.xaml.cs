@@ -66,6 +66,7 @@ public partial class BoardView : UserControl
     readonly QuadTree<BoardItemViewModel> _index = new();
     readonly Dictionary<BoardItemViewModel, BoardItemContainer> _containers = new();
     readonly List<BoardItemViewModel> _query = [];
+    const int MaxPooled = 24;
     readonly List<BoardItemViewModel> _pending = [];
     readonly Stack<BoardItemContainer>[] _pool = Enumerable.Range(0, 13).Select(_ => new Stack<BoardItemContainer>()).ToArray();
     readonly BitmapCache _itemCache = new(1) { EnableClearType = false, SnapsToDevicePixels = false };
@@ -537,7 +538,12 @@ public partial class BoardView : UserControl
         if (!_containers.Remove(vm, out var c)) return;
         c.Detach();
         c.Visibility = Visibility.Collapsed;
-        _pool[(int)vm.Kind].Push(c);
+        // Mídia guardada solta a imagem ou o vídeo; a reserva de cada tipo tem limite (o resto é descartado).
+        var pool = _pool[(int)vm.Kind];
+        bool keep = pool.Count < MaxPooled;
+        if (!keep || vm.Kind is ItemKind.Image or ItemKind.Video or ItemKind.File or ItemKind.Link) c.Content = null;
+        if (keep) pool.Push(c);
+        else ItemsLayer.Children.Remove(c);
     }
 
     /// <summary>No modo diagrama desligado, os conectores (linhas presas a itens) somem.</summary>

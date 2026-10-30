@@ -248,6 +248,7 @@ public partial class LibraryViewModel : ObservableObject
         if (_meta.TryGetValue(path, out var m) && m.Stamp == stamp) return (m.Board, m.Text);
         var b = StorageService.LoadBoard(path);
         var text = string.Join("\n", b.Itens.Select(i => i.Titulo + " " + i.Texto + " " + i.Descricao));
+        if (_meta.Count >= 32) _meta.Clear(); // é só um atalho: lê do disco de novo quando precisar
         _meta[path] = (stamp, b, text);
         return (b, text);
     }

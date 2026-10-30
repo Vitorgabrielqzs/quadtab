@@ -96,6 +96,7 @@ public sealed partial class PageEditor : Grid
         _editor.TextChanged += (_, _) => { if (!_loading) { _save.Stop(); _save.Start(); } UpdateSuggest(); };
         _editor.SelectionChanged += (_, _) => UpdateSuggest();
         _editor.PreviewKeyDown += OnEditorKey;
+        Behaviors.ListTyping.Attach(_editor, bullets: false); // texto puro: aqui a bolinha continua sendo "- "
         _editor.PreviewMouseLeftButtonDown += OnEditorClick;
         _editor.LostKeyboardFocus += (_, _) => HideSuggest();
 

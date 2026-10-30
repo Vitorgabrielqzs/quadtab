@@ -47,6 +47,7 @@
     <b:EqualsConverter x:Key="Is" />
     <b:VisibleWhen x:Key="Visible" />
     <b:VisibleWhen x:Key="Hidden" Invert="True" />
+    <b:NoteTextConverter x:Key="NoteText" />
     <b:BrushOf x:Key="Brush" />
     <b:ArrowAngle x:Key="ArrowAngle" />
     <b:NonZero x:Key="NonZero" />

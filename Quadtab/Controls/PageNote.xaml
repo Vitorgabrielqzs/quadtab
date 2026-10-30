@@ -33,7 +33,8 @@
                 <TextBlock b:UI.Field="text" Text="{Binding PreviewText}" FontSize="14.5" LineHeight="24"
                            LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{StaticResource PageBodyBrush}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-                <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="multi"
+                         Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
                          FontSize="14.5" Foreground="{StaticResource PageBodyBrush}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>

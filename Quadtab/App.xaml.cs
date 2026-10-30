@@ -65,6 +65,7 @@ public partial class App : Application
         Library.GalleryOpen = false;
         Library.Refresh();
         if (!empty) Library.Visit(path);
+        MemoryService.Request();
     }
 
     /// <summary>Abre uma página no editor ao lado do quadro.</summary>

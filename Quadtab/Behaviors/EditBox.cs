@@ -20,6 +20,16 @@ public static class EditBox
     public static string? GetMode(DependencyObject d) => (string?)d.GetValue(ModeProperty);
     public static void SetMode(DependencyObject d, string? v) => d.SetValue(ModeProperty, v);
 
+    /// <summary>Listas com bolinha e numeradas (notas). No XAML vem antes de Mode: a lista responde ao Shift+Enter primeiro.</summary>
+    public static readonly DependencyProperty ListsProperty = DependencyProperty.RegisterAttached(
+        "Lists", typeof(bool), typeof(EditBox), new PropertyMetadata(false, (d, e) =>
+        {
+            if (d is TextBox tb && e.NewValue is true) ListTyping.Attach(tb, bullets: true);
+        }));
+
+    public static bool GetLists(DependencyObject d) => (bool)d.GetValue(ListsProperty);
+    public static void SetLists(DependencyObject d, bool v) => d.SetValue(ListsProperty, v);
+
     static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not TextBox tb || e.OldValue is not null) return;
