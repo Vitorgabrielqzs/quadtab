@@ -449,6 +449,7 @@ public partial class MainViewModel : ObservableObject
             if (style is { } ns) NewStyle = ns;
         }
         if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox or ItemKind.Block) BeginEdit(vm, EditField.Text);
+        else if (kind == ItemKind.Page) BeginEdit(vm, EditField.Title); // nota nova: já escrevendo o título
         return vm;
     }
 
@@ -862,8 +863,33 @@ public partial class MainViewModel : ObservableObject
     public void EndEdit()
     {
         if (EditingItem is null) return;
-        EditingItem.Editing = EditField.None;
+        var item = EditingItem;
+        item.Editing = EditField.None;
         EditingItem = null;
+        if (item.Kind == ItemKind.Page) SyncNote(item);
+    }
+
+    /// <summary>
+    /// Nota editada direto no quadro: o título vira o nome do arquivo (os links [[ ]] acompanham) e o texto
+    /// é gravado no .md ("# Título" + texto).
+    /// </summary>
+    static void SyncNote(BoardItemViewModel note)
+    {
+        if (note.FileFullPath is not { } path || !File.Exists(path)) return;
+        try
+        {
+            var title = note.Title.Trim();
+            if (title.Length > 0 && !string.Equals(Path.GetFileNameWithoutExtension(path), StorageService.SafeName(title), StringComparison.Ordinal))
+            {
+                App.RenamePage(path, title); // também troca FilePath e Title do item
+                if (note.FileFullPath is not { } renamed) return;
+                path = renamed;
+            }
+            var content = $"# {note.Title}\n\n{note.Text.TrimEnd()}\n";
+            if (StorageService.ReadPage(path) != content) StorageService.WritePage(path, content);
+        }
+        catch (IOException ex) { App.Log(ex); }
+        catch (UnauthorizedAccessException ex) { App.Log(ex); }
     }
 
     /// <summary>Chamado ao soltar um item arrastado: reordena a lista da lateral.</summary>
@@ -923,8 +949,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Atualiza a lista em grupos mexendo só no que mudou (sem recriar as linhas).</summary>
+    /// <summary>Numera os post-its do quadro pela ordem em que foram colados (1, 2, 3...).</summary>
+    void RenumberNotes()
+    {
+        int n = 0;
+        foreach (var it in Items.Where(i => i.Kind == ItemKind.PostIt).OrderBy(i => i.Id)) it.NoteNumber = ++n;
+    }
+
     void RefreshOutline()
     {
+        RenumberNotes();
         var matching = Items.Where(i => i.Matches(_query)).OrderBy(i => i.Y).ThenBy(i => i.X).ToList();
         foreach (var g in OutlineGroups)
         {

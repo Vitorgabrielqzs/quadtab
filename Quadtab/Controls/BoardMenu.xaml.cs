@@ -36,6 +36,7 @@ public partial class BoardMenu : UserControl
             });
             d.DataContext = key;
             _itemDots.Add(d);
+            d.Margin = new Thickness(0, 0, 4.5, 6); // 8 por linha (16 cores, duas linhas)
             ItemDots.Children.Add(d);
         }
         // Linhas: cores próprias, mais vivas (inclui juta, a cor natural do barbante).
@@ -155,7 +156,8 @@ public partial class BoardMenu : UserControl
 
     void OnLineType(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: string t }) ChangeLine(l => l.Tipo = t);
+        // Trocar o traçado volta para a dobra automática (depois dá para arrastar a alça do meio).
+        if (sender is FrameworkElement { Tag: string t }) ChangeLine(l => { l.Tipo = t; l.DobraX = l.DobraY = null; });
     }
 
     // ---------- item ----------

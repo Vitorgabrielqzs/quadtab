@@ -27,7 +27,7 @@
             <StackPanel x:Name="ItemPart">
                 <StackPanel x:Name="ColorPart">
                     <TextBlock Text="Cor" Style="{StaticResource Head}" />
-                    <StackPanel x:Name="ItemDots" Orientation="Horizontal" Margin="12,2,12,10" />
+                    <WrapPanel x:Name="ItemDots" Margin="12,2,6,6" />
                 </StackPanel>
 
                 <StackPanel x:Name="StylePart">

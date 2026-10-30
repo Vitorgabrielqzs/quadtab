@@ -1174,8 +1174,7 @@ public partial class MainWindow : Window
             case Key.F2:
                 if (_vm.Selected is { } edit)
                 {
-                    if (edit is { Kind: ItemKind.Page, FileFullPath: { } page }) OpenPage(page);
-                    else if (edit.Kind != ItemKind.Line) _vm.BeginEdit(edit, EditField.Text); // linhas: sem nome por enquanto
+                    if (edit.Kind != ItemKind.Line) _vm.BeginEdit(edit, EditField.Text); // linhas: sem nome por enquanto
                 }
                 else StartRename();
                 break;

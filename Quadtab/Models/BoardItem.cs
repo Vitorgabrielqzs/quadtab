@@ -143,9 +143,13 @@ public sealed class LineEnd
 public sealed class LineData
 {
     public LineEnd De { get; set; } = new();
-    public LineEnd Para { get; set; } = new() { Ponta = "seta" };
+    public LineEnd Para { get; set; } = new(); // sem seta: só quando o usuário escolhe
     public string Tipo { get; set; } = "reta"; // reta | curva | angulo
     public string Traco { get; set; } = "solido"; // solido | barbante
+
+    /// <summary>Dobra escolhida (curva e ângulo): deslocamento a partir do meio das pontas. Null = automática.</summary>
+    public double? DobraX { get; set; }
+    public double? DobraY { get; set; }
 }
 
 public sealed class InkStroke

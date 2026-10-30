@@ -206,7 +206,12 @@ public partial class BoardItemViewModel : ObservableObject
     public bool HasTitle => Kind is ItemKind.Page or ItemKind.Block || Lined;
 
     public string UpperText => Text.ToUpper(PtBr);
-    public string Number => "#" + (Id % 100).ToString("00");
+    /// <summary>Posição do post-it entre os post-its deste quadro (1, 2, 3...); apagados e outros quadros não contam.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Number))]
+    public partial int NoteNumber { get; set; }
+
+    public string Number => NoteNumber > 0 ? NoteNumber.ToString(CultureInfo.InvariantCulture) : "";
     public string DateLabel => $"{Created.Day} {Months[Created.Month - 1]}";
     public object? Tooltip => string.IsNullOrWhiteSpace(Description) ? null : Description;
 

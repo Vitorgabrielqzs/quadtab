@@ -50,6 +50,15 @@ public static class Palette
         new("menta", "Menta", C(0xA2EDD8), C(0x0B7658)),
         new("verde", "Verde", C(0xC6EC9E), C(0x3B770F)),
         new("branco", "Branco", C(0xFBFAF5), C(0x2A2E39)),
+        // Mais cores para personalizar (papel claro + tinta forte, como as primeiras)
+        new("vermelho", "Vermelho", C(0xFF9E99), C(0xB3261E)),
+        new("pessego", "Pêssego", C(0xFFD3B6), C(0xA35A2A)),
+        new("areia", "Areia", C(0xF3DFB8), C(0x7A5A1E)),
+        new("lima", "Lima", C(0xE2F27A), C(0x6B7A00)),
+        new("turquesa", "Turquesa", C(0x8FE3EF), C(0x0A6E7C)),
+        new("indigo", "Índigo", C(0xB8C3FF), C(0x2F3FA8)),
+        new("lilas", "Lilás", C(0xF2C4F0), C(0x8E2C87)),
+        new("cinza", "Cinza", C(0xDADDE3), C(0x4B5263)),
     ];
 
     /// <summary>Cores dos alfinetes e fitas, escolhidas por id % 5.</summary>

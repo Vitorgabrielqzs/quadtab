@@ -56,7 +56,7 @@ public sealed class Board
             Linha = new LineData
             {
                 De = new LineEnd { Item = from, Lado = fromSide },
-                Para = new LineEnd { Item = to, Lado = toSide, Ponta = "seta" },
+                Para = new LineEnd { Item = to, Lado = toSide },
                 Traco = traco,
             },
         };

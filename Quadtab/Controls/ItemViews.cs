@@ -232,6 +232,63 @@ public sealed class LineView : ItemViewBase
         Canvas.SetTop(_label, Math.Round(mid.Y - _label.ActualHeight / 2));
     }
 
+    /// <summary>Dobra escolhida pelo usuário (deslocamento a partir do meio das pontas), se houver.</summary>
+    static Vector? Bent(LineData l) =>
+        l.Tipo is "curva" or "angulo" && l.DobraX is { } x && l.DobraY is { } y ? new Vector(x, y) : null;
+
+    /// <summary>Ponto de controle de uma curva quadrática que passa pelo meio + dobra (+ balanço do barbante).</summary>
+    static Point CurveControl(Point a, Point b, Vector dobra, Vector sway = default)
+    {
+        var p = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2) + dobra + sway;
+        return new Point(2 * p.X - (a.X + b.X) / 2, 2 * p.Y - (a.Y + b.Y) / 2);
+    }
+
+    /// <summary>Cantos de uma linha em ângulo com a dobra escolhida (o trecho do meio vai até a dobra).</summary>
+    static (Point, Point) Corners(LineData l, Point a, Point b, Vector dobra)
+    {
+        bool horizontal = l.De.Lado is "esquerda" or "direita" || (l.De.Lado is null && Math.Abs(b.X - a.X) > Math.Abs(b.Y - a.Y));
+        if (horizontal)
+        {
+            double mx = (a.X + b.X) / 2 + dobra.X;
+            return (new Point(mx, a.Y), new Point(mx, b.Y));
+        }
+        double my = (a.Y + b.Y) / 2 + dobra.Y;
+        return (new Point(a.X, my), new Point(b.X, my));
+    }
+
+    /// <summary>Área ocupada pela linha (pontas, dobra e cantos), em coordenadas do mundo.</summary>
+    public static Rect Extent(LineData l)
+    {
+        var (a, b) = Ends(l);
+        var r = new Rect(a, b);
+        r.Union(Midpoint(l));
+        if (l.Tipo == "angulo" && Bent(l) is { } v)
+        {
+            var (k1, k2) = Corners(l, a, b, v);
+            r.Union(k1);
+            r.Union(k2);
+        }
+        return r;
+    }
+
+    /// <summary>Meio da linha no mundo: o ponto fixo onde outra linha ou seta pode chegar (e a alça da dobra).</summary>
+    public static Point Midpoint(LineData l)
+    {
+        var (a, b) = Ends(l);
+        if (Bent(l) is { } v)
+        {
+            var mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+            if (l.Tipo == "curva") return mid + v;
+            var (k1, k2) = Corners(l, a, b, v);
+            return new Point((k1.X + k2.X) / 2, (k1.Y + k2.Y) / 2);
+        }
+        if (l.Tipo != "curva") return new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2); // reta e ângulo: o meio entre as pontas
+        double d = Math.Max(40, (b - a).Length / 2.5);
+        var c1 = a + Normal(l.De.Lado, b - a) * d;
+        var c2 = b + Normal(l.Para.Lado, a - b) * d;
+        return new Point((a.X + 3 * c1.X + 3 * c2.X + b.X) / 8, (a.Y + 3 * c1.Y + 3 * c2.Y + b.Y) / 8);
+    }
+
     /// <summary>Pontos da linha em coordenadas do mundo.</summary>
     public static (Point A, Point B) Ends(LineData l) => (new Point(l.De.X, l.De.Y), new Point(l.Para.X, l.Para.Y));
 
@@ -245,8 +302,21 @@ public sealed class LineView : ItemViewBase
         using (var c = g.Open())
         {
             c.BeginFigure(a, false, false);
+            var free = Bent(l);
             switch (l.Tipo)
             {
+                case "curva" when free is { } fv:
+                    // Curva que passa pela dobra escolhida (ponto do meio).
+                    c.QuadraticBezierTo(CurveControl(a, b, fv, bend), b, true, true);
+                    break;
+                case "angulo" when free is { } av:
+                    {
+                        var (k1, k2) = Corners(l, a, b, av);
+                        c.LineTo(k1, true, true);
+                        c.LineTo(k2, true, true);
+                        c.LineTo(b, true, true);
+                        break;
+                    }
                 case "curva":
                     var na = Normal(l.De.Lado, b - a);
                     var nb = Normal(l.Para.Lado, a - b);
@@ -295,8 +365,17 @@ public sealed class LineView : ItemViewBase
         var (a, b) = Ends(l);
         a -= origin; b -= origin;
         var bend = Bend(a, b, sway);
+        var free = Bent(l);
         switch (l.Tipo)
         {
+            case "curva" when free is { } fv:
+                var ctl = CurveControl(a, b, fv, bend);
+                return (a, ctl, b, ctl);
+            case "angulo" when free is { } av:
+                {
+                    var (k1, k2) = Corners(l, a, b, av);
+                    return (a, (k1 - a).Length > 0.5 ? k1 : k2, b, (k2 - b).Length > 0.5 ? k2 : k1);
+                }
             case "curva":
                 double d = Math.Max(40, (b - a).Length / 2.5);
                 return (a, a + Normal(l.De.Lado, b - a) * d + bend / 0.75, b, b + Normal(l.Para.Lado, a - b) * d + bend / 0.75);
@@ -345,8 +424,8 @@ public sealed class LineView : ItemViewBase
         protected override Size MeasureOverride(Size availableSize)
         {
             if (_item?.Line is not { } l) return default;
-            var (a, b) = Ends(l);
-            return new Size(Math.Abs(b.X - a.X) + 2 * Pad, Math.Abs(b.Y - a.Y) + 2 * Pad);
+            var r = Extent(l); // inclui a dobra escolhida
+            return new Size(r.Width + 2 * Pad, r.Height + 2 * Pad);
         }
 
         protected override void OnRender(DrawingContext dc)

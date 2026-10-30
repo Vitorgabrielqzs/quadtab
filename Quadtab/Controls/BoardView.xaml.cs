@@ -271,7 +271,7 @@ public partial class BoardView : UserControl
             case nameof(BoardItemViewModel.Rotation):
                 _index.Set(it, it.Bounds);
                 if (!_containers.ContainsKey(it) && it.Bounds.IntersectsWith(_realizedArea)) Realize(it);
-                if (_drag is null && it.Kind != ItemKind.Line) RefreshLines(it);
+                if (_drag is null) RefreshLines(it);
                 if (it.IsSelected) UpdateAdorner();
                 break;
             case nameof(BoardItemViewModel.IsSelected):
@@ -523,7 +523,7 @@ public partial class BoardView : UserControl
                 item.Height = e.NewSize.Height;
                 _index.Set(item, item.Bounds);
                 if (item.IsSelected) UpdateAdorner();
-                if (item.Kind != ItemKind.Line) RefreshLines(item);
+                RefreshLines(item);
             };
             ItemsLayer.Children.Add(c);
         }
@@ -803,6 +803,17 @@ public partial class BoardView : UserControl
             else if (!item.IsSelected) Vm.SelectWithGroup(item);
 
             if (item.Locked) StartPan(p); // bloqueado não se move: arrastar em cima dele move a câmera
+            else if (!shift && item.Line is { } ln && (ln.De.Item is not null || ln.Para.Item is not null))
+            {
+                // Linha ligada: clicar não a solta dos itens. Curva/ângulo: arrastar muda a dobra.
+                if (ln.Tipo is "curva" or "angulo")
+                {
+                    Vm.Checkpoint();
+                    _handle = new HandleState(item, 11, world);
+                    Surface.CaptureMouse();
+                    Kick();
+                }
+            }
             else if (item.IsSelected) StartDrag(container, p, Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
             e.Handled = true;
             return;
@@ -831,9 +842,6 @@ public partial class BoardView : UserControl
     {
         switch (item.Kind)
         {
-            case ItemKind.Page when item.FileFullPath is { } page:
-                App.OpenPage(page);
-                return;
             case ItemKind.Link when item.Url is { } url:
                 ItemViewBase.OpenExternal(url);
                 return;
@@ -898,7 +906,7 @@ public partial class BoardView : UserControl
             if (e.RightButton != MouseButtonState.Pressed) _rightStart = null;
             else if ((p - rs.Pointer).Length >= 6)
             {
-                _connecting = (rs.Item, NearestSide(rs.Item.Box, _camera.ToWorld(p)));
+                _connecting = (rs.Item, SideFor(rs.Item, _camera.ToWorld(p)));
                 _rightDrag = true;
                 ClearPorts();
                 Surface.CaptureMouse();
@@ -968,7 +976,7 @@ public partial class BoardView : UserControl
             // Pontos de conexão aparecem ao passar o mouse sobre um item.
             var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
             if (item is null && e.OriginalSource is FrameworkElement { Tag: PortTag }) return;
-            if (item is { Kind: not ItemKind.Line } && item.Editing == EditField.None) ShowPorts(item);
+            if (item is not null && item.Editing == EditField.None) ShowPorts(item);
             else ClearPorts();
         }
     }
@@ -1136,12 +1144,14 @@ public partial class BoardView : UserControl
         }
         var it = sel[0];
         var offset = _drag?.Offset ?? default;
-        if (Adorner.Children.Count != (it.Kind == ItemKind.Line ? 2 : 8) || Adorner.Tag != it) BuildAdorner(it);
+        int handles = it.Line is { } lt ? (lt.Tipo is "curva" or "angulo" ? 3 : 2) : 8;
+        if (Adorner.Children.Count != handles || Adorner.Tag != it) BuildAdorner(it);
 
         if (it.Kind == ItemKind.Line && it.Line is { } l)
         {
             Place(Adorner.Children[0], _camera.ToScreen(new Point(l.De.X, l.De.Y) + offset));
             Place(Adorner.Children[1], _camera.ToScreen(new Point(l.Para.X, l.Para.Y) + offset));
+            if (Adorner.Children.Count == 3) Place(Adorner.Children[2], _camera.ToScreen(LineView.Midpoint(l) + offset));
             return;
         }
         var box = it.Box;
@@ -1179,6 +1189,15 @@ public partial class BoardView : UserControl
         {
             Adorner.Children.Add(Dot(new HandleTag(it, 9), 14, Cursors.SizeAll));
             Adorner.Children.Add(Dot(new HandleTag(it, 10), 14, Cursors.SizeAll));
+            // Curva e ângulo: alça da dobra no meio (arrastar muda a forma como quiser).
+            if (it.Line is { Tipo: "curva" or "angulo" })
+            {
+                var bendDot = Dot(new HandleTag(it, 11), 13, Cursors.SizeAll);
+                bendDot.Fill = AccentBrush;
+                bendDot.Stroke = Brushes.White;
+                bendDot.ToolTip = "Arraste para mudar a dobra da linha";
+                Adorner.Children.Add(bendDot);
+            }
             return;
         }
         // Só as 8 alças de tamanho: os itens ficam sempre retos (sem alça de girar).
@@ -1202,6 +1221,16 @@ public partial class BoardView : UserControl
     {
         var it = h.Item;
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (h.Handle == 11 && it.Line is { } bl)
+        {
+            if ((h.Pointer - h.WorldStart).Length * _camera.Zoom < 3) return; // só clicou: a dobra não pula
+            // Dobra: guardada em relação ao meio das pontas (acompanha quando os itens se movem).
+            bl.DobraX = Math.Round(h.Pointer.X - (bl.De.X + bl.Para.X) / 2, 1);
+            bl.DobraY = Math.Round(h.Pointer.Y - (bl.De.Y + bl.Para.Y) / 2, 1);
+            FitLineBox(it);
+            RefreshLines([it], default); // setas presas no meio desta linha acompanham
+            return;
+        }
         if (h.Handle >= 9 && it.Line is { } l)
         {
             var end = h.Handle == 9 ? l.De : l.Para;
@@ -1260,14 +1289,14 @@ public partial class BoardView : UserControl
 
     void EndHandle()
     {
-        if (_handle is { Handle: >= 9 } h && h.Item.Line is { } l)
+        if (_handle is { Handle: 9 or 10 } h && h.Item.Line is { } l)
         {
             // Soltou a ponta em cima de um item: prende nele.
             var end = h.Handle == 9 ? l.De : l.Para;
-            if (ItemAt(_camera.ToScreen(h.Pointer), h.Item) is { } target)
+            if (ItemAt(_camera.ToScreen(h.Pointer), h.Item) is { } target && !DependsOn(target, h.Item))
             {
                 end.Item = target.Id;
-                end.Lado = NearestSide(target.Box, h.Pointer);
+                end.Lado = SideFor(target, h.Pointer);
                 RefreshLines([target], default);
             }
             h.Item.Touch(nameof(BoardItemViewModel.Line));
@@ -1284,6 +1313,22 @@ public partial class BoardView : UserControl
     {
         if (Vm.ReadOnly || _drag is not null || _panning || Tool != BoardTool.Select) return;
         _hoverItem = item;
+        // Linha: um ponto fixo no meio (onde outra seta pode chegar ou de onde pode sair).
+        if (item.Line is { } line)
+        {
+            if (Ports.Tag != item || Ports.Children.Count != 1)
+            {
+                Ports.Children.Clear();
+                Ports.Tag = item;
+                Ports.Children.Add(new Ellipse
+                {
+                    Width = 14, Height = 14, Fill = AccentBrush, Stroke = Brushes.White, StrokeThickness = 2.5,
+                    Tag = new PortTag(item, "meio"), Cursor = Cursors.Cross, ToolTip = "Arraste para ligar outra linha ao meio desta",
+                });
+            }
+            Place(Ports.Children[0], _camera.ToScreen(LineView.Midpoint(line)));
+            return;
+        }
         if (Ports.Tag != item || Ports.Children.Count != 4)
         {
             Ports.Children.Clear();
@@ -1321,6 +1366,28 @@ public partial class BoardView : UserControl
         _ => new Point(b.X + b.Width / 2, b.Y + b.Height / 2),
     };
 
+    /// <summary>Onde uma ponta presa fica: num lado do item ou, se for uma linha, no meio dela.</summary>
+    static Point AnchorOf(BoardItemViewModel item, string? side, Vector offset = default)
+    {
+        if (item.Line is { } l) return LineView.Midpoint(l) + offset;
+        var box = item.Box;
+        box.Offset(offset);
+        return SidePoint(box, side);
+    }
+
+    /// <summary>Lado mais perto do ponto (linha: sempre o meio).</summary>
+    static string SideFor(BoardItemViewModel item, Point p) => item.Line is null ? NearestSide(item.Box, p) : "meio";
+
+    /// <summary>"item" é uma linha presa (direta ou indiretamente) em "line"? Evita ligações em círculo.</summary>
+    bool DependsOn(BoardItemViewModel item, BoardItemViewModel line, int depth = 0)
+    {
+        if (item == line) return true;
+        if (item.Line is not { } l || depth > 8) return false;
+        foreach (var id in new[] { l.De.Item, l.Para.Item })
+            if (id is { } i && Vm.Items.FirstOrDefault(x => x.Id == i) is { } next && DependsOn(next, line, depth + 1)) return true;
+        return false;
+    }
+
     static string NearestSide(Rect b, Point p)
     {
         var sides = new[] { "cima", "direita", "baixo", "esquerda" };
@@ -1330,7 +1397,7 @@ public partial class BoardView : UserControl
     void UpdateConnector(Point p)
     {
         if (_connecting is not { } c) return;
-        var a = _camera.ToScreen(SidePoint(c.From.Box, c.Side));
+        var a = _camera.ToScreen(AnchorOf(c.From, c.Side));
         ConnectorPreview.X1 = a.X; ConnectorPreview.Y1 = a.Y;
         ConnectorPreview.X2 = p.X; ConnectorPreview.Y2 = p.Y;
         ConnectorPreview.Visibility = Visibility.Visible;
@@ -1343,11 +1410,13 @@ public partial class BoardView : UserControl
         ConnectorPreview.Visibility = Visibility.Collapsed;
         ReleaseSurface();
         var world = _camera.ToWorld(p);
-        if ((p - _camera.ToScreen(SidePoint(c.From.Box, c.Side))).Length < 12) return; // só clicou
+        var start = AnchorOf(c.From, c.Side);
+        if ((p - _camera.ToScreen(start)).Length < 12) return; // só clicou
         var target = ItemAt(p, c.From);
+        if (target is not null && DependsOn(target, c.From)) return; // ligação em círculo: não cria
         if (target is null)
         {
-            if (!copyOnEmpty) return;
+            if (!copyOnEmpty || c.From.Line is not null) return; // linha solta no vazio não vira cópia
             // Soltou no vazio: cria uma cópia do item já ligada.
             var copy = Vm.DuplicateMany([c.From], default, select: false)[0];
             var size = c.From.Box.Size;
@@ -1355,14 +1424,14 @@ public partial class BoardView : UserControl
             copy.Y = Math.Round(world.Y - size.Height / 2);
             target = copy;
         }
-        AddConnector(c.From, c.Side, target, NearestSide(target.Box, SidePoint(c.From.Box, c.Side)));
+        AddConnector(c.From, c.Side, target, SideFor(target, start));
     }
 
     /// <summary>Cria uma linha presa a dois itens.</summary>
     public BoardItemViewModel AddConnector(BoardItemViewModel a, string sideA, BoardItemViewModel b, string sideB)
     {
-        var pa = SidePoint(a.Box, sideA);
-        var pb = SidePoint(b.Box, sideB);
+        var pa = AnchorOf(a, sideA);
+        var pb = AnchorOf(b, sideB);
         var line = Vm.AddItem(new BoardItem
         {
             Tipo = "linha",
@@ -1370,7 +1439,7 @@ public partial class BoardView : UserControl
             Linha = new LineData
             {
                 De = new LineEnd { X = pa.X, Y = pa.Y, Item = a.Id, Lado = sideA },
-                Para = new LineEnd { X = pb.X, Y = pb.Y, Item = b.Id, Lado = sideB, Ponta = "seta" },
+                Para = new LineEnd { X = pb.X, Y = pb.Y, Item = b.Id, Lado = sideB }, // sem seta até o usuário pedir
                 Tipo = DrawSettings.LineType,
             },
             Fixacao = "nenhuma",
@@ -1384,8 +1453,9 @@ public partial class BoardView : UserControl
     static void FitLineBox(BoardItemViewModel line)
     {
         if (line.Line is not { } l) return;
-        line.X = Math.Min(l.De.X, l.Para.X) - LineView.Pad;
-        line.Y = Math.Min(l.De.Y, l.Para.Y) - LineView.Pad;
+        var r = LineView.Extent(l); // pontas e dobra
+        line.X = r.X - LineView.Pad;
+        line.Y = r.Y - LineView.Pad;
         line.Touch(nameof(BoardItemViewModel.Line));
     }
 
@@ -1396,8 +1466,7 @@ public partial class BoardView : UserControl
     static Dictionary<int, BoardItemViewModel> MovedById(IEnumerable<BoardItemViewModel> moved)
     {
         var ids = new Dictionary<int, BoardItemViewModel>();
-        foreach (var m in moved)
-            if (m.Kind != ItemKind.Line) ids[m.Id] = m;
+        foreach (var m in moved) ids[m.Id] = m; // linhas também: setas presas no meio delas acompanham
         return ids;
     }
 
@@ -1406,23 +1475,26 @@ public partial class BoardView : UserControl
     void RefreshLines(IEnumerable<BoardItemViewModel> moved, Vector offset) => RefreshLines(MovedById(moved), offset);
 
     /// <summary>Linhas presas aos itens que se moveram acompanham (offset = deslocamento do arraste).</summary>
-    void RefreshLines(Dictionary<int, BoardItemViewModel> ids, Vector offset)
+    void RefreshLines(Dictionary<int, BoardItemViewModel> ids, Vector offset, int depth = 0)
     {
-        if (_vm is null || ids.Count == 0) return;
+        if (_vm is null || ids.Count == 0 || depth > 6) return;
+        Dictionary<int, BoardItemViewModel>? moved = null;
         foreach (var line in Lines)
         {
-            if (line.Line is not { } l) continue;
-            bool changed = MoveEnd(l.De, ids, offset) | MoveEnd(l.Para, ids, offset);
-            if (changed) FitLineBox(line);
+            if (line.Line is not { } l || ids.ContainsKey(line.Id) && offset != default) continue;
+            bool changed = MoveEnd(line, l.De, ids, offset) | MoveEnd(line, l.Para, ids, offset);
+            if (!changed) continue;
+            FitLineBox(line);
+            (moved ??= [])[line.Id] = line;
         }
+        // Em cascata: as setas presas no meio das linhas que acabaram de mudar também acompanham.
+        if (moved is not null) RefreshLines(moved, default, depth + 1);
     }
 
-    static bool MoveEnd(LineEnd end, Dictionary<int, BoardItemViewModel> ids, Vector offset)
+    static bool MoveEnd(BoardItemViewModel line, LineEnd end, Dictionary<int, BoardItemViewModel> ids, Vector offset)
     {
-        if (end.Item is not { } id || !ids.TryGetValue(id, out var target)) return false;
-        var box = target.Box;
-        box.Offset(offset);
-        var p = SidePoint(box, end.Lado);
+        if (end.Item is not { } id || id == line.Id || !ids.TryGetValue(id, out var target)) return false;
+        var p = AnchorOf(target, end.Lado, offset);
         if (p.X == end.X && p.Y == end.Y) return false;
         end.X = p.X;
         end.Y = p.Y;
@@ -1435,7 +1507,7 @@ public partial class BoardView : UserControl
         VisualTreeHelper.HitTest(ItemsLayer, null, r =>
         {
             var it = Tree.FindAncestor<BoardItemContainer>(r.VisualHit)?.Item;
-            if (it is not null && it != except && it.Kind != ItemKind.Line) { found = it; return HitTestResultBehavior.Stop; }
+            if (it is not null && it != except) { found = it; return HitTestResultBehavior.Stop; }
             return HitTestResultBehavior.Continue;
         }, new PointHitTestParameters(Surface.TranslatePoint(screen, ItemsLayer)));
         return found;
@@ -1520,8 +1592,8 @@ public partial class BoardView : UserControl
         var b = ItemAt(p, a);
         var data = new LineData
         {
-            De = new LineEnd { X = start.X, Y = start.Y, Item = a?.Id, Lado = a is null ? null : NearestSide(a.Box, start) },
-            Para = new LineEnd { X = end.X, Y = end.Y, Item = b?.Id, Lado = b is null ? null : NearestSide(b.Box, end), Ponta = DrawSettings.ArrowEnd ? "seta" : "nenhuma" },
+            De = new LineEnd { X = start.X, Y = start.Y, Item = a?.Id, Lado = a is null ? null : SideFor(a, start) },
+            Para = new LineEnd { X = end.X, Y = end.Y, Item = b?.Id, Lado = b is null ? null : SideFor(b, end), Ponta = DrawSettings.ArrowEnd ? "seta" : "nenhuma" },
             Tipo = DrawSettings.LineType,
         };
         var line = Vm.AddItem(new BoardItem { Tipo = "linha", Linha = data, Fixacao = "nenhuma" });
@@ -1578,7 +1650,7 @@ public partial class BoardView : UserControl
         _rightStart = null;
         if (Vm.ReadOnly || Tool != BoardTool.Select || _drag is not null || _connecting is not null) return;
         var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
-        if (item is { Kind: not ItemKind.Line } && item.Editing == EditField.None) _rightStart = (item, e.GetPosition(Surface));
+        if (item is not null && item.Editing == EditField.None) _rightStart = (item, e.GetPosition(Surface));
     }
 
     void OnRightUp(object sender, MouseButtonEventArgs e)
@@ -1700,7 +1772,7 @@ public static class DrawSettings
     public static Color Color = Color.FromRgb(0x1D, 0x21, 0x30);
     public static double Thickness = 4;
     public static string LineType = "reta";
-    public static bool ArrowEnd = true;
+    public static bool ArrowEnd; // linhas nascem sem seta; o "Seta" da bandeja liga
 
     public static InkStroke Stroke(BoardTool tool, List<double> points) => new()
     {

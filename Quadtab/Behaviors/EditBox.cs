@@ -7,10 +7,9 @@ namespace Quadtab.Behaviors;
 
 /// <summary>
 /// Campo de edição dos itens. Modos:
-/// "note"  = Enter termina, Shift+Enter quebra a linha (texto do post-it);
-/// "line"  = Enter termina (títulos e texto solto);
-/// "multi" = Enter quebra a linha (corpo de nota, bloco e pautado). Esc sempre termina.
-/// Tab: do título passa para o texto de baixo; no texto, termina.
+/// "note" e "multi" = Enter termina, Shift+Enter quebra a linha (post-it, corpo de nota, bloco e pautado);
+/// "line" = Enter termina (títulos e texto solto). Esc sempre termina.
+/// Tab: alterna entre título e texto (itens sem título: termina).
 /// Ao aparecer, ganha foco com o texto selecionado; ao perder o foco, termina a edição.
 /// </summary>
 public static class EditBox
@@ -52,18 +51,20 @@ public static class EditBox
             e.Handled = true;
             return;
         }
-        // Tab: do título vai para o texto de baixo; no texto, termina a edição (sai do item).
+        // Tab alterna entre título e texto (notas, blocos, pautados); item sem título: termina a edição.
         if (e.Key == Key.Tab)
         {
             var vm = App.ViewModel;
-            if (vm.EditingItem is { Editing: ViewModels.EditField.Title } item) vm.BeginEdit(item, ViewModels.EditField.Text);
+            if (vm.EditingItem is { } item && item.HasTitle)
+                vm.BeginEdit(item, item.Editing == ViewModels.EditField.Title ? ViewModels.EditField.Text : ViewModels.EditField.Title);
             else vm.EndEdit();
             e.Handled = true;
             return;
         }
-        if (e.Key != Key.Enter || mode == "multi") return;
+        if (e.Key != Key.Enter) return;
 
-        if (mode == "note" && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        // Enter sai da edição em qualquer campo; Shift+Enter quebra a linha (menos nos de uma linha só).
+        if (mode != "line" && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             int i = tb.SelectionStart;
             tb.Text = tb.Text.Remove(i, tb.SelectionLength).Insert(i, "\n");

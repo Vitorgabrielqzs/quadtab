@@ -9,7 +9,7 @@ namespace Quadtab.Controls;
 /// <summary>
 /// Moldura do quadro, uma diferente para cada modelo: Liso = faixa suave azulada (clara ou grafite,
 /// segue o tema); Cortiça = madeira clara; Branco = alumínio; Lousa = madeira escura; Pontilhado = papel.
-/// Na tela cheia (FullBleed) a moldura continua, mas vai até a borda da tela (sem cantos nem sombra de fora).
+/// Na tela cheia (FullBleed) a moldura continua, com os cantos arredondados, até a borda da tela (sem sombra de fora).
 /// </summary>
 public sealed class FrameBackground : FrameworkElement
 {
@@ -43,7 +43,8 @@ public sealed class FrameBackground : FrameworkElement
     {
         var box = new Rect(RenderSize);
         if (box.Width <= 1 || box.Height <= 1) return;
-        double radius = FullBleed ? 0 : Model == BoardModel.Liso ? 26 : 32;
+        // Cantos sempre arredondados, também na tela cheia (só a sombra de fora some).
+        double radius = Model == BoardModel.Liso ? 26 : 32;
         if (Model == BoardModel.Liso)
         {
             // Faixa de 10 px com um degradê suave e um fio de luz por dentro (moldura própria do Liso).
