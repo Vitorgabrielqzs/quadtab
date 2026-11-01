@@ -63,8 +63,9 @@ public sealed class TextBoxView : ItemViewBase
         Children.Add(text);
 
         var edit = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Margin = new Thickness(6, 2, 6, 2) };
+        EditBox.SetLists(edit, true);
         EditBox.SetMode(edit, "multi");
-        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged });
+        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
         BindFont(edit);
         edit.SetBinding(TextBox.ForegroundProperty, "TextBrush");
         edit.SetBinding(TextBox.TextAlignmentProperty, "TextAlign");
@@ -111,7 +112,7 @@ public sealed class ShapeView : ItemViewBase
 
         var text = new TextBlock { Margin = new Thickness(16), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         UI.SetField(text, "text");
-        text.SetBinding(TextBlock.TextProperty, "Text");
+        text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Text") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
         TextBoxView.BindFont(text);
         text.SetBinding(TextBlock.ForegroundProperty, "TextBrush");
         text.SetBinding(TextBlock.TextAlignmentProperty, "TextAlign");
@@ -119,9 +120,11 @@ public sealed class ShapeView : ItemViewBase
         Children.Add(text);
 
         var edit = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Margin = new Thickness(14), VerticalAlignment = VerticalAlignment.Center };
+        EditBox.SetLists(edit, true);
         EditBox.SetMode(edit, "note");
-        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged });
+        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
         TextBoxView.BindFont(edit);
+        edit.SetBinding(TextBox.ForegroundProperty, "TextBrush");
         edit.SetBinding(TextBox.TextAlignmentProperty, "TextAlign");
         edit.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Visible") });
         Children.Add(edit);
@@ -808,15 +811,64 @@ public sealed class TableView : ItemViewBase
 {
     readonly Grid _grid = new();
     readonly Border _frame = new() { CornerRadius = new CornerRadius(10), ClipToBounds = true };
+    readonly Border _addColumn, _addRow;
     (int R, int C)? _editing;
+
+    /// <summary>Marca o + da tabela: o quadro recebe o clique e põe a coluna ou a linha.</summary>
+    public sealed record AddTag(TableView View, BoardItemViewModel Table, bool Row);
 
     public TableView()
     {
         Children.Add(new Shadow { Layers = "0 10 22 -10 #4D321900", CornerRadius = 10 });
         _frame.Child = _grid;
         Children.Add(_frame);
+        // Faixas invisíveis nas bordas direita (coluna) e de baixo (linha): o + só aparece com o mouse nelas.
+        // Entram 6 px na tabela e saem 36 px, para o mouse chegar nelas vindo de dentro.
+        Children.Add(_addColumn = AddZone("Clique ou arraste: para fora põe colunas, para dentro tira", new Thickness(0, 0, -36, 0), new Thickness(14, 0, 0, 0), Cursors.SizeWE));
+        _addColumn.Width = 42;
+        _addColumn.HorizontalAlignment = HorizontalAlignment.Right;
+        Children.Add(_addRow = AddZone("Clique ou arraste: para fora põe linhas, para dentro tira", new Thickness(0, 0, 0, -36), new Thickness(0, 14, 0, 0), Cursors.SizeNS));
+        _addRow.Height = 42;
+        _addRow.VerticalAlignment = VerticalAlignment.Bottom;
         SetBinding(WidthProperty, "ItemWidth");
         SetBinding(OpacityProperty, "ItemOpacity");
+    }
+
+    Border AddZone(string tip, Thickness margin, Thickness inner, Cursor cursor)
+    {
+        var plus = new Border
+        {
+            Margin = inner,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Hidden,
+            Child = new Icon { Data = UiKit.G("IcPlus"), Size = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        plus.SetResourceReference(Border.BorderBrushProperty, "Ink3Brush");
+        plus.SetResourceReference(Border.BackgroundProperty, "FillBrush");
+        plus.SetResourceReference(TextElement.ForegroundProperty, "Ink2Brush");
+        var zone = new Border { Margin = margin, Background = Brushes.Transparent, ToolTip = tip, Cursor = cursor, Child = plus };
+        zone.MouseEnter += (_, _) => plus.Visibility = Visibility.Visible;
+        zone.MouseLeave += (_, _) => { if (_held != zone) plus.Visibility = Visibility.Hidden; };
+        return zone;
+    }
+
+    Border? _held;
+
+    /// <summary>Durante o arraste o + continua à mostra, mesmo com o mouse longe.</summary>
+    public void HoldAdd(bool row, bool hold)
+    {
+        var zone = row ? _addRow : _addColumn;
+        _held = hold ? zone : null;
+        zone.Child.Visibility = hold || zone.IsMouseOver ? Visibility.Visible : Visibility.Hidden;
+    }
+
+    /// <summary>Esconde as faixas do + (exportar, somente visualização).</summary>
+    public void ShowAdd(bool show)
+    {
+        var v = show && App.ViewModel?.ReadOnly != true ? Visibility.Visible : Visibility.Collapsed;
+        _addColumn.Visibility = _addRow.Visibility = v;
     }
 
     protected override void OnItem(string p)
@@ -830,6 +882,9 @@ public sealed class TableView : ItemViewBase
         _grid.RowDefinitions.Clear();
         _grid.ColumnDefinitions.Clear();
         if (Item?.Table is not { Count: > 0 } t) return;
+        _addColumn.Tag = new AddTag(this, Item, Row: false);
+        _addRow.Tag = new AddTag(this, Item, Row: true);
+        ShowAdd(true);
         int cols = t.Max(r => r.Count);
         _frame.Background = Item.FillBrush;
         _frame.BorderBrush = Item.StrokeBrush;
@@ -851,21 +906,23 @@ public sealed class TableView : ItemViewBase
                 };
                 if (_editing == (r, c))
                 {
-                    var tb = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Text = text, AcceptsReturn = false };
+                    var tb = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Text = ListText.ToDisplay(text), AcceptsReturn = false };
+                    EditBox.SetLists(tb, true);
                     TextBoxView.BindFont(tb);
                     int rr = r, cc = c;
+                    string Saved() => ListText.ToMarkdown(tb.Text);
                     tb.Loaded += (_, _) => { tb.Focus(); tb.SelectAll(); };
                     tb.KeyDown += (_, e) =>
                     {
-                        if (e.Key is Key.Enter or Key.Escape) { Commit(rr, cc, tb.Text, null); e.Handled = true; }
-                        else if (e.Key == Key.Tab) { Commit(rr, cc, tb.Text, cc + 1 < cols ? (rr, cc + 1) : rr + 1 < t.Count ? (rr + 1, 0) : null); e.Handled = true; }
+                        if (e.Key is Key.Enter or Key.Escape) { Commit(rr, cc, Saved(), null); e.Handled = true; }
+                        else if (e.Key == Key.Tab) { Commit(rr, cc, Saved(), cc + 1 < cols ? (rr, cc + 1) : (rr + 1, 0)); e.Handled = true; } // Tab na última célula cria outra linha
                     };
-                    tb.LostKeyboardFocus += (_, _) => { if (_editing == (rr, cc)) Commit(rr, cc, tb.Text, null); };
+                    tb.LostKeyboardFocus += (_, _) => { if (_editing == (rr, cc)) Commit(rr, cc, Saved(), null); };
                     cell.Child = tb;
                 }
                 else
                 {
-                    var tbk = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontWeight = r == 0 ? FontWeights.SemiBold : FontWeights.Normal };
+                    var tbk = new TextBlock { Text = ListText.ToDisplay(text), TextWrapping = TextWrapping.Wrap, FontWeight = r == 0 ? FontWeights.SemiBold : FontWeights.Normal };
                     TextBoxView.BindFont(tbk);
                     if (r == 0) tbk.FontWeight = FontWeights.SemiBold;
                     tbk.SetBinding(TextBlock.ForegroundProperty, "TextBrush");
@@ -901,6 +958,7 @@ public sealed class TableView : ItemViewBase
         var copy = t.Select(row => row.ToList()).ToList();
         while (copy[r].Count <= c) copy[r].Add("");
         copy[r][c] = text;
+        if (next is { } n && n.Item1 >= copy.Count) copy.Add(Enumerable.Repeat("", copy.Max(row => row.Count)).ToList());
         Item.Table = copy;
         if (next is null) Rebuild();
     }

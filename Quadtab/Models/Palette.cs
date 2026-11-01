@@ -7,7 +7,7 @@ public enum ItemKind { PostIt, Page, Block, Text, TextBox, Shape, Line, Drawing,
 public enum Fastening { Pin, Tape, None }
 
 /// <summary>Fundo do quadro. Liso = estilo Canvas do Obsidian (fundo do tema com pontinhos).</summary>
-public enum BoardModel { Cortica, Branco, Lousa, Pontilhado, Liso }
+public enum BoardModel { Cortica, Branco, Lousa, Pontilhado, Liso, Escuro }
 
 /// <summary>Estilo escolhido no menu para os próximos post-its.</summary>
 public enum NoteStyle { Pin, Tape, None, Lined }
@@ -15,20 +15,32 @@ public enum NoteStyle { Pin, Tape, None, Lined }
 /// <summary>Uma cor de post-it: papel (fundo) e tinta (detalhes).</summary>
 public sealed class NoteColor
 {
-    public NoteColor(string key, string name, Color paper, Color ink)
+    public NoteColor(string key, string name, Color paper, Color ink, bool strong = false)
     {
         Key = key;
         Name = name;
         Paper = paper;
-        Ink = ink;
+        IsStrong = strong;
+        IsDark = Luminance(paper) < 0.3;
+        Ink = strong ? (IsDark ? Colors.White : Color.FromRgb(0x1A, 0x1A, 0x1A)) : ink;
         PaperBrush = Freeze(new SolidColorBrush(paper));
-        InkBrush = Freeze(new SolidColorBrush(ink));
-        // Bloco de vidro: cor forte (75% da cor com um pouco de branco), quase opaca, para o texto preto ler bem.
-        BlockFill = Freeze(new SolidColorBrush(Rendering.ColorMath.Mix(paper, 0.75, Color.FromArgb(200, 255, 255, 255))));
+        InkBrush = Freeze(new SolidColorBrush(Ink));
+        // Bloco de vidro: 75% da cor com um pouco de branco, para o texto preto ler bem. Cor forte fica sólida.
+        BlockFill = Freeze(new SolidColorBrush(strong ? paper : Rendering.ColorMath.Mix(paper, 0.75, Color.FromArgb(200, 255, 255, 255))));
+    }
+
+    static double Luminance(Color c)
+    {
+        static double L(byte v) { double s = v / 255.0; return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4); }
+        return 0.2126 * L(c.R) + 0.7152 * L(c.G) + 0.0722 * L(c.B);
     }
 
     public string Key { get; }
     public string Name { get; }
+    /// <summary>Cor forte de verdade: sólida, sem misturar com branco.</summary>
+    public bool IsStrong { get; }
+    /// <summary>Fundo escuro: o texto dentro do item fica branco.</summary>
+    public bool IsDark { get; }
     public Color Paper { get; }
     public Color Ink { get; }
     public SolidColorBrush PaperBrush { get; }
@@ -67,6 +79,17 @@ public static class Palette
         new("salvia", "Sálvia", C(0xCFE3CF), C(0x3E6B45)),
         new("oliva", "Oliva", C(0xD5DDA8), C(0x55611D)),
         new("chocolate", "Chocolate", C(0xE3C7B0), C(0x6B3F22)),
+        // Cores fortes (a tinta sai do contraste: branca nas escuras)
+        new("forte-vermelho", "Vermelho forte", C(0xFF0000), default, true),
+        new("forte-laranja", "Laranja forte", C(0xFF6D00), default, true),
+        new("forte-amarelo", "Amarelo forte", C(0xFFD600), default, true),
+        new("forte-verde", "Verde forte", C(0x00A83E), default, true),
+        new("forte-azul", "Azul forte", C(0x0050FF), default, true),
+        new("forte-roxo", "Roxo forte", C(0x7B00E0), default, true),
+        new("forte-rosa", "Rosa forte", C(0xFF0080), default, true),
+        new("forte-marrom", "Marrom forte", C(0x5D3200), default, true),
+        new("preto", "Preto", C(0x000000), default, true),
+        new("branco-puro", "Branco puro", C(0xFFFFFF), default, true),
     ];
 
     /// <summary>Cores dos alfinetes e fitas, escolhidas por id % 5.</summary>
@@ -88,10 +111,11 @@ public static class Palette
         (BoardModel.Lousa, "lousa", "Lousa"),
         (BoardModel.Pontilhado, "pontilhado", "Pontilhado"),
         (BoardModel.Liso, "liso", "Liso"),
+        (BoardModel.Escuro, "escuro", "Escuro"),
     ];
 
     /// <summary>Ordem em que os modelos aparecem nas bandejas (Liso primeiro).</summary>
-    public static readonly BoardModel[] ModelOrder = [BoardModel.Liso, BoardModel.Cortica, BoardModel.Branco, BoardModel.Lousa, BoardModel.Pontilhado];
+    public static readonly BoardModel[] ModelOrder = [BoardModel.Liso, BoardModel.Cortica, BoardModel.Branco, BoardModel.Escuro, BoardModel.Lousa, BoardModel.Pontilhado];
 
     public static string ModelName(BoardModel m) => Models[(int)m].Name;
     public static string ModelKey(BoardModel m) => Models[(int)m].Key;

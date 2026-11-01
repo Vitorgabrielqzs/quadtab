@@ -10,7 +10,7 @@
         Background="{DynamicResource BgBrush}"
         Foreground="{DynamicResource InkBrush}"
         FontFamily="{StaticResource Inter}" FontSize="14"
-        TextOptions.TextFormattingMode="Ideal">
+        TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True">
 
     <!-- Sem a moldura padrão do Windows (continua redimensionável e com cantos arredondados) -->
     <WindowChrome.WindowChrome>
@@ -30,8 +30,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- ================= BARRA LATERAL ================= -->
-            <!-- Fixa: ocupa a coluna. Escondida: flutua por cima do quadro, deixando ~12 px à mostra na borda
-                 esquerda (como o dock da bandeja), e desliza para fora quando o mouse chega perto. -->
+            <!-- Aberta: ocupa a coluna. Escondida: sai da tela por inteiro; o botão da barra de cima a traz de volta. -->
             <c:GlassPanel x:Name="SidebarGlass" Width="292" HorizontalAlignment="Left" CornerRadius="32" Padding="14,18,14,14"
                           ClipContent="True" Panel.ZIndex="40">
                 <c:GlassPanel.RenderTransform>
@@ -59,6 +58,13 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+
+                        <!-- Reabre a barra lateral: só aparece com ela escondida -->
+                        <c:GlassPanel x:Name="SideCap" ShadowLayers="" CornerRadius="21" Padding="4" Visibility="Collapsed">
+                            <Button Style="{StaticResource BarButton}" Command="{Binding ToggleSidebarCommand}" ToolTip="Mostra a barra lateral">
+                                <c:Icon Size="15" Data="{StaticResource IcSidebar}" />
+                            </Button>
+                        </c:GlassPanel>
 
                         <!-- Mostrar / ocultar o título grande: sempre à mostra (a seta gira) -->
                         <c:GlassPanel x:Name="TitleCap" ShadowLayers="" Grid.Column="3" CornerRadius="21" Padding="4" Margin="10,0,0,0">
@@ -177,7 +183,7 @@
                             </StackPanel>
                         </c:GlassPanel>
 
-                        <!-- Dock da bandeja: fica um pouquinho à mostra na borda da cortiça; sobe quando o mouse chega perto -->
+                        <!-- Botão da bandeja, sempre à mostra: clicar abre a bandeja completa -->
                         <Grid Margin="16" ClipToBounds="True" Panel.ZIndex="30">
                             <c:Tray x:Name="Tray" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10" />
                         </Grid>

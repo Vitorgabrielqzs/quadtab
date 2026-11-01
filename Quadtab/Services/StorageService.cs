@@ -442,6 +442,9 @@ public static class StorageService
 
     public static void WritePage(string path, string text) => WriteText(path, text);
 
+    /// <summary>Título da nota: o "# Título" do arquivo ou, sem ele, o nome do arquivo.</summary>
+    public static string PageTitle(string path) => Rendering.Markdown.TitleOf(ReadPage(path)) ?? Path.GetFileNameWithoutExtension(path);
+
     public static string CreatePage(string name, string content = "", string folderRel = "")
     {
         var folder = Path.Combine(PagesDir, folderRel);
@@ -459,6 +462,29 @@ public static class StorageService
         File.Move(path, target);
         NotifyLibrary();
         return target;
+    }
+
+    /// <summary>Apaga a nota de vez, sem passar pela lixeira.</summary>
+    public static void DeletePage(string path)
+    {
+        File.Delete(path);
+        State.Recentes.Remove(Rel(path));
+        State.Fixados.Remove(Rel(path));
+        State.Favoritos.Remove(Rel(path));
+        SaveState();
+        NotifyLibrary();
+    }
+
+    /// <summary>Algum outro quadro usa este arquivo de nota (ex.: quadro duplicado)?</summary>
+    public static bool NoteUsedElsewhere(string path, string board)
+    {
+        var full = Path.GetFullPath(path);
+        foreach (var b in BoardFiles())
+        {
+            if (string.Equals(b, board, StringComparison.OrdinalIgnoreCase)) continue;
+            if (LoadBoard(b).Itens.Any(it => it is { Tipo: "pagina", Arquivo: { } rel } && string.Equals(Path.GetFullPath(Full(rel)), full, StringComparison.OrdinalIgnoreCase))) return true;
+        }
+        return false;
     }
 
     public static void TrashPage(string path)

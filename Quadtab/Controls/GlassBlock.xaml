@@ -4,28 +4,28 @@
              xmlns:c="clr-namespace:Quadtab.Controls"
              xmlns:b="clr-namespace:Quadtab.Behaviors"
              Width="{Binding ItemWidth}" FontFamily="{StaticResource Inter}">
-    <!-- Bloco: painel de vidro colado no quadro. O texto é sempre escuro, nos dois temas. -->
+    <!-- Bloco: painel de vidro colado no quadro. O texto é escuro nos dois temas, ou branco se a cor do bloco for escura. -->
     <c:GlassPanel x:Name="Glass" CornerRadius="24" Padding="20,22,20,18" Background="{Binding BlockFill}" MinHeight="{Binding ItemMinHeight}"
                   ShadowLayers="0 18 30 -12 #80321900, 0 2 6 0 #2E321900"
                   RimColor="#F2FFFFFF" Rim2Color="#80FFFFFF" GlowAlpha="0.4">
-        <StackPanel>
+        <StackPanel Margin="{Binding AttachMargin}">
             <!-- Título livre: vazio, mostra "Título" bem clarinho; 2 cliques escrevem -->
             <Grid>
                 <TextBlock x:Name="Placeholder" b:UI.Field="title" Text="Título" FontSize="16.5" FontWeight="Bold"
-                           Foreground="{StaticResource BlockInkBrush}" Opacity="0.35" />
+                           Foreground="{Binding BlockInkColor}" Opacity="0.35" />
                 <c:TrackedText b:UI.Field="title" Text="{Binding Title}" FontSize="16.5" FontWeight="Bold"
-                               Tracking="-0.02" Foreground="{StaticResource BlockInkBrush}"
+                               Tracking="-0.02" Foreground="{Binding BlockInkColor}"
                                Visibility="{Binding IsEditingTitle, Converter={StaticResource Hidden}}" />
                 <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="line" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="16.5" FontWeight="Bold" Foreground="{StaticResource BlockInkBrush}" TextWrapping="NoWrap"
+                         FontSize="16.5" FontWeight="Bold" Foreground="{Binding BlockInkColor}" TextWrapping="NoWrap"
                          Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
             </Grid>
             <Grid Margin="0,8,0,0">
-                <TextBlock b:UI.Field="text" Text="{Binding Text}" FontSize="14" LineHeight="23.8"
-                           LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{StaticResource BlockBodyBrush}"
+                <TextBlock b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" FontSize="14" LineHeight="23.8"
+                           LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{Binding BlockBodyColor}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-                <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="14" Foreground="{StaticResource BlockBodyBrush}"
+                <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
+                         FontSize="14" Foreground="{Binding BlockBodyColor}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>
         </StackPanel>

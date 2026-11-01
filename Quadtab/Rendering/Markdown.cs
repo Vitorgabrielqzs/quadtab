@@ -21,6 +21,16 @@ public static partial class Markdown
         return string.Join("\n", lines).TrimEnd();
     }
 
+    /// <summary>O título da nota é o "# Título" da primeira linha (o nome do arquivo pode ter número; o título, não).</summary>
+    public static string? TitleOf(string md)
+    {
+        var first = md.Replace("\r", "").Split('\n')[0];
+        return Heading().Match(first) is { Success: true } m && m.Groups[1].Length == 1 ? m.Groups[2].Value.Trim() : null;
+    }
+
+    /// <summary>O texto da nota com este título na primeira linha.</summary>
+    public static string WithTitle(string md, string title) => $"# {title}\n\n{StripTitle(md, title)}\n";
+
     /// <summary>Texto curto para a folha de caderno no quadro (sem marcações).</summary>
     public static string ToPlainPreview(string md, int maxLines)
     {

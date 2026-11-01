@@ -125,7 +125,7 @@ public sealed partial class PageEditor : Grid
         Flush();
         Path = path;
         _loading = true;
-        _title.Text = System.IO.Path.GetFileNameWithoutExtension(path);
+        _title.Text = StorageService.PageTitle(path);
         _editor.Text = Markdown.StripTitle(StorageService.ReadPage(path), _title.Text);
         _loading = false;
         Visibility = Visibility.Visible;
@@ -157,7 +157,8 @@ public sealed partial class PageEditor : Grid
     {
         if (Path is null) return;
         var name = _title.Text.Trim();
-        if (name.Length == 0 || name == System.IO.Path.GetFileNameWithoutExtension(Path)) { _title.Text = System.IO.Path.GetFileNameWithoutExtension(Path); return; }
+        var saved = StorageService.PageTitle(Path);
+        if (name.Length == 0 || name == saved) { _title.Text = saved; return; }
         Flush();
         App.RenamePage(Path, name);
     }
@@ -167,7 +168,7 @@ public sealed partial class PageEditor : Grid
     {
         if (!string.Equals(Path, oldPath, StringComparison.OrdinalIgnoreCase)) return;
         Path = newPath;
-        _title.Text = System.IO.Path.GetFileNameWithoutExtension(newPath);
+        _title.Text = StorageService.PageTitle(newPath);
         if (!Editing) Render();
     }
 

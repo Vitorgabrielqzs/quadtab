@@ -136,7 +136,7 @@ public partial class Sidebar : UserControl
             new("Renomear", "IcPencil", () => Lib.StartRename(n.Path)) { Tip = "Muda o nome da nota e dos links para ela · F2" },
             new(n.IsPinned ? "Desafixar" : "Fixar", "IcPin", () => Lib.TogglePinned(n.Path)) { Tip = n.PinTip },
             new(n.IsImportant ? "Tirar dos importantes" : "Marcar como importante", "IcStar", () => Lib.ToggleFavorite(n.Path)) { Tip = n.StarTip },
-            new("Excluir", "IcTrash", () => StorageService.TrashPage(n.Path), Danger: true, Separator: true) { Tip = "Manda a nota para a lixeira" },
+            new("Excluir", "IcTrash", () => App.DeleteNote(n.Path), Danger: true, Separator: true) { Tip = "Apaga a nota de vez" },
         ],
         SideKind.Folder =>
         [

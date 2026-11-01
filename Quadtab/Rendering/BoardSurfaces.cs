@@ -73,6 +73,7 @@ public static class BoardSurfaces
         BoardModel.Lousa => Color.FromRgb(0x2E, 0x4A, 0x3A),
         BoardModel.Pontilhado => Color.FromRgb(0xF7, 0xF7, 0xF3),
         BoardModel.Liso => Colors.White,
+        BoardModel.Escuro => Color.FromRgb(0x0F, 0x10, 0x13),
         _ => CorkAverage,
     };
 

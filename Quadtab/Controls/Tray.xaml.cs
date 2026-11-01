@@ -33,6 +33,9 @@ public partial class Tray : UserControl
     /// <summary>Clicou em "Forma": abrir a biblioteca de formas para escolher.</summary>
     public event Action? ShapesRequested;
 
+    /// <summary>Clicou em "Título": criar no centro da área visível.</summary>
+    public event Action? TitleRequested;
+
     /// <summary>Soltou em algum ponto (relativo a Root). Retorna se criou.</summary>
     public event Func<TrayPayload, Point, bool>? DropRequested;
 
@@ -58,12 +61,8 @@ public partial class Tray : UserControl
         Draggable(CardText, new TrayPayload(ItemKind.Text, "branco"));
         Draggable(CardBox, new TrayPayload(ItemKind.TextBox, "branco"));
         CardShape.Click += (_, _) => ShapesRequested?.Invoke();
+        CardTitle.Click += (_, _) => TitleRequested?.Invoke();
         Draggable(CardTable, new TrayPayload(ItemKind.Table, "branco"));
-
-        QuickPage.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Page, "branco"));
-        QuickText.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Text, "branco"));
-        QuickBlock.Click += (_, _) => AddRequested?.Invoke(new TrayPayload(ItemKind.Block, "branco"));
-        QuickShape.Click += (_, _) => ShapesRequested?.Invoke();
 
         DataContextChanged += (_, e) =>
         {
@@ -87,7 +86,6 @@ public partial class Tray : UserControl
     void SetOpen(bool open, bool animate)
     {
         double dur = animate ? 1 : 0;
-        Anim.To(ChevronTurn, RotateTransform.AngleProperty, open ? 180 : 0, 0.45 * dur, Anim.Item);
         if (open)
         {
             BuildModels();

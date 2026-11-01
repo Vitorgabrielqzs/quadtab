@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace Quadtab.Behaviors;
@@ -37,6 +39,20 @@ public static class EditBox
         tb.IsVisibleChanged += (_, _) =>
         {
             if (!tb.IsVisible) return;
+            if (tb.DataContext is ViewModels.BoardItemViewModel { HasDarkBackground: var dark })
+            {
+                // Item de cor escura: o campo não clareia o fundo, para o texto branco continuar legível.
+                if (dark)
+                {
+                    tb.Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+                    tb.CaretBrush = Brushes.White;
+                }
+                else
+                {
+                    tb.ClearValue(Control.BackgroundProperty);
+                    tb.ClearValue(TextBoxBase.CaretBrushProperty);
+                }
+            }
             tb.Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
             {
                 tb.Focus();

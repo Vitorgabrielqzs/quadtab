@@ -104,6 +104,10 @@ public sealed class AppState
     public string CorPostit { get; set; } = "amarelo";
     public string EstiloPostit { get; set; } = "Pin";
 
+    /// <summary>Últimas cores usadas no menu dos itens e no das linhas (a mais recente primeiro).</summary>
+    public List<string> CoresRecentes { get; set; } = [];
+    public List<string> CoresLinhaRecentes { get; set; } = [];
+
     /// <summary>Molde do último item criado: 2 cliques com o botão direito colocam outro igual.</summary>
     public BoardItem? UltimoItem { get; set; }
 }

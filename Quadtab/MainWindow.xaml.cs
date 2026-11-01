@@ -20,15 +20,12 @@ namespace Quadtab;
 public partial class MainWindow : Window
 {
     const double SidebarWidth = 292;
-    const double SidePeek = 12;        // escondida, a lateral deixa ~12 px à mostra (como o dock)
-    const double DockHiddenY = 52;     // escondido, o dock deixa ~14 px à mostra
 
     MainViewModel _vm;
     readonly BackdropBlobs _glassBackdrop = new() { Saturation = 1.9 };
     readonly ScaleTransform MenuScale = new();
     readonly ScaleTransform ActionsScale = new();
     readonly ScaleTransform TrayScale = new();
-    readonly TranslateTransform TrayShift = new() { Y = DockHiddenY }; // dock quase todo abaixo da borda
     bool _menuOpen, _actionsOpen, _ctxOpen, _ctxWasOpen;
     // Botão que abriu o menu de ações: clicar nele de novo fecha (em vez de reabrir).
     FrameworkElement? _actionsOwner, _ownerJustClosed;
@@ -60,7 +57,6 @@ public partial class MainWindow : Window
         Menu.RenderTransform = MenuScale;
         Actions.RenderTransform = ActionsScale;
         CtxTray.RenderTransform = TrayScale;
-        Tray.RenderTransform = TrayShift;
         Board.MenuRequested += (item, p) => ShowMenu(item, default, p);
         Board.TrayRequested += ShowContextTray;
         Menu.CloseRequested += CloseMenu;
@@ -74,6 +70,8 @@ public partial class MainWindow : Window
         // Post-it da bandeja: última cor e último estilo usados.
         Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Tray.ShapesRequested += ShowShapePicker;
+        Tray.TitleRequested += () => _vm.AddTitle(Board.ViewCenter.X, Board.ViewCenter.Y);
+        Menu.FontsRequested += ShowFonts;
         Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Editor.CloseRequested += ClosePage;
         Editor.ExpandChanged += ApplyEditorLayout;
@@ -89,8 +87,6 @@ public partial class MainWindow : Window
         {
             if (e.PropertyName == nameof(LibraryViewModel.GalleryOpen)) ApplyEmptyState(_emptyMode);
         };
-        _sideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _sideTimer.Tick += (_, _) => { _sideTimer.Stop(); if (!KeepSide()) RevealSide(false); };
         ApplySidebar(animate: false);
 
 
@@ -115,12 +111,8 @@ public partial class MainWindow : Window
         }), handledEventsToo: true);
         DpiChanged += (_, e) => BoardCursors.SetScale(e.NewDpi.DpiScaleX);
 
-        _dockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.8) };
-        _dockTimer.Tick += (_, _) => { _dockTimer.Stop(); if (!KeepDock()) SetDock(false); };
         _zoomTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
         _zoomTimer.Tick += (_, _) => { _zoomTimer.Stop(); HideZoom(); };
-        PreviewMouseMove += (_, e) => { DockNear(e.GetPosition(BoardArea)); SideNear(e.GetPosition(WindowRoot)); };
-        MouseLeave += (_, _) => { DockNear(new Point(-1, -1)); SideNear(new Point(9999, -1)); };
         _itemsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _itemsTimer.Tick += (_, _) => { _itemsTimer.Stop(); App.Library.RefreshCurrent(); };
 
@@ -260,8 +252,6 @@ public partial class MainWindow : Window
             case nameof(MainViewModel.BoardSearch): _hit = -1; UpdateSearchCount(); break;
             case nameof(MainViewModel.Zoom): ShowZoom(); break;
             case nameof(MainViewModel.TrayOpen):
-                if (_vm.TrayOpen) SetDock(true);
-                else if (!KeepDock()) { _dockTimer.Stop(); _dockTimer.Start(); }
                 var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.6) };
                 t.Tick += (_, _) => { t.Stop(); RefreshBoardGlass(); };
                 t.Start();
@@ -325,66 +315,21 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
-    // ---------- barra lateral: fixa ou escondida na borda (aparece como o dock da bandeja) ----------
+    // ---------- barra lateral: fixa ou fora da tela (o botão da barra de cima a traz de volta) ----------
 
-    readonly DispatcherTimer _sideTimer;
-    bool _sideRevealed;
-
-    /// <summary>A lateral ocupa a coluna dela (fixa) ou flutua escondida sobre o quadro.</summary>
-    bool SideDocked => _vm.SidebarOpen; // fixa também na tela cheia, até clicar para esconder
-
-    double SideMargin => _fullscreen ? 0 : 14;
-
-    /// <summary>Fixa ↔ escondida: o quadro cresce ou encolhe com a mola da lateral.</summary>
+    /// <summary>Aberta ↔ escondida: o quadro cresce ou encolhe com a mola da lateral; escondida, some por inteiro.</summary>
     void ApplySidebar(bool animate)
     {
+        bool shown = _vm.SidebarOpen; // vale também na tela cheia
         double k = animate ? 1 : 0;
-        Anim.To(MainColumn, MarginProperty, new Thickness(SideDocked ? SidebarWidth + 14 : 0, 0, 0, 0), 0.45 * k, Anim.Sidebar);
-        _sideTimer.Stop();
-        // Quem acabou de esconder com o mouse em cima: ela só sai quando o mouse se afastar.
-        _sideRevealed = !SideDocked && SidebarGlass.IsMouseOver;
-        MoveSide(animate);
-    }
-
-    void MoveSide(bool animate)
-    {
-        bool shown = SideDocked || _sideRevealed;
-        double x = shown ? 0 : -(SidebarWidth + SideMargin - SidePeek);
+        Anim.To(MainColumn, MarginProperty, new Thickness(shown ? SidebarWidth + 14 : 0, 0, 0, 0), 0.45 * k, Anim.Sidebar);
+        double x = shown ? 0 : -(SidebarWidth + 80); // 80: a sombra do vidro também sai da tela
         if (animate) Anim.To(SideShift, TranslateTransform.XProperty, x, shown ? 0.55 : 0.4, shown ? Anim.Panel : Anim.Ease);
         else Anim.Set(SideShift, TranslateTransform.XProperty, x);
-        SidebarView.IsHitTestVisible = shown;
-        Anim.To(SidebarView, OpacityProperty, shown ? 1 : 0, animate ? (shown ? 0.3 : 0.2) : 0, Anim.Ease);
-        // Flutuando sobre o quadro, o vidro fica mais denso; o fundo desfocado acompanha o deslize.
-        SidebarGlass.SetResourceReference(GlassPanel.BackgroundProperty, SideDocked ? "GlassBrush" : "Glass2Brush");
+        SidebarGlass.IsHitTestVisible = shown;
+        SideCap.Visibility = shown ? Visibility.Collapsed : Visibility.Visible;
         TrackGlass(0.6);
     }
-
-    void RevealSide(bool show)
-    {
-        if (show == _sideRevealed || SideDocked) return;
-        _sideRevealed = show;
-        if (!show) _sideHeld = false;
-        MoveSide(animate: true);
-    }
-
-    /// <summary>Escondida: aparece com o mouse a menos de ~30 px da borda esquerda e some 1 s depois que ele sai.</summary>
-    void SideNear(Point p)
-    {
-        if (SideDocked || _presenting) return;
-        bool near = (p.X >= 0 && p.Y >= 0 && p.X <= SideMargin + SidePeek + 16) || (_sideRevealed && SidebarGlass.IsMouseOver);
-        if (near || KeepSide())
-        {
-            _sideTimer.Stop();
-            if (near) RevealSide(true);
-        }
-        else if (_sideRevealed && !_sideTimer.IsEnabled) _sideTimer.Start();
-    }
-
-    // Clicou dentro dela enquanto aberta: fica na tela até clicar fora (no quadro, na barra...).
-    bool _sideHeld;
-
-    // Segura aberta: clicada, com um menu dela aberto, renomeando algo nela ou com o mouse em cima.
-    bool KeepSide() => _sideHeld || _actionsOpen || (Keyboard.FocusedElement is TextBox tb && SidebarView.IsAncestorOf(tb)) || (_sideRevealed && SidebarGlass.IsMouseOver);
 
     // ---------- título grande (recolhe em 0.5 s) e renomear ----------
 
@@ -618,12 +563,6 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        // Lateral escondida e aberta pelo mouse: um clique nela a prende; um clique fora solta (e ela sai em 1 s).
-        if (_sideRevealed && !SideDocked)
-        {
-            _sideHeld = SidebarGlass.IsMouseOver;
-            if (!_sideHeld && !_sideTimer.IsEnabled) _sideTimer.Start();
-        }
         // Renomeando (na lateral ou no título) e clicou fora do campo: termina e grava o nome.
         if (Keyboard.FocusedElement is TextBox renaming && !renaming.IsMouseOver
             && (renaming == TitleEditor || SidebarView.IsAncestorOf(renaming)))
@@ -636,18 +575,34 @@ public partial class MainWindow : Window
         if (_ctxOpen && !CtxTray.IsMouseOver) CloseContextTray();
     }
 
+    /// <summary>Caligrafias do título e do texto solto; a atual fica marcada.</summary>
+    void ShowFonts(BoardItemViewModel item, Point at)
+    {
+        var current = item.Style.Fonte == "Nunito" ? "Inter" : item.Style.Fonte;
+        ShowActions(at, BoardItemViewModel.TitleFonts.Select(f =>
+            new ActionItem((f.Font == current ? "✓ " : "") + f.Name, "IcText", () => _vm.SetFont(item, f.Font)) { Tip = "Muda a letra para " + f.Font }).ToList());
+    }
+
     /// <summary>Opções extras de um item: agrupar, alinhar, camadas, estilo e descrição.</summary>
     void ShowItemExtras(BoardItemViewModel item, Point at)
     {
         var sel = _vm.SelectedItems.ToList();
-        var list = new List<ActionItem>
+        var list = new List<ActionItem>();
+        if (item.Kind == ItemKind.Table)
+        {
+            list.Add(new("Adicionar linha", "IcPlus", () => _vm.TableAdd(item, row: true)) { Tip = "Põe uma linha no fim da tabela" });
+            list.Add(new("Adicionar coluna", "IcPlus", () => _vm.TableAdd(item, row: false)) { Tip = "Põe uma coluna no fim da tabela" });
+            list.Add(new("Remover última linha", "IcTrash", () => _vm.TableRemove(item, row: true)) { Tip = "Apaga a última linha · Ctrl+Z desfaz" });
+            list.Add(new("Remover última coluna", "IcTrash", () => _vm.TableRemove(item, row: false)) { Tip = "Apaga a última coluna · Ctrl+Z desfaz" });
+        }
+        list.AddRange(new ActionItem[]
         {
             new("Para o topo", "IcChevronUp", () => _vm.ToTop(_vm.SelectedItems.ToList())),
             new("Para o fundo", "IcChevronDown", () => _vm.ToBottom(_vm.SelectedItems.ToList())),
             new("Uma camada para frente", "IcArrowUp", () => _vm.Step(item, +1)),
             new("Uma camada para trás", "IcArrowDown", () => _vm.Step(item, -1)),
             new("Copiar estilo", "IcBrush", () => _vm.CopyStyle(item), Separator: true),
-        };
+        });
         if (_vm.HasStyleClip) list.Add(new("Colar estilo", "IcBrush", _vm.PasteStyle));
         if (sel.Count >= 2)
         {
@@ -825,14 +780,21 @@ public partial class MainWindow : Window
         if (dlg.ShowDialog(this) != true) return;
         var sel = _vm.SelectedItems.ToList();
         _vm.ClearSelection(); // o contorno azul não vai para a imagem
-        var image = Board.RenderRegion(items, 2, onlyThese: selectionOnly);
-        _vm.SelectMany(sel, add: false);
         try
         {
+            // O título do mapa é o maior texto solto; o quadro todo abre a partir do centro dele.
+            var title = selectionOnly ? null : items.Where(i => i.Kind == ItemKind.Text).OrderByDescending(i => i.FontSizeValue).ThenBy(i => i.Y).FirstOrDefault();
+            var image = Board.RenderRegion(items, 4, onlyThese: selectionOnly, centerOn: title); // 4×: dá para aproximar e ler na imagem
             if (dlg.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) ExportService.SavePdf(image, dlg.FileName);
             else ExportService.SavePng(image, dlg.FileName);
         }
         catch (IOException) { MessageBox.Show(this, "Não foi possível salvar o arquivo (ele está aberto em outro programa?).", "Quadtab"); }
+        catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
+        {
+            App.Log(ex);
+            MessageBox.Show(this, "Não há memória para uma imagem deste tamanho.", "Quadtab");
+        }
+        finally { _vm.SelectMany(sel, add: false); }
     }
 
     /// <summary>Miniatura do quadro para a galeria (sem seleção).</summary>
@@ -879,6 +841,12 @@ public partial class MainWindow : Window
         BoardColumn.Width = expanded ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         Editor.Margin = new Thickness(expanded ? 0 : 14, 0, 0, 0);
         BoardArea.Visibility = expanded ? Visibility.Hidden : Visibility.Visible;
+    }
+
+    public void PageDeleted(string path)
+    {
+        if (string.Equals(Editor.Path, path, StringComparison.OrdinalIgnoreCase)) ClosePage();
+        App.Library.Refresh();
     }
 
     public void PageRenamed(string oldPath, string newPath)
@@ -969,36 +937,6 @@ public partial class MainWindow : Window
         {
             if (!_zoomShown) ZoomPanel.Visibility = Visibility.Collapsed;
         });
-    }
-
-    // ---------- dock da bandeja que se esconde ----------
-
-    readonly DispatcherTimer _dockTimer;
-    bool _dockShown;
-
-    /// <summary>Mouse a menos de 80 px da borda de baixo, na faixa central do quadro.</summary>
-    void DockNear(Point p)
-    {
-        double w = BoardArea.ActualWidth, h = BoardArea.ActualHeight;
-        bool near = p.X >= 0 && p.Y <= h && h - p.Y <= 80 && Math.Abs(p.X - w / 2) <= Math.Max(260, Tray.DockGlass.ActualWidth / 2 + 80) && !_presenting;
-        if (near || KeepDock())
-        {
-            _dockTimer.Stop();
-            if (near) SetDock(true);
-        }
-        else if (_dockShown && !_dockTimer.IsEnabled) _dockTimer.Start();
-    }
-
-    /// <summary>O dock fica à mostra: bandeja aberta, algo sendo arrastado dela ou mouse em cima.</summary>
-    bool KeepDock() => _vm.TrayOpen || Tray.IsDragging || Tray.IsMouseOver;
-
-    void SetDock(bool show)
-    {
-        if (show == _dockShown) return;
-        _dockShown = show;
-        if (show) Anim.To(TrayShift, TranslateTransform.YProperty, 0, 0.55, Anim.Panel);
-        else Anim.To(TrayShift, TranslateTransform.YProperty, DockHiddenY, 0.4, Anim.Ease);
-        TrackGlass(0.6);
     }
 
     // Enquanto o dock anda, o fundo desfocado do vidro acompanha a cada quadro.

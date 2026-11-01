@@ -27,6 +27,14 @@ public sealed class BoardItem
     /// <summary>Itens com o mesmo número de grupo se movem e se selecionam juntos.</summary>
     public int? Grupo { get; set; }
 
+    /// <summary>Item anexado a outro: id do principal e o lado ("cima" ou "baixo"). Segue o principal ao mover.</summary>
+    public int? AnexadoA { get; set; }
+    public string? AnexoLado { get; set; }
+
+    /// <summary>Tamanho do item antes de anexar: volta a ele quando sai do principal.</summary>
+    public double? AnexoLargura { get; set; }
+    public double? AnexoAltura { get; set; }
+
     /// <summary>Texto alternativo, aparece ao passar o mouse.</summary>
     public string? Descricao { get; set; }
 

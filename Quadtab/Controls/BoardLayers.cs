@@ -8,7 +8,7 @@ namespace Quadtab.Controls;
 
 /// <summary>
 /// Moldura do quadro, uma diferente para cada modelo: Liso = faixa suave azulada (clara ou grafite,
-/// segue o tema); Cortiça = madeira clara; Branco = alumínio; Lousa = madeira escura; Pontilhado = papel.
+/// segue o tema); Escuro = a mesma faixa, sempre grafite; Cortiça = madeira clara; Branco = alumínio; Lousa = madeira escura; Pontilhado = papel.
 /// Na tela cheia (FullBleed) a moldura continua, com os cantos arredondados, até a borda da tela (sem sombra de fora).
 /// </summary>
 public sealed class FrameBackground : FrameworkElement
@@ -35,7 +35,7 @@ public sealed class FrameBackground : FrameworkElement
     public bool FullBleed { get => (bool)GetValue(FullBleedProperty); set => SetValue(FullBleedProperty, value); }
 
     /// <summary>Margem entre a moldura e a superfície (o "batente" da moldura).</summary>
-    public static double Inset(BoardModel m, bool fullBleed) => m == BoardModel.Liso ? 10 : 16;
+    public static double Inset(BoardModel m, bool fullBleed) => m is BoardModel.Liso or BoardModel.Escuro ? 10 : 16;
 
     protected override Size MeasureOverride(Size availableSize) => default;
 
@@ -44,11 +44,11 @@ public sealed class FrameBackground : FrameworkElement
         var box = new Rect(RenderSize);
         if (box.Width <= 1 || box.Height <= 1) return;
         // Cantos sempre arredondados, também na tela cheia (só a sombra de fora some).
-        double radius = Model == BoardModel.Liso ? 26 : 32;
-        if (Model == BoardModel.Liso)
+        double radius = Model is BoardModel.Liso or BoardModel.Escuro ? 26 : 32;
+        if (Model is BoardModel.Liso or BoardModel.Escuro)
         {
             // Faixa de 10 px com um degradê suave e um fio de luz por dentro (moldura própria do Liso).
-            bool dark = ThemeService.IsDark;
+            bool dark = Model == BoardModel.Escuro || ThemeService.IsDark;
             if (!FullBleed) ShadowCache.Draw(dc, box, radius, dark ? LisoShadowDark : LisoShadow);
             var band = dark
                 ? new[] { (H(0x30333D), 0.0), (H(0x24262E), 0.55), (H(0x1B1D23), 1.0) }
@@ -104,13 +104,13 @@ public sealed class FrameBackground : FrameworkElement
 }
 
 /// <summary>
-/// Superfície do quadro infinito: liso com pontinhos (segue o tema), cortiça, branco, lousa ou pontilhado.
+/// Superfície do quadro infinito: liso com grade quadrada (segue o tema), cortiça, branco, escuro, lousa ou pontilhado.
 /// A textura se repete sem fim e acompanha a câmera: só a posição do pincel muda a cada quadro.
 /// </summary>
 public sealed class SurfaceBackground : FrameworkElement
 {
-    const double DotTile = 22;
     const double GridTile = 32;
+    public static readonly Color EscuroColor = Palette.C(0x0F1013);
 
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(
         nameof(Model), typeof(BoardModel), typeof(SurfaceBackground), new FrameworkPropertyMetadata(BoardModel.Liso, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -131,6 +131,7 @@ public sealed class SurfaceBackground : FrameworkElement
     static readonly Brush WhiteBase = ColorMath.Brush(Palette.C(0xF9FAFB));
     static readonly Brush ChalkBase = ColorMath.Brush(Palette.C(0x2C4838));
     static readonly Brush DotBase = ColorMath.Brush(Palette.C(0xFBFBF8));
+    static readonly Brush EscuroBase = ColorMath.Brush(EscuroColor);
 
     static readonly Dictionary<BoardModel, ShadowLayer[]> Insets = new()
     {
@@ -138,6 +139,7 @@ public sealed class SurfaceBackground : FrameworkElement
         [BoardModel.Branco] = ShadowSpec.Parse("inset 0 2 10 0 #1F1E283C, inset 0 0 0 1 #141E283C"),
         [BoardModel.Lousa] = ShadowSpec.Parse("inset 0 4 18 0 #80000000"),
         [BoardModel.Pontilhado] = ShadowSpec.Parse("inset 0 2 10 0 #1F28281E, inset 0 0 0 1 #1428281E"),
+        [BoardModel.Escuro] = ShadowSpec.Parse("inset 0 0 0 1 #1FFFFFFF"),
     };
 
     // Cópias que podem mudar (as originais são congeladas e compartilhadas).
@@ -145,7 +147,6 @@ public sealed class SurfaceBackground : FrameworkElement
     readonly DrawingBrush _paperDots = BoardSurfaces.DotsBrush.Clone();
     readonly DrawingBrush _gridDark = GridBrush(Color.FromArgb(34, 0, 0, 0));
     readonly DrawingBrush _gridLight = GridBrush(Color.FromArgb(40, 255, 255, 255));
-    DrawingBrush _dots = DotBrush(Colors.Gray);
     DrawingBrush _grid = GridBrush(Colors.Gray);
     (double X, double Y, double Zoom) _camera = (0, 0, 1);
 
@@ -158,19 +159,15 @@ public sealed class SurfaceBackground : FrameworkElement
 
     void OnTheme()
     {
-        var dot = (Color)FindResource("CanvasDotColor");
-        _dots = DotBrush(dot);
-        _grid = GridBrush(Color.FromArgb((byte)(dot.A * 0.6), dot.R, dot.G, dot.B));
+        _grid = GridBrush((Color)FindResource("CanvasDotColor"));
         SetCamera(_camera.X, _camera.Y, _camera.Zoom);
         InvalidateVisual();
     }
 
-    static DrawingBrush DotBrush(Color c) => Tile(new GeometryDrawing(new SolidColorBrush(c), null,
-        new EllipseGeometry(new Point(DotTile / 2, DotTile / 2), 1.15, 1.15)), DotTile);
-
+    // A linha fica a 0,5 da borda da peça: em cima de 0 ela seria cortada pela metade.
     static DrawingBrush GridBrush(Color c) => Tile(new GeometryDrawing(null, new Pen(new SolidColorBrush(c), 1), new GeometryGroup
     {
-        Children = { new LineGeometry(new Point(0, 0), new Point(GridTile, 0)), new LineGeometry(new Point(0, 0), new Point(0, GridTile)) },
+        Children = { new LineGeometry(new Point(0, 0.5), new Point(GridTile, 0.5)), new LineGeometry(new Point(0.5, 0), new Point(0.5, GridTile)) },
     }), GridTile);
 
     static DrawingBrush Tile(Drawing d, double size) => new(d)
@@ -191,7 +188,6 @@ public sealed class SurfaceBackground : FrameworkElement
         _camera = (ox, oy, zoom);
         Place(_cork, BoardSurfaces.CorkTile, ox, oy, zoom);
         Place(_paperDots, BoardSurfaces.DotTile, ox, oy, zoom);
-        Place(_dots, DotTile, ox, oy, zoom);
         Place(_grid, GridTile, ox, oy, zoom);
         Place(_gridDark, GridTile, ox, oy, zoom);
         Place(_gridLight, GridTile, ox, oy, zoom);
@@ -220,7 +216,7 @@ public sealed class SurfaceBackground : FrameworkElement
         if (Model == BoardModel.Liso)
         {
             dc.DrawRectangle((Brush)FindResource("CanvasBrush"), null, box);
-            dc.DrawRectangle(ShowGrid ? _grid : _dots, null, box);
+            dc.DrawRectangle(_grid, null, box);
             dc.Pop();
             var edge = new Pen((Brush)FindResource("CanvasEdgeBrush"), 1);
             if (edge.CanFreeze) edge.Freeze(); // durante a troca de tema o pincel está animando
@@ -238,6 +234,10 @@ public sealed class SurfaceBackground : FrameworkElement
                     (Color.FromArgb(242, 255, 255, 255), 0), (Color.FromArgb(153, 232, 236, 242), .55), (Color.FromArgb(230, 255, 255, 255), 1)), null, box);
                 break;
 
+            case BoardModel.Escuro:
+                dc.DrawRectangle(EscuroBase, null, box);
+                break;
+
             case BoardModel.Lousa:
                 dc.DrawRectangle(ChalkBase, null, box);
                 Smudge(dc, box, .22, .30, .45, .32, 18); // manchas de giz
@@ -253,9 +253,46 @@ public sealed class SurfaceBackground : FrameworkElement
                 dc.DrawRectangle(_cork, null, box);
                 break;
         }
-        if (ShowGrid) dc.DrawRectangle(Model == BoardModel.Lousa ? _gridLight : _gridDark, null, box);
+        if (ShowGrid) dc.DrawRectangle(Model is BoardModel.Lousa or BoardModel.Escuro ? _gridLight : _gridDark, null, box);
         dc.Pop();
         ShadowCache.Draw(dc, box, r, Insets[Model]);
+    }
+
+    /// <summary>Exportar: pinta o fundo do modelo numa área do mundo, com as texturas presas à origem como no quadro.</summary>
+    public void PaintWorld(DrawingContext dc, Rect area)
+    {
+        static T World<T>(T b, double size) where T : TileBrush
+        {
+            var c = (T)b.Clone();
+            c.Viewport = new Rect(0, 0, size, size);
+            return c;
+        }
+        switch (Model)
+        {
+            case BoardModel.Liso:
+                dc.DrawRectangle((Brush)FindResource("CanvasBrush"), null, area);
+                dc.DrawRectangle(World(_grid, GridTile), null, area);
+                return;
+            case BoardModel.Branco:
+                dc.DrawRectangle(WhiteBase, null, area);
+                break;
+            case BoardModel.Escuro:
+                dc.DrawRectangle(EscuroBase, null, area);
+                break;
+            case BoardModel.Lousa:
+                dc.DrawRectangle(ChalkBase, null, area);
+                Smudge(dc, area, .22, .30, .45, .32, 18);
+                Smudge(dc, area, .78, .72, .38, .28, 15);
+                break;
+            case BoardModel.Pontilhado:
+                dc.DrawRectangle(DotBase, null, area);
+                dc.DrawRectangle(World(_paperDots, BoardSurfaces.DotTile), null, area);
+                break;
+            default:
+                dc.DrawRectangle(World(_cork, BoardSurfaces.CorkTile), null, area);
+                break;
+        }
+        if (ShowGrid) dc.DrawRectangle(World(Model is BoardModel.Lousa or BoardModel.Escuro ? _gridLight : _gridDark, GridTile), null, area);
     }
 
     static void Smudge(DrawingContext dc, Rect area, double cx, double cy, double rx, double ry, byte alpha)

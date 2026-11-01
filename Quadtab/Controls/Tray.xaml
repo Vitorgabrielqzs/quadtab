@@ -91,40 +91,25 @@
                             <TextBlock Text="Tabela" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                    <Button x:Name="CardTitle" Grid.Column="6" Grid.Row="1" Style="{StaticResource TrayCard}" ToolTip="Cola um título; cor e caligrafia ficam no botão direito" Margin="0,10,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <c:Icon Data="{StaticResource IcTitle}" Size="22" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" />
+                            <TextBlock Text="Título" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </Grid>
             </StackPanel>
         </c:GlassPanel>
 
-        <!-- Dock (sempre visível) -->
-        <c:GlassPanel x:Name="Dock" CornerRadius="28" Height="56" Padding="6" HorizontalAlignment="Center"
-                     >
-            <StackPanel Orientation="Horizontal">
-                <Button Style="{StaticResource DockButton}" Margin="0,0,1,0" ToolTip="Abre a bandeja de elementos"
-                        Command="{Binding ToggleTrayCommand}">
-                    <StackPanel Orientation="Horizontal">
-                        <c:Icon Data="{StaticResource IcTray}" />
-                        <TextBlock Text="Bandeja" Margin="7,0" VerticalAlignment="Center" />
-                        <c:Icon x:Name="Chevron" Data="{StaticResource IcChevronUp}" RenderTransformOrigin="0.5,0.5">
-                            <c:Icon.RenderTransform>
-                                <RotateTransform x:Name="ChevronTurn" />
-                            </c:Icon.RenderTransform>
-                        </c:Icon>
-                    </StackPanel>
-                </Button>
-                <Border Width="1" Height="24" Background="{DynamicResource SepBrush}" Margin="4,0" />
-                <Button x:Name="QuickPage" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola uma nota no centro do quadro">
-                    <c:Icon Data="{StaticResource IcPage}" />
-                </Button>
-                <Button x:Name="QuickText" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um texto no centro do quadro">
-                    <c:Icon Data="{StaticResource IcText}" />
-                </Button>
-                <Button x:Name="QuickBlock" Style="{StaticResource DockButton}" Margin="1,0" ToolTip="Cola um bloco no centro do quadro">
-                    <c:Icon Data="{StaticResource IcBlock}" />
-                </Button>
-                <Button x:Name="QuickShape" Style="{StaticResource DockButton}" Margin="1,0,0,0" ToolTip="Abre a biblioteca de formas para escolher uma">
-                    <c:Icon Data="{StaticResource IcShapes}" />
-                </Button>
-            </StackPanel>
+        <!-- Botão da bandeja (sempre visível) -->
+        <c:GlassPanel x:Name="Dock" CornerRadius="28" Height="56" Padding="6" HorizontalAlignment="Center">
+            <Button Style="{StaticResource DockButton}" ToolTip="Abre ou fecha a bandeja de elementos"
+                    Command="{Binding ToggleTrayCommand}">
+                <StackPanel Orientation="Horizontal">
+                    <c:Icon Data="{StaticResource IcTray}" />
+                    <TextBlock Text="Bandeja" Margin="7,0,2,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
         </c:GlassPanel>
     </StackPanel>
 </UserControl>

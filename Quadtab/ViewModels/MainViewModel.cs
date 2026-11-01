@@ -75,10 +75,18 @@ public partial class MainViewModel : ObservableObject
         OutlineOpen = StorageService.State.Abertos.Contains("noquadro");
         foreach (var s in board.Cenas) Scenes.Add(s);
 
+        var usedNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool separated = false;
         foreach (var m in board.Itens)
         {
             MigrateNote(m);
             MigratePage(m);
+            // Cópias antigas dividiam o mesmo arquivo (e o mesmo título): cada nota ganha o seu.
+            if (m.Tipo == "pagina" && m.Arquivo is { } file && !usedNotes.Add(file))
+            {
+                SeparateNote(m);
+                separated = true;
+            }
             var vm = new BoardItemViewModel(m);
             vm.PropertyChanged += OnItemChanged;
             Items.Add(vm);
@@ -102,6 +110,7 @@ public partial class MainViewModel : ObservableObject
         _clockTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(30) };
         _clockTimer.Tick += (_, _) => OnPropertyChanged(nameof(Subtitle));
         _clockTimer.Start();
+        if (separated) MarkDirty(); // grava logo os arquivos novos, para não separar de novo na próxima vez
     }
 
     static readonly (string Key, string Name)[] GroupNames =
@@ -127,6 +136,13 @@ public partial class MainViewModel : ObservableObject
         if (m.Tipo == "bloco" && m.Titulo == "Bloco de vidro") m.Titulo = "";
     }
 
+    /// <summary>Dá à nota um arquivo só dela, com o mesmo título e texto (só o nome do arquivo recebe número se já existir).</summary>
+    static void SeparateNote(BoardItem m)
+    {
+        var path = StorageService.CreatePage(string.IsNullOrWhiteSpace(m.Titulo) ? "Nova nota" : m.Titulo, $"# {m.Titulo}\n\n{m.Texto}\n");
+        m.Arquivo = StorageService.Rel(path);
+    }
+
     /// <summary>Páginas antigas (título + texto no quadro) viram arquivos .md no cofre.</summary>
     static void MigratePage(BoardItem m)
     {
@@ -134,7 +150,7 @@ public partial class MainViewModel : ObservableObject
         if (m.Arquivo is { } rel && File.Exists(StorageService.Full(rel)))
         {
             var text = StorageService.ReadPage(StorageService.Full(rel));
-            m.Titulo = Path.GetFileNameWithoutExtension(rel);
+            m.Titulo = StorageService.PageTitle(StorageService.Full(rel));
             m.Texto = Markdown.StripTitle(text, m.Titulo);
             return;
         }
@@ -142,7 +158,7 @@ public partial class MainViewModel : ObservableObject
         var existing = StorageService.FindPage(name);
         var path = existing ?? StorageService.CreatePage(name, $"# {name}\n\n{m.Texto}\n");
         m.Arquivo = StorageService.Rel(path);
-        m.Titulo = Path.GetFileNameWithoutExtension(path);
+        m.Titulo = StorageService.PageTitle(path);
         m.Texto = Markdown.StripTitle(StorageService.ReadPage(path), m.Titulo);
     }
 
@@ -218,11 +234,10 @@ public partial class MainViewModel : ObservableObject
     public BoardItemViewModel? EditingItem { get; private set; }
 
     public int Count => Items.Count;
-    public string CountLabel => Count == 1 ? "1 item" : $"{Count} itens";
     public string ModelName => Palette.ModelName(Model);
     public int ModelIndex => (int)Model;
-    public string Subtitle => $"{CountLabel} · editado {EditedAgo()}";
-    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")} · {CountLabel}{(ReadOnly ? " · somente visualização" : "")}";
+    public string Subtitle => $"Editado {EditedAgo()}";
+    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")}{(ReadOnly ? " · somente visualização" : "")}";
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
     public string TitleToggleVerb => TitleHidden ? "Mostrar" : "Ocultar";
     public string TitleToggleLabel => TitleToggleVerb + " título";
@@ -430,7 +445,7 @@ public partial class MainViewModel : ObservableObject
             m.SemEspiral = true; // a página nasce sem espiral (o menu do botão direito põe)
             var path = StorageService.CreatePage("Nova nota", "# Nova nota\n\nEscreva aqui…\n");
             m.Arquivo = StorageService.Rel(path);
-            m.Titulo = Path.GetFileNameWithoutExtension(path);
+            m.Titulo = "Nova nota";
             m.Texto = "Escreva aqui…";
         }
 
@@ -454,6 +469,26 @@ public partial class MainViewModel : ObservableObject
         if (vm.IsPlainNote || kind is ItemKind.Text or ItemKind.TextBox or ItemKind.Block) BeginEdit(vm, EditField.Text);
         else if (kind == ItemKind.Page) BeginEdit(vm, EditField.Title); // nota nova: já escrevendo o título
         return vm;
+    }
+
+    /// <summary>Título: texto solto grande, já escrevendo; cor e caligrafia pelo botão direito.</summary>
+    public BoardItemViewModel AddTitle(double cx, double cy)
+    {
+        var vm = Add(ItemKind.Text, "branco", cx, cy);
+        vm.Text = "Título";
+        var st = vm.Style.Clone();
+        st.Tamanho = 64;
+        vm.Style = st;
+        return vm;
+    }
+
+    public void SetFont(BoardItemViewModel vm, string font)
+    {
+        if (vm.Style.Fonte == font) return;
+        Checkpoint();
+        var st = vm.Style.Clone();
+        st.Fonte = font;
+        vm.Style = st;
     }
 
     /// <summary>Acrescenta um item pronto (formas, linhas, imagens...). Recebe id e camada novos.</summary>
@@ -487,6 +522,8 @@ public partial class MainViewModel : ObservableObject
         t.Id = 0;
         t.Z = 0;
         t.Grupo = null;
+        t.AnexadoA = null;
+        t.AnexoLado = null;
         t.Bloqueado = false;
         StorageService.State.UltimoItem = t;
         StorageService.SaveState();
@@ -528,9 +565,177 @@ public partial class MainViewModel : ObservableObject
         StructureChanged();
     }
 
+    // ---------- tabelas: linhas e colunas sem limite ----------
+
+    /// <summary>Linha nova embaixo ou coluna nova à direita; com coluna nova, a tabela alarga para as outras não encolherem.</summary>
+    public void TableAdd(BoardItemViewModel table, bool row)
+    {
+        if (table.Table is not { Count: > 0 } t) return;
+        Checkpoint();
+        int cols = t.Max(r => r.Count);
+        var copy = t.Select(r => r.ToList()).ToList();
+        if (row) copy.Add(Enumerable.Repeat("", cols).ToList());
+        else
+        {
+            for (int i = 0; i < copy.Count; i++)
+            {
+                while (copy[i].Count < cols) copy[i].Add("");
+                copy[i].Add(i == 0 ? $"Coluna {cols + 1}" : "");
+            }
+            table.W = table.Box.Width + table.Box.Width / cols;
+        }
+        table.Table = copy;
+    }
+
+    /// <summary>Arrastando o + da tabela: deixa com tantas linhas ou colunas, a partir da tabela como estava (voltar o arraste devolve o texto).</summary>
+    public void TableResize(BoardItemViewModel table, List<List<string>> original, double originalWidth, bool row, int count)
+    {
+        int cols = original.Max(r => r.Count);
+        if (count == (row ? table.Table!.Count : table.Table!.Max(r => r.Count))) return;
+        var copy = original.Select(r => r.ToList()).ToList();
+        if (row)
+        {
+            copy = copy.Take(count).ToList();
+            while (copy.Count < count) copy.Add(Enumerable.Repeat("", cols).ToList());
+        }
+        else
+        {
+            for (int i = 0; i < copy.Count; i++)
+            {
+                var r = copy[i];
+                while (r.Count < cols) r.Add("");
+                if (r.Count > count) r.RemoveRange(count, r.Count - count);
+                while (r.Count < count) r.Add(i == 0 ? $"Coluna {r.Count + 1}" : "");
+            }
+            table.W = originalWidth * count / cols;
+        }
+        table.Table = copy;
+    }
+
+    /// <summary>Tira a última linha ou coluna; a tabela fica com pelo menos uma de cada.</summary>
+    public void TableRemove(BoardItemViewModel table, bool row)
+    {
+        if (table.Table is not { Count: > 0 } t) return;
+        int cols = t.Max(r => r.Count);
+        if (row ? t.Count <= 1 : cols <= 1) return;
+        Checkpoint();
+        var copy = t.Select(r => r.ToList()).ToList();
+        if (row) copy.RemoveAt(copy.Count - 1);
+        else
+        {
+            foreach (var r in copy)
+                if (r.Count == cols) r.RemoveAt(cols - 1);
+            table.W = table.Box.Width - table.Box.Width / cols;
+        }
+        table.Table = copy;
+    }
+
+    // ---------- anexos: um item preso em cima ou embaixo de outro ----------
+
+    IEnumerable<BoardItemViewModel> AttachedItems(BoardItemViewModel parent) => Items.Where(i => i.AttachedTo == parent.Id);
+
+    /// <summary>Tudo o que está anexado a este item, inclusive anexos dos anexos.</summary>
+    public List<BoardItemViewModel> AttachedTree(BoardItemViewModel parent)
+    {
+        var result = new List<BoardItemViewModel>();
+        void Walk(BoardItemViewModel p)
+        {
+            foreach (var c in AttachedItems(p))
+                if (!result.Contains(c)) { result.Add(c); Walk(c); }
+        }
+        Walk(parent);
+        return result;
+    }
+
+    const double AttachInset = 14, AttachGap = 10;
+
+    public void Attach(BoardItemViewModel child, BoardItemViewModel parent, string side)
+    {
+        child.AttachPrevW = child.W;
+        child.AttachPrevH = child.H;
+        child.AttachedTo = parent.Id;
+        child.AttachSide = side;
+        LayoutAttached(parent);
+        MarkDirty();
+    }
+
+    public void Detach(BoardItemViewModel child)
+    {
+        var parent = Items.FirstOrDefault(i => i.Id == child.AttachedTo);
+        child.AttachedTo = null;
+        child.AttachSide = null;
+        child.W = child.AttachPrevW;
+        child.H = child.AttachPrevH;
+        child.AttachPrevW = child.AttachPrevH = null;
+        if (parent is not null) LayoutAttached(parent);
+        MarkDirty();
+    }
+
+    /// <summary>Põe os anexos dentro do principal, empilhados e com margem; o principal reserva o espaço e cresce junto.</summary>
+    public void LayoutAttached(BoardItemViewModel parent)
+    {
+        var kids = AttachedItems(parent).OrderBy(c => c.Y).ThenBy(c => c.Id).ToList();
+        var box = parent.Box;
+        double inLeft = parent.Kind == ItemKind.Page && parent.Spiral ? 32 : AttachInset;
+        double inner = box.Width - inLeft - AttachInset;
+        foreach (var c in kids) FitAttached(c, inner);
+
+        var above = kids.Where(c => c.AttachSide == "cima").ToList();
+        var below = kids.Where(c => c.AttachSide != "cima").ToList();
+        double Stack(List<BoardItemViewModel> list) => list.Count == 0 ? 0 : list.Sum(c => c.Box.Height) + AttachGap * (list.Count - 1);
+        double aboveHeight = Stack(above), belowHeight = Stack(below);
+        double top = above.Count == 0 ? 0 : aboveHeight + AttachInset, bottom = below.Count == 0 ? 0 : belowHeight + AttachInset;
+        if (Math.Abs(parent.AttachTop - top) > 0.5) parent.AttachTop = top;
+        if (Math.Abs(parent.AttachBottom - bottom) > 0.5) parent.AttachBottom = bottom;
+
+        // O post-it tem a faixa adesiva em cima e o rodapé embaixo: os anexos ficam entre os dois.
+        bool postIt = parent.Kind == ItemKind.PostIt;
+        void Place(List<BoardItemViewModel> list, double y)
+        {
+            foreach (var c in list)
+            {
+                double width = IsFillKind(c) ? inner : c.Box.Width;
+                c.X = box.X + inLeft + (inner - width) / 2;
+                c.Y = y;
+                if (c.Z <= parent.Z) c.Z = parent.Z + 1; // sempre por cima do principal
+                y += c.Box.Height + AttachGap;
+                LayoutAttached(c);
+            }
+        }
+        Place(above, box.Y + (postIt ? 30 : AttachInset));
+        Place(below, box.Bottom - (postIt ? 26 : AttachInset) - belowHeight);
+    }
+
+    static bool IsFillKind(BoardItemViewModel c) => c.Kind is ItemKind.Page or ItemKind.PostIt or ItemKind.Block or ItemKind.TextBox or ItemKind.Table;
+
+    /// <summary>Notas, post-its e cartões ocupam a largura toda; formas e imagens só encolhem se não couberem.</summary>
+    static void FitAttached(BoardItemViewModel c, double inner)
+    {
+        if (inner <= 0) return;
+        if (IsFillKind(c))
+        {
+            if (c.W != inner) c.W = inner;
+        }
+        else if (c.Box.Width > inner)
+        {
+            double ratio = inner / c.Box.Width;
+            c.H = c.Box.Height * ratio;
+            c.W = inner;
+        }
+    }
+
+    /// <summary>Um item mudou de tamanho: acerta os anexos dele e a posição dele no principal.</summary>
+    public void OnItemResized(BoardItemViewModel item)
+    {
+        LayoutAttached(item);
+        if (item.AttachedTo is { } id && Items.FirstOrDefault(i => i.Id == id) is { } parent) LayoutAttached(parent);
+    }
+
     void RemoveCore(BoardItemViewModel vm)
     {
         if (EditingItem == vm) EndEdit();
+        foreach (var c in AttachedItems(vm).ToList()) Detach(c);
+        if (vm.AttachedTo is not null) Detach(vm);
         if (Selected == vm) Selected = null;
         vm.IsSelected = false;
         vm.PropertyChanged -= OnItemChanged;
@@ -543,6 +748,22 @@ public partial class MainViewModel : ObservableObject
             if (l.Line!.Para.Item == vm.Id) { l.Line.Para.Item = null; changed = true; }
             if (changed) l.Touch(nameof(BoardItemViewModel.Line));
         }
+        DeleteNoteFile(vm);
+    }
+
+    /// <summary>Nota apagada não fica guardada: o .md some de vez (Ctrl+Z o recria nesta sessão). Só fica se outro item ou quadro ainda o usa.</summary>
+    void DeleteNoteFile(BoardItemViewModel vm)
+    {
+        if (vm.Kind != ItemKind.Page || vm.FileFullPath is not { } path || !File.Exists(path)) return;
+        if (Items.Any(i => i.Kind == ItemKind.Page && string.Equals(i.FileFullPath, path, StringComparison.OrdinalIgnoreCase))) return;
+        if (StorageService.NoteUsedElsewhere(path, FilePath)) return;
+        try
+        {
+            StorageService.DeletePage(path);
+            App.PageDeleted(path);
+        }
+        catch (IOException ex) { App.Log(ex); }
+        catch (UnauthorizedAccessException ex) { App.Log(ex); }
     }
 
     /// <summary>Exclui todos os itens selecionados.</summary>
@@ -564,7 +785,9 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Copia vários itens com um deslocamento (Ctrl+D, Alt + arrastar). Linhas entre eles continuam ligadas.</summary>
     public List<BoardItemViewModel> DuplicateMany(IReadOnlyList<BoardItemViewModel> src, Vector offset, bool select = true)
     {
-        var models = src.Select(s => s.ToModel()).ToList();
+        // Os anexos vão junto: sem eles a cópia do principal nasceria menor.
+        var all = src.Concat(src.SelectMany(AttachedTree)).Distinct();
+        var models = all.Select(s => s.ToModel()).ToList();
         return PasteModels(models, offset, select);
     }
 
@@ -584,6 +807,7 @@ public partial class MainViewModel : ObservableObject
             m.Y += offset.Y;
             m.Z = ++top;
             m.Criado = DateTime.Today.ToString("yyyy-MM-dd");
+            if (m.Tipo == "pagina") SeparateNote(m); // a cópia de uma nota é outra nota, com título próprio
             if (m.Grupo is { } g)
             {
                 if (!groups.TryGetValue(g, out var ng)) groups[g] = ng = NewGroupId();
@@ -592,6 +816,13 @@ public partial class MainViewModel : ObservableObject
         }
         foreach (var m in models)
         {
+            // Copiado junto com o principal continua anexado; copiado sozinho fica solto.
+            m.AnexadoA = m.AnexadoA is { } parentId && ids.TryGetValue(parentId, out var newParent) ? newParent : null;
+            if (m.AnexadoA is null)
+            {
+                m.AnexoLado = null;
+                m.AnexoLargura = m.AnexoAltura = null; // cópia solta: o tamanho atual é o dela
+            }
             if (m.Linha is { } l)
             {
                 foreach (var end in new[] { l.De, l.Para })
@@ -629,6 +860,7 @@ public partial class MainViewModel : ObservableObject
     {
         int top = TopZ();
         if (vm.Z != top || Items.Count(i => i.Z == top) > 1) vm.Z = top + 1;
+        foreach (var c in AttachedTree(vm)) c.Z = ++top + 1;
     }
 
     public void SendToBack(BoardItemViewModel vm) => vm.Z = Items.Min(i => i.Z) - 1;
@@ -682,7 +914,12 @@ public partial class MainViewModel : ObservableObject
             var s = vm.Style.Clone();
             if (vm.Kind == ItemKind.Line) s.Borda = c.Ink.ToString();
             else if (vm.Kind == ItemKind.TextBox) s.CorTexto = c.Ink.ToString();
-            else { s.Preenchimento = c.Paper.ToString(); s.Borda = c.Ink.ToString(); }
+            else
+            {
+                s.Preenchimento = c.Paper.ToString();
+                s.Borda = (c.IsStrong ? c.Paper : c.Ink).ToString();
+                s.CorTexto = c.IsDark ? "#FFFFFFFF" : "#FF1D2130"; // texto branco só dentro de item escuro
+            }
             vm.Style = s;
         }
     }
@@ -817,7 +1054,7 @@ public partial class MainViewModel : ObservableObject
     {
         var sel = SelectedItems.ToList();
         if (sel.Count == 0) return;
-        _clipboard = sel.Select(i => i.ToModel()).ToList();
+        _clipboard = sel.Concat(sel.SelectMany(AttachedTree)).Distinct().Select(i => i.ToModel()).ToList();
         try
         {
             var data = new DataObject();
@@ -873,8 +1110,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Nota editada direto no quadro: o título vira o nome do arquivo (os links [[ ]] acompanham) e o texto
-    /// é gravado no .md ("# Título" + texto).
+    /// Nota editada direto no quadro: o título e o texto são gravados no .md ("# Título" + texto). Título novo também
+    /// renomeia o arquivo (os links [[ ]] acompanham); títulos iguais em notas diferentes só numeram o nome do arquivo.
     /// </summary>
     static void SyncNote(BoardItemViewModel note)
     {
@@ -882,7 +1119,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var title = note.Title.Trim();
-            if (title.Length > 0 && !string.Equals(Path.GetFileNameWithoutExtension(path), StorageService.SafeName(title), StringComparison.Ordinal))
+            if (title.Length > 0 && title != Markdown.TitleOf(StorageService.ReadPage(path)))
             {
                 App.RenamePage(path, title); // também troca FilePath e Title do item
                 if (note.FileFullPath is not { } renamed) return;
@@ -905,7 +1142,6 @@ public partial class MainViewModel : ObservableObject
     void StructureChanged()
     {
         OnPropertyChanged(nameof(Count));
-        OnPropertyChanged(nameof(CountLabel));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(SelectionCount));
         RefreshOutline();
@@ -915,6 +1151,8 @@ public partial class MainViewModel : ObservableObject
     void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_restoring) return;
+        if (e.PropertyName is nameof(BoardItemViewModel.X) or nameof(BoardItemViewModel.Y) && sender is BoardItemViewModel movedItem)
+            LayoutAttached(movedItem); // o anexo segue o principal (setas, alinhar, distribuir...)
         switch (e.PropertyName)
         {
             case nameof(BoardItemViewModel.Title):
@@ -1053,9 +1291,13 @@ public partial class MainViewModel : ObservableObject
             vm.PropertyChanged -= OnItemChanged;
             vm.IsSelected = false;
             Items.Remove(vm);
+            DeleteNoteFile(vm);
         }
         foreach (var m in models)
         {
+            // Desfazer a exclusão de uma nota: o arquivo volta com o título e o texto dela.
+            if (m is { Tipo: "pagina", Arquivo: { } rel } && !File.Exists(StorageService.Full(rel)))
+                StorageService.WritePage(StorageService.Full(rel), $"# {m.Titulo}\n\n{m.Texto}\n");
             if (byId.TryGetValue(m.Id, out var vm)) vm.Load(m);
             else
             {

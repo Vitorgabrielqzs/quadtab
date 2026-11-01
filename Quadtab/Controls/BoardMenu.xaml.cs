@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Quadtab.Models;
 using Quadtab.Rendering;
+using Quadtab.Services;
 using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
@@ -14,6 +15,8 @@ public partial class BoardMenu : UserControl
     BoardItemViewModel? _item;
     readonly List<Button> _itemDots = [];
     readonly List<Button> _lineDots = [];
+    readonly List<Button> _recentDots = [];
+    const int RecentCount = 8;
 
     /// <summary>O menu terminou uma ação e deve fechar.</summary>
     public event Action? CloseRequested;
@@ -25,35 +28,93 @@ public partial class BoardMenu : UserControl
     public BoardMenu()
     {
         InitializeComponent();
-        foreach (var c in Palette.Colors)
+        // Paleta: as cores fortes primeiro; 8 por linha.
+        foreach (var c in Palette.Colors.OrderByDescending(c => c.IsStrong))
         {
-            var key = c.Key;
-            var d = Dot(c.PaperBrush, $"Muda a cor para {c.Name.ToLowerInvariant()}", () =>
-            {
-                if (_item is null) return;
-                Vm.SetColor(_item, key);
-                Refresh();
-            });
-            d.DataContext = key;
+            var d = ItemDot(c);
             _itemDots.Add(d);
-            d.Margin = new Thickness(0, 0, 4.5, 6); // 8 por linha (16 cores, duas linhas)
             ItemDots.Children.Add(d);
         }
         // Linhas: cores próprias, mais vivas (inclui juta, a cor natural do barbante).
         foreach (var (name, hex) in BoardItemViewModel.LineColors)
         {
-            var d = Dot(ShadowCache.BrushOf((Color)ColorConverter.ConvertFromString(hex)), $"Linha {name.ToLowerInvariant()}", () => ChangeLine(_ =>
+            var d = LineDot(name, hex);
+            _lineDots.Add(d);
+            LineDots.Children.Add(d);
+        }
+    }
+
+    Button ItemDot(NoteColor c)
+    {
+        var key = c.Key;
+        var d = Dot(c.PaperBrush, $"Muda a cor para {c.Name.ToLowerInvariant()}", () =>
+        {
+            if (_item is null) return;
+            Vm.SetColor(_item, key);
+            Remember(StorageService.State.CoresRecentes, key);
+            Refresh();
+        });
+        d.DataContext = key;
+        d.Margin = new Thickness(0, 0, 4.5, 6);
+        return d;
+    }
+
+    Button LineDot(string name, string hex)
+    {
+        var d = Dot(ShadowCache.BrushOf((Color)ColorConverter.ConvertFromString(hex)), $"Linha {name.ToLowerInvariant()}", () =>
+        {
+            ChangeLine(_ =>
             {
                 if (_item is null) return;
                 var st = _item.Style.Clone();
                 st.Borda = hex;
                 _item.Style = st;
-            }));
-            d.DataContext = hex;
-            d.Margin = new Thickness(0, 0, 6, 6);
-            _lineDots.Add(d);
-            LineDots.Children.Add(d);
+            });
+            Remember(StorageService.State.CoresLinhaRecentes, hex);
+        });
+        d.DataContext = hex;
+        d.Margin = new Thickness(0, 0, 6, 6);
+        return d;
+    }
+
+    static void Remember(List<string> recent, string key)
+    {
+        recent.RemoveAll(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+        recent.Insert(0, key);
+        if (recent.Count > RecentCount) recent.RemoveRange(RecentCount, recent.Count - RecentCount);
+        StorageService.SaveState();
+    }
+
+    /// <summary>Monta as últimas cores ao abrir o menu (sem histórico ainda: as primeiras da paleta). Não mudam de lugar com o menu aberto.</summary>
+    void BuildRecents()
+    {
+        RecentDots.Children.Clear();
+        _recentDots.Clear();
+        var keys = StorageService.State.CoresRecentes.Where(k => Palette.Colors.Any(c => c.Key == k))
+            .Concat(Palette.Colors.Where(c => c.IsStrong).Select(c => c.Key)).Distinct().Take(RecentCount);
+        foreach (var key in keys)
+        {
+            var d = ItemDot(Palette.Get(key));
+            _recentDots.Add(d);
+            RecentDots.Children.Add(d);
         }
+        RecentLineDots.Children.Clear();
+        var lineKeys = StorageService.State.CoresLinhaRecentes
+            .Where(k => BoardItemViewModel.LineColors.Any(c => string.Equals(c.Hex, k, StringComparison.OrdinalIgnoreCase)))
+            .Concat(BoardItemViewModel.LineColors.Select(c => c.Hex)).Distinct(StringComparer.OrdinalIgnoreCase).Take(RecentCount);
+        foreach (var hex in lineKeys)
+        {
+            var (name, h) = BoardItemViewModel.LineColors.First(c => string.Equals(c.Hex, hex, StringComparison.OrdinalIgnoreCase));
+            var d = LineDot(name, h);
+            _recentDots.Add(d);
+            RecentLineDots.Children.Add(d);
+        }
+    }
+
+    void OnPalette(object sender, RoutedEventArgs e)
+    {
+        var panel = _item?.Line is null ? ItemDots : LineDots;
+        panel.Visibility = panel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     static Button Dot(Brush fill, string tip, Action click)
@@ -84,9 +145,15 @@ public partial class BoardMenu : UserControl
         LinePart.Visibility = item.Line is null ? Visibility.Collapsed : Visibility.Visible;
         ColorPart.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
         SpiralRow.Visibility = item.Kind == ItemKind.Page ? Visibility.Visible : Visibility.Collapsed;
+        FontRow.Visibility = SizeRow.Visibility = item.Kind == ItemKind.Text ? Visibility.Visible : Visibility.Collapsed;
+        _fillingSize = true;
+        SizeBox.Text = Math.Round(item.Style.Tamanho).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _fillingSize = false;
         SpiralText.Text = item.Spiral ? "Tirar a espiral" : "Pôr a espiral";
         // Linhas: sem "escrever na linha" por enquanto (nomes nas linhas desligados).
         EditRow.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
+        ItemDots.Visibility = LineDots.Visibility = Visibility.Collapsed;
+        BuildRecents();
         Refresh();
     }
 
@@ -94,7 +161,8 @@ public partial class BoardMenu : UserControl
     void Refresh()
     {
         if (_item is null) return;
-        foreach (var d in _itemDots) d.Tag = (string)d.DataContext == _item.ColorKey ? "on" : null;
+        foreach (var d in _itemDots.Concat(_recentDots))
+            d.Tag = string.Equals((string)d.DataContext, _item.Line is null ? _item.ColorKey : _item.Style.Borda, StringComparison.OrdinalIgnoreCase) ? "on" : null;
         ChipPin.IsChecked = _item.Fastening == Fastening.Pin;
         ChipTape.IsChecked = _item.Fastening == Fastening.Tape;
         ChipNone.IsChecked = _item.Fastening == Fastening.None;
@@ -178,6 +246,42 @@ public partial class BoardMenu : UserControl
 
     /// <summary>Pede o menu extra (agrupar, alinhar, camadas, estilo, descrição) no ponto da janela.</summary>
     public event Action<BoardItemViewModel, Point>? MoreRequested;
+
+    // Tamanho do título: muda a cada dígito; Enter ou Esc fecha o menu. O desfazer volta ao tamanho de antes de digitar.
+    bool _fillingSize;
+
+    void OnSizeFocus(object sender, RoutedEventArgs e)
+    {
+        Vm.Checkpoint();
+        SizeBox.SelectAll();
+    }
+
+    void OnSizeChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_fillingSize || _item is not { } item) return;
+        if (!double.TryParse(SizeBox.Text, out var px) || px < 8 || px > 400) return;
+        var st = item.Style.Clone();
+        st.Tamanho = px;
+        item.Style = st;
+    }
+
+    void OnSizeKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is not (System.Windows.Input.Key.Enter or System.Windows.Input.Key.Escape)) return;
+        CloseRequested?.Invoke();
+        e.Handled = true;
+    }
+
+    /// <summary>Pede a lista de caligrafias no ponto da janela.</summary>
+    public event Action<BoardItemViewModel, Point>? FontsRequested;
+
+    void OnFonts(object sender, RoutedEventArgs e)
+    {
+        var item = _item;
+        var p = TranslatePoint(new Point(ActualWidth, 0), (UIElement)Parent);
+        CloseRequested?.Invoke();
+        if (item is not null) FontsRequested?.Invoke(item, p);
+    }
 
     void OnMore(object sender, RoutedEventArgs e)
     {

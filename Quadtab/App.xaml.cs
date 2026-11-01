@@ -90,21 +90,37 @@ public partial class App : Application
     {
         var oldName = Path.GetFileNameWithoutExtension(path);
         var target = StorageService.RenamePage(path, newName);
-        var newTitle = Path.GetFileNameWithoutExtension(target);
+        var fileName = Path.GetFileNameWithoutExtension(target);
+        var title = newName.Trim();
+        var current = StorageService.ReadPage(target);
+        var titled = Rendering.Markdown.WithTitle(current, title);
+        if (titled != current.Replace("\r", "")) StorageService.WritePage(target, titled);
         foreach (var f in StorageService.PageFiles())
         {
             var text = StorageService.ReadPage(f);
             var replaced = Rendering.Markdown.WikiLink().Replace(text, m =>
-                string.Equals(m.Groups[1].Value.Trim(), oldName, StringComparison.OrdinalIgnoreCase) ? m.Value.Replace(m.Groups[1].Value, newTitle) : m.Value);
+                string.Equals(m.Groups[1].Value.Trim(), oldName, StringComparison.OrdinalIgnoreCase) ? m.Value.Replace(m.Groups[1].Value, fileName) : m.Value);
             if (replaced != text) StorageService.WritePage(f, replaced);
         }
         foreach (var it in ViewModel.Items.Where(i => i.FilePath is { } fp && string.Equals(StorageService.Full(fp), path, StringComparison.OrdinalIgnoreCase)))
         {
             it.FilePath = StorageService.Rel(target);
-            it.Title = newTitle;
+            it.Title = title;
         }
         Window?.PageRenamed(path, target);
     }
+
+    /// <summary>Excluir a nota pelo Cofre: sai do quadro aberto e o arquivo some de vez.</summary>
+    public static void DeleteNote(string path)
+    {
+        foreach (var it in ViewModel.Items.Where(i => i.FileFullPath is { } f && string.Equals(f, path, StringComparison.OrdinalIgnoreCase)).ToList())
+            ViewModel.Remove(it);
+        if (!File.Exists(path)) return;
+        StorageService.DeletePage(path);
+        PageDeleted(path);
+    }
+
+    public static void PageDeleted(string path) => Window?.PageDeleted(path);
 
     /// <summary>Miniatura do quadro atual para a galeria.</summary>
     public static void MakeThumbnail() => Window?.MakeThumbnail();

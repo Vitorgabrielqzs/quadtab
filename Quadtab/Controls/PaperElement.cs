@@ -19,6 +19,10 @@ public sealed class PaperElement : FrameworkElement
     public static readonly DependencyProperty InkProperty = DependencyProperty.Register(nameof(Ink), typeof(Color), typeof(PaperElement), new FrameworkPropertyMetadata(Colors.Black, R));
     public static readonly DependencyProperty SpiralProperty = DependencyProperty.Register(nameof(Spiral), typeof(bool), typeof(PaperElement), new FrameworkPropertyMetadata(true, R));
 
+    public static readonly DependencyProperty SolidProperty = DependencyProperty.Register(nameof(Solid), typeof(bool), typeof(PaperElement), new FrameworkPropertyMetadata(false, R));
+    /// <summary>Nota em cor forte: a folha fica na cor exata, sem clarear.</summary>
+    public bool Solid { get => (bool)GetValue(SolidProperty); set => SetValue(SolidProperty, value); }
+
     public PaperKind Kind { get => (PaperKind)GetValue(KindProperty); set => SetValue(KindProperty, value); }
     public Color Paper { get => (Color)GetValue(PaperProperty); set => SetValue(PaperProperty, value); }
     public Color Ink { get => (Color)GetValue(InkProperty); set => SetValue(InkProperty, value); }
@@ -93,7 +97,7 @@ public sealed class PaperElement : FrameworkElement
     void RenderPage(DrawingContext dc, double w, double h)
     {
         var sheet = new Rect(0, 0, w, h);
-        var paper = ColorMath.Mix(Paper, 0.16, Colors.White);
+        var paper = Solid ? Paper : ColorMath.Mix(Paper, 0.16, Colors.White);
         dc.DrawRoundedRectangle(ShadowCache.BrushOf(paper), null, sheet, 3, 3);
         if (!Spiral) return; // folha solta: só o papel
         dc.DrawRectangle(SpiralShade, null, new Rect(0, 0, 26, h)); // sombra suave que os anéis fazem no papel

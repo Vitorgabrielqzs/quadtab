@@ -47,17 +47,20 @@
         </c:PaperElement>
 
         <!-- Post-it comum: texto centralizado em maiúsculas -->
+        <Border Margin="{Binding AttachMargin}">
         <Grid Margin="16,32,16,26" VerticalAlignment="Center"
               Visibility="{Binding IsPlainNote, Converter={StaticResource Visible}}">
-            <c:TrackedText b:UI.Field="text" Text="{Binding Text}" Uppercase="True" FontSize="19" FontWeight="Black"
-                           Tracking="0.01" LineHeight="23.94" TextAlignment="Center" Foreground="{StaticResource NoteTextBrush}"
+            <c:TrackedText b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" Uppercase="True" FontSize="19" FontWeight="Black"
+                           Tracking="0.01" LineHeight="23.94" TextAlignment="Center" Foreground="{Binding NoteTextColor}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-            <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="note" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
-                     FontSize="19" FontWeight="Black" TextAlignment="Center" Foreground="{StaticResource NoteTextBrush}"
+            <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="note" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
+                     FontSize="19" FontWeight="Black" TextAlignment="Center" Foreground="{Binding NoteTextColor}"
                      Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
         </Grid>
+        </Border>
 
         <!-- Pautado: título + lista -->
+        <Border Margin="{Binding AttachMargin}">
         <StackPanel Margin="16,34,16,28" VerticalAlignment="Top"
                     Visibility="{Binding IsLinedNote, Converter={StaticResource Visible}}">
             <Grid Margin="0,0,0,7">
@@ -69,14 +72,15 @@
                          Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
             </Grid>
             <Grid>
-                <TextBlock b:UI.Field="text" Text="{Binding Text}" FontSize="15" FontWeight="Bold" LineHeight="27"
-                           LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{StaticResource LinedTextBrush}"
+                <TextBlock b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" FontSize="15" FontWeight="Bold" LineHeight="27"
+                           LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{Binding LinedTextColor}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-                <TextBox Style="{StaticResource EditBox}" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="15" FontWeight="Bold" Foreground="{StaticResource LinedTextBrush}"
+                <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
+                         FontSize="15" FontWeight="Bold" Foreground="{Binding LinedTextColor}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>
         </StackPanel>
+        </Border>
 
         <!-- Rodapé: data e número -->
         <Grid VerticalAlignment="Bottom" Margin="13,0,13,8" Opacity="0.85" IsHitTestVisible="False">

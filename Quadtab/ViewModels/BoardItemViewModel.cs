@@ -41,6 +41,10 @@ public partial class BoardItemViewModel : ObservableObject
         Spiral = !m.SemEspiral;
         Locked = m.Bloqueado;
         Group = m.Grupo;
+        AttachedTo = m.AnexadoA;
+        AttachSide = m.AnexoLado;
+        AttachPrevW = m.AnexoLargura;
+        AttachPrevH = m.AnexoAltura;
         Description = m.Descricao ?? "";
         Title = m.Titulo ?? "";
         Text = m.Texto ?? "";
@@ -66,8 +70,26 @@ public partial class BoardItemViewModel : ObservableObject
     // ---------- dados salvos ----------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Color), nameof(PaperBrush), nameof(InkBrush), nameof(PaperColor), nameof(InkColor), nameof(ListDotBrush), nameof(BlockFill))]
+    [NotifyPropertyChangedFor(nameof(Color), nameof(PaperBrush), nameof(InkBrush), nameof(PaperColor), nameof(InkColor), nameof(ListDotBrush), nameof(BlockFill),
+        nameof(NoteTextColor), nameof(LinedTextColor), nameof(PageTitleColor), nameof(PageBodyColor), nameof(BlockInkColor), nameof(BlockBodyColor), nameof(IsSolidPaper))]
     public partial string ColorKey { get; set; }
+
+    /// <summary>Id do item principal ao qual este está anexado, e o lado ("cima" ou "baixo").</summary>
+    [ObservableProperty] public partial int? AttachedTo { get; set; }
+    [ObservableProperty] public partial string? AttachSide { get; set; }
+    public double? AttachPrevW { get; set; }
+    public double? AttachPrevH { get; set; }
+
+    /// <summary>Espaço que o principal reserva dentro dele para os anexos (não é salvo; recalculado ao abrir).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AttachMargin))]
+    public partial double AttachTop { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AttachMargin))]
+    public partial double AttachBottom { get; set; }
+
+    public Thickness AttachMargin => new(0, AttachTop, 0, AttachBottom);
 
     [ObservableProperty] public partial double X { get; set; }
     [ObservableProperty] public partial double Y { get; set; }
@@ -121,7 +143,7 @@ public partial class BoardItemViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FillBrush), nameof(StrokeBrush), nameof(StrokeWidth), nameof(ItemOpacity), nameof(TextBrush),
-        nameof(FontFamilyValue), nameof(FontSizeValue), nameof(FontWeightValue), nameof(FontStyleValue), nameof(TextAlign), nameof(StyledText))]
+        nameof(FontFamilyValue), nameof(FontSizeValue), nameof(FontWeightValue), nameof(FontStyleValue), nameof(TextAlign), nameof(StyledText), nameof(TitleFont), nameof(TitleWeight))]
     public partial ItemStyle Style { get; set; }
 
     [ObservableProperty]
@@ -191,6 +213,18 @@ public partial class BoardItemViewModel : ObservableObject
         _ => Color.PaperBrush,
     };
     public Brush BlockFill => Color.BlockFill;
+    public bool IsSolidPaper => Color.IsStrong;
+
+    // Texto dentro do item: branco quando a cor do item é escura; senão, a cor normal de cada tipo.
+    Brush ContentBrush(string resource) => Color.IsDark ? Brushes.White : (Brush)Application.Current.FindResource(resource);
+    public Brush NoteTextColor => ContentBrush("NoteTextBrush");
+    public Brush LinedTextColor => ContentBrush("LinedTextBrush");
+    public Brush PageTitleColor => ContentBrush("PageTitleBrush");
+    public Brush PageBodyColor => ContentBrush("PageBodyBrush");
+    public Brush BlockInkColor => ContentBrush("BlockInkBrush");
+    public Brush BlockBodyColor => ContentBrush("BlockBodyBrush");
+    /// <summary>O campo de edição fica sobre fundo escuro (texto solto não tem fundo).</summary>
+    public bool HasDarkBackground => Color.IsDark && Kind != ItemKind.Text;
     public Color PinColor => Palette.PinFor(Id);
 
     public double ItemWidth => W ?? DefaultSize(Kind).Width;
@@ -225,13 +259,24 @@ public partial class BoardItemViewModel : ObservableObject
     public double ItemOpacity => Style.Opacidade;
     public Brush TextBrush => BrushFromHex(Style.CorTexto, System.Windows.Media.Color.FromRgb(0x1D, 0x21, 0x30));
     public FontFamily FontFamilyValue => (FontFamily)Application.Current.FindResource(Style.Fonte == "Nunito" ? "Nunito" : "Inter");
+    /// <summary>Caligrafias do título e do texto solto (as do Windows, menos a Inter, que vem com o app).</summary>
+    public static readonly (string Name, string Font)[] TitleFonts =
+    [
+        ("Padrão", "Inter"), ("Clássica", "Georgia"), ("Jornal", "Times New Roman"), ("Forte", "Impact"),
+        ("Manuscrita", "Segoe Script"), ("Caderno", "Segoe Print"), ("Caneta", "Ink Free"), ("Elegante", "Gabriola"),
+        ("Divertida", "Comic Sans MS"), ("Máquina", "Consolas"),
+    ];
+
+    // Textos antigos guardam "Nunito", mas sempre apareceram em Inter: continuam iguais.
+    public FontFamily TitleFont => Style.Fonte is "Inter" or "Nunito" ? (FontFamily)Application.Current.FindResource("Inter") : new FontFamily(Style.Fonte);
+    public FontWeight TitleWeight => Style.Fonte is "Inter" or "Nunito" ? FontWeights.ExtraBold : FontWeights.Normal;
     public double FontSizeValue => Style.Tamanho;
     public FontWeight FontWeightValue => Style.Negrito ? FontWeights.Bold : FontWeights.Normal;
     public FontStyle FontStyleValue => Style.Italico ? FontStyles.Italic : FontStyles.Normal;
     public TextAlignment TextAlign => Style.Alinhamento switch { "centro" => TextAlignment.Center, "direita" => TextAlignment.Right, _ => TextAlignment.Left };
 
     /// <summary>Texto da caixa de texto com marcadores de lista, quando ligados.</summary>
-    public string StyledText => Style.Lista ? string.Join("\n", Text.Split('\n').Select(l => "•  " + l)) : Text;
+    public string StyledText => Style.Lista ? string.Join("\n", Text.Split('\n').Select(l => "•  " + l)) : Behaviors.ListText.ToDisplay(Text);
 
     public Geometry ShapeGeometry => ShapeLibrary.Get(ShapeKey).Geometry;
 
@@ -367,6 +412,10 @@ public partial class BoardItemViewModel : ObservableObject
         SemEspiral = Kind == ItemKind.Page && !Spiral,
         Bloqueado = Locked,
         Grupo = Group,
+        AnexadoA = AttachedTo,
+        AnexoLado = AttachSide,
+        AnexoLargura = AttachPrevW,
+        AnexoAltura = AttachPrevH,
         Descricao = string.IsNullOrWhiteSpace(Description) ? null : Description,
         Titulo = Title,
         Texto = Text,

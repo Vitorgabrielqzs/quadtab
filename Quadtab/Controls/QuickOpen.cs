@@ -59,7 +59,7 @@ public sealed class QuickOpen : Grid
     public void Show()
     {
         _all = StorageService.BoardFiles().Select(f => new Entry(Path.GetFileNameWithoutExtension(f), f, false, Folder(f, StorageService.BoardsDir)))
-            .Concat(StorageService.PageFiles().Select(f => new Entry(Path.GetFileNameWithoutExtension(f), f, true, Folder(f, StorageService.PagesDir))))
+            .Concat(StorageService.PageFiles().Select(f => new Entry(StorageService.PageTitle(f), f, true, Folder(f, StorageService.PagesDir))))
             .ToList();
         // Os recentes vêm primeiro quando a busca está vazia.
         var recent = StorageService.State.Recentes;

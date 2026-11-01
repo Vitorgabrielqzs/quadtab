@@ -29,8 +29,8 @@
 
     <!-- Quadro no estilo do Canvas do Obsidian: fundo liso com pontinhos e cartões retos -->
     <Color x:Key="CanvasColor">#1E1E21</Color>
-    <Color x:Key="CanvasDotColor">#3A3B41</Color>
-    <SolidColorBrush x:Key="CanvasBrush" Color="#1E1E21" />
+    <Color x:Key="CanvasDotColor">#26272C</Color>
+    <SolidColorBrush x:Key="CanvasBrush" Color="#0F1013" />
     <SolidColorBrush x:Key="CanvasEdgeBrush" Color="#1FFFFFFF" />
     <SolidColorBrush x:Key="CardBgBrush" Color="#26272B" />
     <SolidColorBrush x:Key="CardBorderBrush" Color="#45464D" />

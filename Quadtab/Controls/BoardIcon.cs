@@ -25,6 +25,8 @@ public sealed class BoardIcon : FrameworkElement
         [BoardModel.Branco] = (Grad(0xF5F6F8, 0xBBC1CA), ColorMath.Brush(Palette.C(0xF9FAFB))),
         [BoardModel.Lousa] = (Grad(0x9A6C43, 0x54361D), ColorMath.Brush(Palette.C(0x2C4838))),
         [BoardModel.Pontilhado] = (Grad(0xF6F6F2, 0xCFCFC6), ColorMath.Brush(Palette.C(0xFBFBF8))),
+        [BoardModel.Liso] = (Grad(0xF6F8FC, 0xD2D9E6), ColorMath.Brush(Palette.C(0xFFFFFF))),
+        [BoardModel.Escuro] = (Grad(0x30333D, 0x1B1D23), ColorMath.Brush(SurfaceBackground.EscuroColor)),
     };
 
     static readonly Brush Shadow = ColorMath.Brush(Color.FromArgb(50, 0, 0, 0));

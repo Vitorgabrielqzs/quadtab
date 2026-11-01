@@ -37,9 +37,9 @@ public partial class TextLabel : UserControl
     {
         if (_vm is null) return;
         // Na lousa (escura) e no tema escuro do liso, a cor clara do papel; na lousa vira "giz".
-        bool darkSurface = BoardSurfaces.Model == BoardModel.Lousa || (BoardSurfaces.Model == BoardModel.Liso && ThemeService.IsDark);
+        bool darkSurface = BoardSurfaces.Model is BoardModel.Lousa or BoardModel.Escuro || (BoardSurfaces.Model == BoardModel.Liso && ThemeService.IsDark);
         if (_vm.ColorKey == "branco" && BoardSurfaces.Model == BoardModel.Liso) Label.SetResourceReference(TrackedText.ForegroundProperty, "CardTextBrush");
-        else Label.Foreground = darkSurface ? _vm.PaperBrush : _vm.InkBrush;
+        else Label.Foreground = darkSurface || _vm.Color.IsStrong ? _vm.PaperBrush : _vm.InkBrush; // forte: a cor exata
         Editor.SetResourceReference(ForegroundProperty, "CardTextBrush");
         Label.TextShadows = null;
     }
