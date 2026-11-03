@@ -32,7 +32,7 @@ public static partial class Markdown
     public static string WithTitle(string md, string title) => $"# {title}\n\n{StripTitle(md, title)}\n";
 
     /// <summary>Texto curto para a folha de caderno no quadro (sem marcações).</summary>
-    public static string ToPlainPreview(string md, int maxLines)
+    public static string ToPlainPreview(string md, int maxLines, bool keepInline = false)
     {
         var outLines = new List<string>();
         bool code = false;
@@ -48,7 +48,7 @@ public static partial class Markdown
                 l = l.Replace("- [ ] ", "○ ").Replace("- [x] ", "● ").Replace("- [X] ", "● ");
                 if (l.StartsWith("- ", StringComparison.Ordinal) || l.StartsWith("* ", StringComparison.Ordinal)) l = "• " + l[2..];
                 if (l.StartsWith("> ", StringComparison.Ordinal)) l = l[2..];
-                l = l.Replace("**", "").Replace("__", "").Replace("~~", "").Replace("==", "");
+                if (!keepInline) l = l.Replace("**", "").Replace("__", "").Replace("~~", "").Replace("==", "");
                 l = WikiLink().Replace(l, m => m.Groups[1].Value);
                 l = Regex.Replace(l, @"!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\)", "🖼");
             }

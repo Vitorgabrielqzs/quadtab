@@ -24,7 +24,17 @@
         <ScrollViewer Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
         <Grid>
             <!-- ===== Clique direito num item ===== -->
-            <StackPanel x:Name="ItemPart">
+            <Grid x:Name="ItemPart">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="254" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <!-- Uma coluna; se não couber na janela, FitTo passa as ações para uma segunda coluna -->
+                <StackPanel x:Name="LeftPart">
                 <StackPanel x:Name="ColorPart">
                     <TextBlock Text="Últimas cores utilizadas" Style="{StaticResource Head}" />
                     <WrapPanel x:Name="RecentDots" Margin="12,2,6,2" />
@@ -35,6 +45,35 @@
                             <TextBlock Text="Paleta de cores" VerticalAlignment="Center" />
                         </DockPanel>
                     </Button>
+                </StackPanel>
+
+                <!-- Formas: transparência só do fundo -->
+                <StackPanel x:Name="FillPart" Margin="12,6,12,4">
+                    <DockPanel>
+                        <TextBlock x:Name="FillText" DockPanel.Dock="Right" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Ink2Brush}" Typography.NumeralAlignment="Tabular" />
+                        <TextBlock Text="Transparência do fundo" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Ink3Brush}" />
+                    </DockPanel>
+                    <Slider x:Name="FillSlider" Minimum="0" Maximum="100" Margin="0,6,0,0" IsMoveToPointEnabled="True" Focusable="False"
+                            ValueChanged="OnFillChanged" ToolTip="0% = fundo cheio · 100% = só a borda e o texto">
+                        <Slider.Template>
+                            <ControlTemplate TargetType="Slider">
+                                <Grid Height="20" Background="Transparent">
+                                    <Border Height="4" CornerRadius="2" Background="{DynamicResource Fill2Brush}" VerticalAlignment="Center" />
+                                    <Track x:Name="PART_Track">
+                                        <Track.Thumb>
+                                            <Thumb Width="16" Height="16">
+                                                <Thumb.Template>
+                                                    <ControlTemplate TargetType="Thumb">
+                                                        <Ellipse Fill="White" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" />
+                                                    </ControlTemplate>
+                                                </Thumb.Template>
+                                            </Thumb>
+                                        </Track.Thumb>
+                                    </Track>
+                                </Grid>
+                            </ControlTemplate>
+                        </Slider.Template>
+                    </Slider>
                 </StackPanel>
 
                 <StackPanel x:Name="StylePart">
@@ -79,7 +118,10 @@
                         <ToggleButton x:Name="PathAngle" Style="{StaticResource Chip}" Content="Ângulo" Click="OnLineType" Tag="angulo" ToolTip="Linha em ângulo reto" />
                     </WrapPanel>
                 </StackPanel>
-                <Border Style="{StaticResource Gap}" />
+                </StackPanel>
+
+                <StackPanel x:Name="RightPart" Grid.Row="1">
+                <Border x:Name="PartGap" Style="{StaticResource Gap}" />
 
                 <Button x:Name="EditRow" Style="{StaticResource MenuRow}" Click="OnEdit" ToolTip="Edita o texto deste item · 2 cliques">
                     <DockPanel>
@@ -119,7 +161,7 @@
                 </Button>
                 <DockPanel x:Name="SizeRow" Height="42" Margin="14,0,8,0" ToolTip="Digite o tamanho da letra, de 8 a 400 px">
                     <TextBox x:Name="SizeBox" DockPanel.Dock="Right" Style="{StaticResource EditBox}" Width="64" Height="30" VerticalContentAlignment="Center"
-                             TextAlignment="Center" FontSize="14" GotKeyboardFocus="OnSizeFocus" TextChanged="OnSizeChanged" PreviewKeyDown="OnSizeKey" />
+                             TextAlignment="Center" FontSize="14" Background="{DynamicResource FillBrush}" Foreground="{DynamicResource InkBrush}" CaretBrush="{DynamicResource InkBrush}" GotKeyboardFocus="OnSizeFocus" TextChanged="OnSizeChanged" PreviewKeyDown="OnSizeKey" />
                     <TextBlock Text="Tamanho em pixels" FontSize="15" FontWeight="Medium" VerticalAlignment="Center" />
                 </DockPanel>
                 <Button x:Name="FontRow" Style="{StaticResource MenuRow}" Click="OnFonts" ToolTip="Escolhe a caligrafia deste texto">
@@ -141,7 +183,8 @@
                         <TextBlock Text="Excluir" VerticalAlignment="Center" />
                     </DockPanel>
                 </Button>
-            </StackPanel>
+                </StackPanel>
+            </Grid>
         </Grid>
         </ScrollViewer>
     </c:GlassPanel>

@@ -150,6 +150,9 @@ public sealed class ContextTray : ContentControl
         var root = new StackPanel();
         root.Children.Add(Back("Link"));
         var box = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = 15, Margin = new Thickness(2, 6, 2, 4), Padding = new Thickness(8, 6, 8, 6) };
+        box.SetResourceReference(BackgroundProperty, "FillBrush");
+        box.SetResourceReference(ForegroundProperty, "InkBrush");
+        box.SetResourceReference(TextBox.CaretBrushProperty, "InkBrush");
         if (Clipboard.ContainsText() && MediaService.IsUrl(Clipboard.GetText(), out var u)) box.Text = u;
         var hint = UiKit.Label("Cole o endereço e aperte Enter", 12.5);
         hint.Margin = new Thickness(6, 0, 0, 0);
@@ -180,6 +183,9 @@ public sealed class ContextTray : ContentControl
         var root = new StackPanel();
         root.Children.Add(Back("Formas"));
         var search = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = 14, Margin = new Thickness(2, 6, 2, 6), Padding = new Thickness(8, 5, 8, 5), Text = _query };
+        search.SetResourceReference(BackgroundProperty, "FillBrush");
+        search.SetResourceReference(ForegroundProperty, "InkBrush");
+        search.SetResourceReference(TextBox.CaretBrushProperty, "InkBrush");
         root.Children.Add(search);
         var cats = new WrapPanel();
         cats.Children.Add(UiKit.Chip("Todas", _category is null, () => { _category = null; ShowShapes(); }));

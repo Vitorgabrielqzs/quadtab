@@ -5,11 +5,11 @@
              xmlns:b="clr-namespace:Quadtab.Behaviors"
              FontFamily="{StaticResource Inter}">
     <Grid Margin="10,2">
-        <c:TrackedText x:Name="Label" b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" FontSize="{Binding FontSizeValue}" FontFamily="{Binding TitleFont}" FontWeight="{Binding TitleWeight}"
+        <c:TrackedText x:Name="Label" b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" Rich="True" FontSize="{Binding FontSizeValue}" FontFamily="{Binding TitleFont}" FontWeight="{Binding TitleWeight}"
                        Tracking="-0.02" Wrap="False"
                        Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-        <TextBox x:Name="Editor" Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="line" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
-                 MinWidth="420" FontSize="{Binding FontSizeValue}" FontFamily="{Binding TitleFont}" FontWeight="{Binding TitleWeight}" Background="Transparent" TextWrapping="NoWrap"
+        <c:RichEditBox x:Name="Editor" b:EditBox.Mode="line" Wrap="False" Markdown="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                 MinWidth="420" FontSize="{Binding FontSizeValue}" FontFamily="{Binding TitleFont}" FontWeight="{Binding TitleWeight}" Background="Transparent"
                  Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
     </Grid>
 </UserControl>

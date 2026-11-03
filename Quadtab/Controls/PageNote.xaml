@@ -31,11 +31,11 @@
                          Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
             </Grid>
             <Grid>
-                <TextBlock b:UI.Field="text" Text="{Binding PreviewText}" FontSize="14.5" LineHeight="24"
+                <TextBlock b:UI.Field="text" b:RichText.Source="{Binding PreviewMd}" FontSize="14.5" LineHeight="24"
                            LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{Binding PageBodyColor}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-                <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="multi"
-                         Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
+                <c:RichEditBox b:EditBox.Mode="multi"
+                         Markdown="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="14.5" Foreground="{Binding PageBodyColor}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>

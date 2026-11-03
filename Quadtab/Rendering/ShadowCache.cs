@@ -82,9 +82,10 @@ public static class ShadowCache
 
     static void DrawOuter(DrawingContext dc, Rect box, double radius, in ShadowLayer L, bool hollow)
     {
-        var shape = new Rect(box.X + L.X - L.Spread, box.Y + L.Y - L.Spread,
-                             box.Width + 2 * L.Spread, box.Height + 2 * L.Spread);
-        if (shape.Width <= 0 || shape.Height <= 0) return;
+        // Item menor que o espalhamento negativo da sombra (imagem bem pequena): não há sombra para desenhar.
+        double shapeW = box.Width + 2 * L.Spread, shapeH = box.Height + 2 * L.Spread;
+        if (shapeW <= 0 || shapeH <= 0) return;
+        var shape = new Rect(box.X + L.X - L.Spread, box.Y + L.Y - L.Spread, shapeW, shapeH);
         double r = radius > 0 ? Math.Max(0, radius + L.Spread) : 0;
         r = Math.Min(r, Math.Min(shape.Width, shape.Height) / 2);
         double sigma = L.Blur / 2;

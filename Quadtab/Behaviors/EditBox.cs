@@ -26,6 +26,7 @@ public static class EditBox
     public static readonly DependencyProperty ListsProperty = DependencyProperty.RegisterAttached(
         "Lists", typeof(bool), typeof(EditBox), new PropertyMetadata(false, (d, e) =>
         {
+            // O campo formatado (RichEditBox) trata as listas sozinho.
             if (d is TextBox tb && e.NewValue is true) ListTyping.Attach(tb, bullets: true);
         }));
 
@@ -34,7 +35,7 @@ public static class EditBox
 
     static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not TextBox tb || e.OldValue is not null) return;
+        if (d is not TextBoxBase tb || e.OldValue is not null) return;
         tb.AcceptsReturn = (string?)e.NewValue == "multi";
         tb.IsVisibleChanged += (_, _) =>
         {
@@ -69,7 +70,7 @@ public static class EditBox
 
     static void OnKey(object sender, KeyEventArgs e)
     {
-        var tb = (TextBox)sender;
+        var tb = (TextBoxBase)sender;
         var mode = GetMode(tb);
         if (e.Key == Key.Escape)
         {
@@ -92,9 +93,13 @@ public static class EditBox
         // Enter sai da edição em qualquer campo; Shift+Enter quebra a linha (menos nos de uma linha só).
         if (mode != "line" && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
-            int i = tb.SelectionStart;
-            tb.Text = tb.Text.Remove(i, tb.SelectionLength).Insert(i, "\n");
-            tb.CaretIndex = i + 1;
+            // O campo formatado já tratou o Shift+Enter (lista ou quebra de linha) antes de chegar aqui.
+            if (tb is TextBox plain)
+            {
+                int i = plain.SelectionStart;
+                plain.Text = plain.Text.Remove(i, plain.SelectionLength).Insert(i, "\n");
+                plain.CaretIndex = i + 1;
+            }
         }
         else App.ViewModel.EndEdit();
         e.Handled = true;

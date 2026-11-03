@@ -4,7 +4,7 @@
         xmlns:c="clr-namespace:Quadtab.Controls"
         xmlns:b="clr-namespace:Quadtab.Behaviors"
         xmlns:m="clr-namespace:Quadtab.Models"
-        Title="Quadtab" Width="1440" Height="920" MinWidth="1100" MinHeight="720"
+        Title="Quadtab" Width="1440" Height="920" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/Assets/Quadtab.ico"
         Background="{DynamicResource BgBrush}"
@@ -269,6 +269,33 @@
                             </c:GlassPanel>
                         </StackPanel>
 
+                        <!-- Exportando: bloco de vidro (o mesmo da bandeja) no meio, segurando os cliques até terminar -->
+                        <Grid x:Name="ExportBusy" Panel.ZIndex="60" Background="Transparent" Visibility="Collapsed">
+                            <c:GlassPanel x:Name="ExportSheet" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="34"
+                                          Padding="26,22,30,22" Background="{DynamicResource Glass2Brush}" RenderTransformOrigin="0.5,0.5">
+                                <c:GlassPanel.RenderTransform>
+                                    <ScaleTransform x:Name="ExportScale" />
+                                </c:GlassPanel.RenderTransform>
+                                <StackPanel Orientation="Horizontal">
+                                    <Grid Width="34" Height="34" VerticalAlignment="Center">
+                                        <Ellipse Stroke="{DynamicResource Fill2Brush}" StrokeThickness="3.5" />
+                                        <!-- arco de um quarto girando -->
+                                        <Path Stroke="{StaticResource AccentBrush}" StrokeThickness="3.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Data="M 17,1.75 A 15.25,15.25 0 0 1 32.25,17" RenderTransformOrigin="0.5,0.5">
+                                            <Path.RenderTransform>
+                                                <RotateTransform x:Name="ExportSpin" />
+                                            </Path.RenderTransform>
+                                        </Path>
+                                    </Grid>
+                                    <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Exportando…" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource InkBrush}" />
+                                        <TextBlock x:Name="ExportDetail" Text="Salvando o quadro em PDF" FontSize="13.5" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Ink2Brush}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </c:GlassPanel>
+                        </Grid>
+
                         <!-- Galeria de quadros (Todos, Recentes, Favoritos, Apagados) -->
                         <c:Gallery x:Name="GalleryView" Panel.ZIndex="50"
                                    Visibility="{Binding Library.GalleryOpen, Converter={StaticResource Visible}}" />
@@ -285,6 +312,7 @@
             <c:BoardMenu x:Name="Menu" Visibility="Collapsed" Opacity="0" />
             <c:ActionMenu x:Name="Actions" Visibility="Collapsed" />
             <c:ContextTray x:Name="CtxTray" Visibility="Collapsed" />
+            <c:FormatBar x:Name="Format" />
         </Canvas>
 
         <c:QuickOpen x:Name="Quick" />

@@ -588,7 +588,7 @@ public partial class LibraryViewModel : ObservableObject
         else App.ViewModel?.Flush(); // notas novas do quadro aberto precisam estar salvas antes da limpeza
         // As notas ficam só no quadro: vão para a lixeira junto com ele (restaurar o quadro as recria).
         foreach (var it in StorageService.LoadBoard(path).Itens)
-            if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(StorageService.Full(rel)))
+            if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(StorageService.Full(rel)) && !StorageService.NoteUsedElsewhere(StorageService.Full(rel), path))
                 try { StorageService.TrashPage(StorageService.Full(rel)); } catch (IOException) { }
         StorageService.TrashBoard(path);
         StorageService.TrashOrphanNotes(); // cascata: nenhuma nota fica sem quadro

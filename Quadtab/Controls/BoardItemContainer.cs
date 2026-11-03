@@ -51,6 +51,14 @@ public sealed class ItemTemplateSelector : DataTemplateSelector
 /// </summary>
 public sealed class BoardItemContainer : ContentControl
 {
+    /// <summary>Zoom bem afastado: o item mostra sÃ³ o tÃ­tulo.</summary>
+    public static readonly DependencyProperty IsOverviewProperty = DependencyProperty.Register(nameof(IsOverview), typeof(bool), typeof(BoardItemContainer), new PropertyMetadata(false));
+    /// <summary>Quanto o tÃ­tulo cresce para continuar legÃ­vel na tela (1 / zoom).</summary>
+    public static readonly DependencyProperty OverviewScaleProperty = DependencyProperty.Register(nameof(OverviewScale), typeof(double), typeof(BoardItemContainer), new PropertyMetadata(1.0));
+
+    public bool IsOverview { get => (bool)GetValue(IsOverviewProperty); set => SetValue(IsOverviewProperty, value); }
+    public double OverviewScale { get => (double)GetValue(OverviewScaleProperty); set => SetValue(OverviewScaleProperty, value); }
+
     readonly ScaleTransform _scale = new();
     readonly TranslateTransform _lift = new();
     readonly RotateTransform _rotate = new();

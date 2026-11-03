@@ -55,20 +55,19 @@ public sealed class TextBoxView : ItemViewBase
 
         var text = new TextBlock { Margin = new Thickness(10, 6, 10, 6), TextWrapping = TextWrapping.Wrap };
         UI.SetField(text, "text");
-        Bind(text, TextBlock.TextProperty, "StyledText");
+        Bind(text, RichText.SourceProperty, "StyledText");
         BindFont(text);
         text.SetBinding(TextBlock.ForegroundProperty, "TextBrush");
         text.SetBinding(TextBlock.TextAlignmentProperty, "TextAlign");
         text.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Hidden") });
         Children.Add(text);
 
-        var edit = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Margin = new Thickness(6, 2, 6, 2) };
-        EditBox.SetLists(edit, true);
+        var edit = new RichEditBox { Margin = new Thickness(6, 2, 6, 2) };
         EditBox.SetMode(edit, "multi");
-        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
+        edit.SetBinding(RichEditBox.MarkdownProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged });
         BindFont(edit);
-        edit.SetBinding(TextBox.ForegroundProperty, "TextBrush");
-        edit.SetBinding(TextBox.TextAlignmentProperty, "TextAlign");
+        edit.SetBinding(Control.ForegroundProperty, "TextBrush");
+        edit.SetBinding(RichEditBox.TextAlignmentProperty, "TextAlign");
         edit.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Visible") });
         Children.Add(edit);
 
@@ -112,20 +111,19 @@ public sealed class ShapeView : ItemViewBase
 
         var text = new TextBlock { Margin = new Thickness(16), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         UI.SetField(text, "text");
-        text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Text") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
+        text.SetBinding(RichText.SourceProperty, "Text");
         TextBoxView.BindFont(text);
         text.SetBinding(TextBlock.ForegroundProperty, "TextBrush");
         text.SetBinding(TextBlock.TextAlignmentProperty, "TextAlign");
         text.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Hidden") });
         Children.Add(text);
 
-        var edit = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Margin = new Thickness(14), VerticalAlignment = VerticalAlignment.Center };
-        EditBox.SetLists(edit, true);
+        var edit = new RichEditBox { Margin = new Thickness(14), VerticalAlignment = VerticalAlignment.Center };
         EditBox.SetMode(edit, "note");
-        edit.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged, Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("NoteText") });
+        edit.SetBinding(RichEditBox.MarkdownProperty, new System.Windows.Data.Binding("Text") { UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged });
         TextBoxView.BindFont(edit);
-        edit.SetBinding(TextBox.ForegroundProperty, "TextBrush");
-        edit.SetBinding(TextBox.TextAlignmentProperty, "TextAlign");
+        edit.SetBinding(Control.ForegroundProperty, "TextBrush");
+        edit.SetBinding(RichEditBox.TextAlignmentProperty, "TextAlign");
         edit.SetBinding(VisibilityProperty, new System.Windows.Data.Binding("IsEditingText") { Converter = (System.Windows.Data.IValueConverter)Application.Current.FindResource("Visible") });
         Children.Add(edit);
 
@@ -551,7 +549,9 @@ public sealed class DrawingView : ItemViewBase
 
     public static Pen PenFor(InkStroke s)
     {
-        var color = (Color)ColorConverter.ConvertFromString(s.Cor);
+        Color color;
+        try { color = (Color)ColorConverter.ConvertFromString(s.Cor); }
+        catch (FormatException) { color = Color.FromRgb(0x1D, 0x21, 0x30); } // arquivo com cor inválida não derruba o quadro
         var pen = s.Ferramenta switch
         {
             "marcador" => new Pen(ShadowCache.BrushOf(Color.FromArgb(110, color.R, color.G, color.B)), s.Espessura * 3)
@@ -624,8 +624,32 @@ public sealed class ImageView : ItemViewBase
         if (Item is null) { _brush.ImageSource = null; return; } // item guardado: solta a imagem da memória
         _decoded = DecodeWidth(Item.ItemWidth);
         _brush.ImageSource = Load(Item.FileFullPath, _decoded);
+        // Arquivo apagado ou movido: um aviso no lugar, para o item não ficar invisível.
+        if (_brush.ImageSource is null)
+        {
+            _img.SetResourceReference(Border.BackgroundProperty, "Fill2Brush");
+            var missing = new TextBlock { Text = "Imagem não encontrada", TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8), FontSize = 13 };
+            missing.SetResourceReference(TextBlock.ForegroundProperty, "Ink2Brush");
+            _img.Child = missing;
+        }
+        else
+        {
+            _img.Background = _brush;
+            _img.Child = null;
+        }
         Apply();
     }
+
+    /// <summary>Exportar: troca pela imagem no tamanho que a exportação pede (até o original); <see cref="Rebuild"/> volta ao da tela.</summary>
+    public void LoadForExport(double scale)
+    {
+        if (Item is null) return;
+        int width = (int)Math.Ceiling(Item.ItemWidth * scale);
+        if (width <= _decoded) return;
+        if (Load(Item.FileFullPath, width) is { } full) _brush.ImageSource = full;
+    }
+
+    public void EndExport() => Rebuild();
 
     protected override void OnItem(string p)
     {
@@ -906,11 +930,11 @@ public sealed class TableView : ItemViewBase
                 };
                 if (_editing == (r, c))
                 {
-                    var tb = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), Text = ListText.ToDisplay(text), AcceptsReturn = false };
-                    EditBox.SetLists(tb, true);
+                    var tb = new RichEditBox { Markdown = text, AcceptsReturn = false };
                     TextBoxView.BindFont(tb);
+                    tb.SetBinding(Control.ForegroundProperty, "TextBrush");
                     int rr = r, cc = c;
-                    string Saved() => ListText.ToMarkdown(tb.Text);
+                    string Saved() => tb.Markdown;
                     tb.Loaded += (_, _) => { tb.Focus(); tb.SelectAll(); };
                     tb.KeyDown += (_, e) =>
                     {
@@ -922,9 +946,10 @@ public sealed class TableView : ItemViewBase
                 }
                 else
                 {
-                    var tbk = new TextBlock { Text = ListText.ToDisplay(text), TextWrapping = TextWrapping.Wrap, FontWeight = r == 0 ? FontWeights.SemiBold : FontWeights.Normal };
+                    var tbk = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = r == 0 ? FontWeights.SemiBold : FontWeights.Normal };
                     TextBoxView.BindFont(tbk);
                     if (r == 0) tbk.FontWeight = FontWeights.SemiBold;
+                    RichText.Fill(tbk, text);
                     tbk.SetBinding(TextBlock.ForegroundProperty, "TextBrush");
                     cell.Child = tbk;
                 }

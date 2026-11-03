@@ -128,7 +128,7 @@ public partial class BoardItemViewModel : ObservableObject
     public partial string Title { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DisplayName), nameof(UpperText), nameof(PreviewText), nameof(Headings), nameof(HasHeadings))]
+    [NotifyPropertyChangedFor(nameof(DisplayName), nameof(UpperText), nameof(PreviewText), nameof(PreviewMd), nameof(Headings), nameof(HasHeadings))]
     public partial string Text { get; set; }
 
     /// <summary>Página aberta na lista "No quadro" (mostra os títulos internos).</summary>
@@ -205,6 +205,19 @@ public partial class BoardItemViewModel : ObservableObject
     public Color PaperColor => Color.Paper;
     public Color InkColor => Color.Ink;
     public Brush PaperBrush => Color.PaperBrush;
+
+    /// <summary>Fundo e letra do item quando o quadro estÃ¡ bem afastado (sÃ³ o tÃ­tulo aparece).</summary>
+    public Brush OverviewFill => Kind switch
+    {
+        ItemKind.Page => ShadowCache.BrushOf(System.Windows.Media.Color.FromRgb(0xFF, 0xFE, 0xFA)),
+        ItemKind.Block => BlockFill,
+        ItemKind.TextBox => ShadowCache.BrushOf(OverviewDarkSurface ? System.Windows.Media.Color.FromRgb(0x26, 0x27, 0x2B) : System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)),
+        _ => PaperBrush,
+    };
+    public Brush OverviewInk => Kind == ItemKind.TextBox
+        ? ShadowCache.BrushOf(OverviewDarkSurface ? System.Windows.Media.Color.FromRgb(0xE6, 0xE7, 0xEB) : System.Windows.Media.Color.FromRgb(0x1F, 0x22, 0x29))
+        : Color.IsDark ? Brushes.White : ShadowCache.BrushOf(System.Windows.Media.Color.FromRgb(0x1D, 0x21, 0x30));
+    static bool OverviewDarkSurface => BoardSurfaces.Model is BoardModel.Lousa or BoardModel.Escuro || (BoardSurfaces.Model == BoardModel.Liso && Services.ThemeService.IsDark);
     public Brush InkBrush => Color.InkBrush;
     public Brush ListDotBrush => Kind switch
     {
@@ -251,6 +264,8 @@ public partial class BoardItemViewModel : ObservableObject
 
     /// <summary>Começo do texto da página (o que aparece na folha de caderno).</summary>
     public string PreviewText => Markdown.ToPlainPreview(Text, 14);
+    /// <summary>A mesma prévia, mas mantendo negrito, itálico, cor e fundo.</summary>
+    public string PreviewMd => Markdown.ToPlainPreview(Text, 14, keepInline: true);
 
     // estilo livre
     public Brush FillBrush => BrushFromHex(Style.Preenchimento, Colors.Transparent);
@@ -316,6 +331,7 @@ public partial class BoardItemViewModel : ObservableObject
         {
             var s = Kind switch
             {
+                ItemKind.TextBox when !string.IsNullOrWhiteSpace(Title) => Title,
                 ItemKind.Page or ItemKind.Block => Title,
                 ItemKind.PostIt when Lined => Title,
                 ItemKind.Image or ItemKind.Video or ItemKind.File => FileName,
@@ -326,6 +342,7 @@ public partial class BoardItemViewModel : ObservableObject
                 ItemKind.Table => Table is { Count: > 0 } t ? string.Join(" · ", t[0].Where(c => c.Length > 0)) : "Tabela",
                 _ => Text,
             };
+            if (s.Contains('*') || s.Contains('<') || s.Contains('`') || s.Contains('~')) s = Behaviors.RichText.Parse(s).Text; // sem as marcas de formatação
             return string.IsNullOrWhiteSpace(s) ? TypeLabel : s.ReplaceLineEndings(" ").Trim();
         }
     }
@@ -366,7 +383,7 @@ public partial class BoardItemViewModel : ObservableObject
         ItemKind.Shape => new ItemStyle { Preenchimento = "#FFA6D3FF", Borda = "#FF1B5DA8", Espessura = 2, Tamanho = 16, Alinhamento = "centro", CorTexto = "#FF1D2130" },
         ItemKind.Line => new ItemStyle { Borda = LineGray, Espessura = 2.5 },
         ItemKind.TextBox => new ItemStyle { Tamanho = 20, CorTexto = "#FF1D2130" },
-        ItemKind.Table => new ItemStyle { Preenchimento = "#F2FFFFFF", Borda = "#331D2130", Espessura = 1, Tamanho = 14, CorTexto = "#FF1D2130" },
+        ItemKind.Table => new ItemStyle { Preenchimento = "#FFFFFFFF", Borda = "#331D2130", Espessura = 1, Tamanho = 14, CorTexto = "#FF1D2130" },
         ItemKind.Text => new ItemStyle { Tamanho = 50, Fonte = "Nunito" },
         _ => new ItemStyle(),
     };

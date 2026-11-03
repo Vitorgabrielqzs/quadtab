@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Quadtab.Behaviors;
 using Quadtab.Rendering;
 
 namespace Quadtab.Controls;
@@ -27,6 +28,10 @@ public sealed class TrackedText : FrameworkElement
     public static readonly DependencyProperty WrapProperty = DependencyProperty.Register(nameof(Wrap), typeof(bool), typeof(TrackedText), new FrameworkPropertyMetadata(true, M));
     public static readonly DependencyProperty TextShadowsProperty = DependencyProperty.Register(nameof(TextShadows), typeof(string), typeof(TrackedText), new FrameworkPropertyMetadata(null, M));
 
+    /// <summary>Lê negrito, itálico, cor e fundo no texto (corpo dos itens; títulos não).</summary>
+    public static readonly DependencyProperty RichProperty = DependencyProperty.Register(nameof(Rich), typeof(bool), typeof(TrackedText), new FrameworkPropertyMetadata(false, M));
+
+    public bool Rich { get => (bool)GetValue(RichProperty); set => SetValue(RichProperty, value); }
     public string Text { get => (string)GetValue(TextProperty); set => SetValue(TextProperty, value); }
     public FontFamily FontFamily { get => (FontFamily)GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
     public double FontSize { get => (double)GetValue(FontSizeProperty); set => SetValue(FontSizeProperty, value); }
@@ -44,6 +49,8 @@ public sealed class TrackedText : FrameworkElement
     readonly List<(GlyphRun? Run, double Width)> _lines = [];
     readonly List<(double Dx, double Dy, Brush Brush)> _shadowPasses = [];
     FormattedText? _fallback;
+    bool _rich;
+    readonly List<(int Start, int Length, Brush Brush)> _backs = [];
     double _lineHeight;
 
     public TrackedText() => IsHitTestVisible = true;
@@ -54,22 +61,31 @@ public sealed class TrackedText : FrameworkElement
     {
         _lines.Clear();
         _fallback = null;
+        _rich = false;
+        _backs.Clear();
         BuildShadowPasses();
 
         var text = Text ?? "";
+        Parsed? rich = null;
+        if (Rich && RichText.Parse(text) is { HasFormat: true } parsed)
+        {
+            rich = parsed;
+            text = parsed.Text;
+        }
         if (Uppercase) text = text.ToUpper(PtBr);
         double size = FontSize;
         double maxW = Wrap && !double.IsInfinity(available.Width) ? Math.Max(1, available.Width) : double.PositiveInfinity;
         float ppd = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
 
         var tf = new Typeface(FontFamily, FontStyles.Normal, FontWeight, FontStretches.Normal);
-        if (!tf.TryGetGlyphTypeface(out var gt) || !HasAllGlyphs(gt, text))
+        if (rich is not null || !tf.TryGetGlyphTypeface(out var gt) || !HasAllGlyphs(gt, text))
         {
-            // Caractere que a fonte não tem (ex.: emoji): usa o texto normal do WPF, sem espaçamento.
+            // Caractere que a fonte não tem (ex.: emoji) ou texto formatado: usa o texto normal do WPF, sem espaçamento.
             _fallback = new FormattedText(text, PtBr, FlowDirection.LeftToRight, tf, size, Foreground, ppd)
             {
                 TextAlignment = TextAlignment,
             };
+            if (rich is not null) ApplyRich(_fallback, rich);
             if (!double.IsNaN(LineHeight)) _fallback.LineHeight = LineHeight;
             if (!double.IsInfinity(maxW)) _fallback.MaxTextWidth = maxW;
             return new Size(Math.Min(_fallback.WidthIncludingTrailingWhitespace, maxW), _fallback.Height);
@@ -148,6 +164,28 @@ public sealed class TrackedText : FrameworkElement
         return new Size(maxLine, _lines.Count * _lineHeight);
     }
 
+    void ApplyRich(FormattedText ft, Parsed rich)
+    {
+        _rich = true;
+        foreach (var (start, length, f) in rich.Segs)
+        {
+            if (f.IsPlain) continue;
+            if (f.Bold) ft.SetFontWeight(RichText.BoldOf(FontWeight), start, length);
+            if (f.Italic) ft.SetFontStyle(FontStyles.Italic, start, length);
+            if (f.Code) ft.SetFontFamily(RichText.CodeFont, start, length);
+            if (f.Underline || f.Strike)
+            {
+                var d = new TextDecorationCollection();
+                if (f.Underline) d.Add(TextDecorations.Underline[0]);
+                if (f.Strike) d.Add(TextDecorations.Strikethrough[0]);
+                ft.SetTextDecorations(d, start, length);
+            }
+            if (RichText.BrushOf(f.Color) is { } ink) ft.SetForegroundBrush(ink, start, length);
+            if (f.Code) _backs.Add((start, length, RichText.CodeBack));
+            if (RichText.BrushOf(f.Back) is { } back) _backs.Add((start, length, back));
+        }
+    }
+
     static bool HasAllGlyphs(GlyphTypeface gt, string text)
     {
         var map = gt.CharacterToGlyphMap;
@@ -190,6 +228,15 @@ public sealed class TrackedText : FrameworkElement
     {
         double width = ActualWidth;
         dc.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize)); // a caixa toda responde ao clique
+        if (_fallback is not null && _rich)
+        {
+            // Texto formatado: fundos primeiro, depois as letras (sem sombra, para não apagar as cores).
+            foreach (var (start, length, brush) in _backs)
+                if (_fallback.BuildHighlightGeometry(new Point(0, 0), start, length) is { } g)
+                    dc.DrawGeometry(brush, null, g);
+            dc.DrawText(_fallback, new Point(0, 0));
+            return;
+        }
         if (_fallback is not null)
         {
             foreach (var (dx, dy, b) in _shadowPasses)

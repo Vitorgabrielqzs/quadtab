@@ -316,6 +316,33 @@
         </Setter>
     </Style>
 
+    <!-- O mesmo campo de edição, para o texto formatado (RichEditBox) -->
+    <Style x:Key="RichEdit" TargetType="RichTextBox">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Background" Value="{StaticResource EditBackBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="SelectionOpacity" Value="0.3" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Cursor" Value="IBeam" />
+        <Setter Property="AllowDrop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RichTextBox">
+                    <Grid>
+                        <Border Margin="-2" CornerRadius="8" BorderThickness="2" BorderBrush="{StaticResource AccentBrush}" />
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Barras de rolagem finas e arredondadas -->
     <Style x:Key="ThinThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True" />

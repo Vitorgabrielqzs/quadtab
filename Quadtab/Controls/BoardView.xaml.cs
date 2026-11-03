@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
@@ -68,6 +68,9 @@ public partial class BoardView : UserControl
         public readonly double Rotation = item.Rotation;
         public readonly double FontSize = item.Style.Tamanho;
         public Point Pointer = world;
+        // Ponta de linha: onde estava presa. Solta no vazio, volta para lá.
+        public readonly int? EndItem = handle == 9 ? item.Line?.De.Item : handle == 10 ? item.Line?.Para.Item : null;
+        public readonly string? EndSide = handle == 9 ? item.Line?.De.Lado : handle == 10 ? item.Line?.Para.Lado : null;
     }
 
     readonly BoardCamera _camera = new();
@@ -83,7 +86,7 @@ public partial class BoardView : UserControl
     const double GapHoldMs = 500;
     readonly DispatcherTimer _holdTimer = new() { Interval = TimeSpan.FromMilliseconds(GapHoldMs + 20) };
     double ItemCacheScale =>Math.Clamp(_camera.Zoom * _dpi * 2, 0.2, 6);
-    const double MaxExportSide = 16000, MaxExportPixels = 100_000_000; // PNG: até 100 megapixels
+    const double MaxExportSide = 16000, MaxExportPixels = 100_000_000; // imagem de até 100 megapixels
     readonly DispatcherTimer _idle;
     readonly Stopwatch _work = new();
 
@@ -289,6 +292,7 @@ public partial class BoardView : UserControl
             case nameof(BoardItemViewModel.IsSelected):
             case nameof(BoardItemViewModel.Editing):
                 if (it.IsSelected || it.Editing != EditField.None) Realize(it); // nunca some enquanto está em uso
+                if (_containers.TryGetValue(it, out var overviewHost)) ApplyOverview(it, overviewHost);
                 UpdateAdorner();
                 break;
             case nameof(BoardItemViewModel.Line):
@@ -342,6 +346,34 @@ public partial class BoardView : UserControl
         BoardSurfaces.Update(Vm.Model, _camera.Zoom);
         ApplyCamera();
         Settle();
+    }
+
+    // ---------- zoom bem afastado: sÃ³ os tÃ­tulos ----------
+
+    bool _overview;
+    double _overviewZoom = 1;
+
+    static bool HasOverview(BoardItemViewModel v) => v.Kind is ItemKind.PostIt or ItemKind.Page or ItemKind.Block or ItemKind.TextBox;
+
+    /// <summary>Liga abaixo de 34% e sÃ³ desliga acima de 42%, para nÃ£o piscar no limite.</summary>
+    void UpdateOverview(double zoom)
+    {
+        bool on = _overview ? zoom < 0.42 : zoom < 0.34;
+        if (on == _overview && (!on || Math.Abs(zoom / _overviewZoom - 1) < 0.03)) return;
+        _overview = on;
+        _overviewZoom = zoom;
+        foreach (var (vm, c) in _containers) ApplyOverview(vm, c);
+    }
+
+    void ApplyOverview(BoardItemViewModel vm, BoardItemContainer c)
+    {
+        bool show = _overview && HasOverview(vm) && vm.Editing == EditField.None;
+        if (c.IsOverview != show) c.IsOverview = show;
+        if (!show) return;
+        // Letra de 9 a 15 px na tela: item pequeno ganha tÃ­tulo menor, para caber mais palavras.
+        double target = Math.Clamp(0.2 * vm.MeasuredSize.Width * _overviewZoom, 9, 15);
+        double scale = Math.Clamp(target / (16 * _overviewZoom), 1, 8);
+        if (Math.Abs(c.OverviewScale - scale) > 0.001) c.OverviewScale = scale;
     }
 
     void Kick()
@@ -449,6 +481,7 @@ public partial class BoardView : UserControl
         tx = Math.Round(tx * _dpi) / _dpi;
         ty = Math.Round(ty * _dpi) / _dpi;
         CameraTransform.Matrix = new Matrix(z, 0, 0, z, tx, ty);
+        UpdateOverview(z);
         SurfaceBg.SetCamera(tx, ty, z);
         UpdateGlass();
         UpdateAdorner();
@@ -524,7 +557,9 @@ public partial class BoardView : UserControl
             c.DataContext = vm;
             c.Content = vm;
             c.Visibility = Visibility.Visible;
-            Vm.OnItemResized(vm); // reaproveitado no mesmo tamanho não avisa: acerta o espaço dos anexos
+            // Reaproveitado no mesmo tamanho não avisa: guarda o tamanho e acerta o espaço dos anexos.
+            if (c.ActualWidth > 0) { vm.Width = c.ActualWidth; vm.Height = c.ActualHeight; }
+            Vm.OnItemResized(vm);
         }
         else
         {
@@ -543,6 +578,7 @@ public partial class BoardView : UserControl
         }
         c.Attach(vm);
         _containers[vm] = c;
+        ApplyOverview(vm, c);
         ApplyLineVisibility(vm);
     }
 
@@ -739,7 +775,7 @@ public partial class BoardView : UserControl
         if (e.ChangedButton != MouseButton.Left) return;
 
         var src = e.OriginalSource as DependencyObject;
-        if (Tree.FindAncestor<TextBox>(src) is not null) return; // clique dentro do campo em edição
+        if (Tree.FindAncestor<System.Windows.Controls.Primitives.TextBoxBase>(src) is not null) return; // clique dentro do campo em edição
         // Somente visualização: arrastar só move a câmera; 2 cliques só abrem links e arquivos.
         if (Vm.ReadOnly)
         {
@@ -904,6 +940,9 @@ public partial class BoardView : UserControl
         foreach (var it in items.ToList())
             foreach (var c in Vm.AttachedTree(it))
                 if (!items.Contains(c)) items.Add(c);
+        // Seta ligada não anda com o arraste: as pontas seguem os itens e nunca se soltam.
+        items.RemoveAll(i => i.Line is { } l && (l.De.Item is not null || l.Para.Item is not null));
+        if (items.Count == 0) return;
         Vm.Checkpoint();
         var d = new DragState(grabbed, _camera.ToWorld(p), p);
         foreach (var it in items)
@@ -1067,14 +1106,11 @@ public partial class BoardView : UserControl
         {
             if (it.Line is { } l)
             {
-                // Linha arrastada: as pontas andam juntas e soltam dos itens que ficaram parados.
+                // Só linha sem nada preso entra no arraste (ver StartDrag): as duas pontas andam juntas.
                 foreach (var end in new[] { l.De, l.Para })
                 {
-                    if (end.Item is { } id && moving.Contains(id)) continue;
                     end.X += d.Offset.X;
                     end.Y += d.Offset.Y;
-                    end.Item = null;
-                    end.Lado = null;
                 }
             }
             it.X = Math.Round(it.X + d.Offset.X);
@@ -1601,6 +1637,16 @@ public partial class BoardView : UserControl
                 end.Lado = SideFor(target, h.Pointer);
                 RefreshLines([target], default);
             }
+            else if (h.EndItem is { } id && Vm.Items.FirstOrDefault(i => i.Id == id) is { } origin)
+            {
+                // Seta ligada não se solta: soltou no vazio, a ponta volta para o item.
+                end.Item = id;
+                end.Lado = h.EndSide;
+                var p = AnchorOf(origin, h.EndSide);
+                end.X = p.X;
+                end.Y = p.Y;
+                FitLineBox(h.Item);
+            }
             h.Item.Touch(nameof(BoardItemViewModel.Line));
         }
         _handle = null;
@@ -1918,7 +1964,7 @@ public partial class BoardView : UserControl
             return;
         }
         var src = e.OriginalSource as DependencyObject;
-        if (Tree.FindAncestor<TextBox>(src) is not null) return;
+        if (Tree.FindAncestor<System.Windows.Controls.Primitives.TextBoxBase>(src) is not null) return;
         if (Vm.ReadOnly) { e.Handled = true; return; } // somente visualização: sem menus nem bandeja
         var root = Window.GetWindow(this)?.Content as IInputElement;
         var windowPoint = root is null ? default : e.GetPosition(root);
@@ -1940,6 +1986,9 @@ public partial class BoardView : UserControl
     {
         // Primeiro cria e mede tudo: itens fora da tela ainda não têm o tamanho real, e a área sairia errada.
         foreach (var it in items) Realize(it);
+        // A imagem exportada mostra o item inteiro, mesmo que o quadro esteja afastado na tela.
+        bool wasOverview = _overview;
+        if (wasOverview) { _overview = false; foreach (var (vm, c) in _containers) ApplyOverview(vm, c); ItemsLayer.UpdateLayout(); }
         var hidden = new List<BoardItemContainer>();
         if (onlyThese)
             foreach (var (vm, c) in _containers)
@@ -1950,9 +1999,6 @@ public partial class BoardView : UserControl
         // Os + das tabelas são da tela: não vão para a imagem.
         var tables = _containers.Values.Where(c => c.Item?.Kind == ItemKind.Table).Select(FindChild<TableView>).OfType<TableView>().ToList();
         foreach (var tv in tables) tv.ShowAdd(false);
-        // O pincel enxerga a transformação da própria camada: com a câmera nela, a imagem sairia no zoom e na posição da tela.
-        var cameraTransform = ItemsLayer.RenderTransform;
-        ItemsLayer.RenderTransform = Transform.Identity;
         UpdateLayout();
 
         var area = items.Aggregate(Rect.Empty, (r, i) => { r.Union(i.Bounds); return r; });
@@ -1967,24 +2013,50 @@ public partial class BoardView : UserControl
         }
         scale = Math.Min(scale, Math.Min(MaxExportSide / Math.Max(area.Width, area.Height), Math.Sqrt(MaxExportPixels / (area.Width * area.Height))));
 
+        // Fotos na resolução que a imagem pede (na tela elas ficam reduzidas para poupar memória).
+        var images = _containers.Values.Select(FindChild<ImageView>).OfType<ImageView>().ToList();
+        foreach (var iv in images) iv.LoadForExport(scale);
+
         int w = (int)Math.Ceiling(area.Width * scale), h = (int)Math.Ceiling(area.Height * scale);
+        var rtb = new RenderTargetBitmap(Math.Max(1, w), Math.Max(1, h), 96, 96, PixelFormats.Pbgra32);
         var dv = new DrawingVisual();
         using (var dc = dv.RenderOpen())
         {
             dc.PushTransform(new ScaleTransform(scale, scale));
             dc.PushTransform(new TranslateTransform(-area.X, -area.Y));
             SurfaceBg.PaintWorld(dc, area);
-            dc.DrawRectangle(new VisualBrush(ItemsLayer) { ViewboxUnits = BrushMappingMode.Absolute, Viewbox = area, Stretch = Stretch.Fill }, null, area);
             dc.Pop();
             dc.Pop();
         }
-        var rtb = new RenderTargetBitmap(Math.Max(1, w), Math.Max(1, h), 96, 96, PixelFormats.Pbgra32);
         rtb.Render(dv);
+        // Os itens vão direto para a imagem, sem VisualBrush: o pincel vira um bitmap intermediário de tamanho
+        // limitado e saía borrado. O Render ignora a transformação do próprio elemento desenhado, então desenha a
+        // Surface (só com a camada dos itens à mostra) e a câmera da camada vira a escala da exportação.
+        // (Troca a matriz, não o objeto: um RenderTransform novo só vale depois do próximo arrange.)
+        var camera = CameraTransform.Matrix;
+        var clip = Surface.Clip;
+        CameraTransform.Matrix = new Matrix(scale, 0, 0, scale, -area.X * scale, -area.Y * scale);
+        RenderOptions.SetBitmapScalingMode(ItemsLayer, BitmapScalingMode.HighQuality);
+        Surface.Clip = null;
+        SurfaceBg.Opacity = Hud.Opacity = 0;
+        try
+        {
+            UpdateLayout();
+            rtb.Render(Surface);
+        }
+        finally
+        {
+            SurfaceBg.Opacity = Hud.Opacity = 1;
+            Surface.Clip = clip;
+            ItemsLayer.ClearValue(RenderOptions.BitmapScalingModeProperty);
+            CameraTransform.Matrix = camera;
+            foreach (var iv in images) iv.EndExport();
+            foreach (var c in hidden) c.Visibility = Visibility.Visible;
+            foreach (var c in cached) c.CacheMode = _itemCache;
+            if (wasOverview) { _overview = true; foreach (var (vm, c) in _containers) ApplyOverview(vm, c); }
+            foreach (var tv in tables) tv.ShowAdd(true);
+        }
         rtb.Freeze();
-        foreach (var c in hidden) c.Visibility = Visibility.Visible;
-        foreach (var c in cached) c.CacheMode = _itemCache;
-        ItemsLayer.RenderTransform = cameraTransform;
-        foreach (var tv in tables) tv.ShowAdd(true);
         return rtb;
     }
 }

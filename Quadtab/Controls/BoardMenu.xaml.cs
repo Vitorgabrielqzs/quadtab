@@ -73,7 +73,7 @@ public partial class BoardMenu : UserControl
             Remember(StorageService.State.CoresLinhaRecentes, hex);
         });
         d.DataContext = hex;
-        d.Margin = new Thickness(0, 0, 6, 6);
+        d.Margin = new Thickness(0, 0, 4.5, 6); // as 8 cores cabem numa linha só
         return d;
     }
 
@@ -115,6 +115,38 @@ public partial class BoardMenu : UserControl
     {
         var panel = _item?.Line is null ? ItemDots : LineDots;
         panel.Visibility = panel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        ContentChanged?.Invoke();
+    }
+
+    /// <summary>O menu mudou de altura (a paleta abriu ou fechou): a janela reposiciona.</summary>
+    public event Action? ContentChanged;
+
+    /// <summary>Uma coluna quando cabe na altura disponível; senão, duas, para aparecer tudo sem rolar.</summary>
+    public void FitTo(double available)
+    {
+        SetColumns(false);
+        MaxHeight = double.PositiveInfinity;
+        UpdateLayout();
+        if (ItemPart.DesiredSize.Height + 12 > available) SetColumns(true);
+    }
+
+    void SetColumns(bool two)
+    {
+        Width = two ? 528 : 266;
+        Grid.SetRow(RightPart, two ? 0 : 1);
+        Grid.SetColumn(RightPart, two ? 1 : 0);
+        RightPart.Width = 254;
+        RightPart.Margin = new Thickness(two ? 8 : 0, 0, 0, 0);
+        PartGap.Visibility = two ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    bool _fillingAlpha;
+
+    void OnFillChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        FillText.Text = $"{Math.Round(FillSlider.Value)}%";
+        if (_fillingAlpha || _item is not { } item) return;
+        Vm.SetFillTransparency(item, Math.Round(FillSlider.Value));
     }
 
     static Button Dot(Brush fill, string tip, Action click)
@@ -146,6 +178,11 @@ public partial class BoardMenu : UserControl
         ColorPart.Visibility = item.Line is null ? Visibility.Visible : Visibility.Collapsed;
         SpiralRow.Visibility = item.Kind == ItemKind.Page ? Visibility.Visible : Visibility.Collapsed;
         FontRow.Visibility = SizeRow.Visibility = item.Kind == ItemKind.Text ? Visibility.Visible : Visibility.Collapsed;
+        FillPart.Visibility = item.Kind == ItemKind.Shape ? Visibility.Visible : Visibility.Collapsed;
+        _fillingAlpha = true;
+        FillSlider.Value = Math.Round((1 - MainViewModel.FillAlpha(item)) * 100);
+        FillText.Text = $"{Math.Round(FillSlider.Value)}%";
+        _fillingAlpha = false;
         _fillingSize = true;
         SizeBox.Text = Math.Round(item.Style.Tamanho).ToString(System.Globalization.CultureInfo.InvariantCulture);
         _fillingSize = false;

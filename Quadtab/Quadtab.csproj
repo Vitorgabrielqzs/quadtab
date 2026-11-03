@@ -12,7 +12,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\Quadtab.ico</ApplicationIcon>
     <Product>Quadtab</Product>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
     <!-- Menos memória: sem instrumentação do JIT e sem a linha extra do coletor de lixo -->
     <TieredPGO>false</TieredPGO>
@@ -23,6 +23,8 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Arquivo de 220 MB para 87 MB: o Windows demorava 13 a 23 s para liberar a primeira abertura de cada versão nova (custa ~100 MB de memória) -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
   </PropertyGroup>
 

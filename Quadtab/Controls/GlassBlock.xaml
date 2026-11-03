@@ -21,10 +21,10 @@
                          Visibility="{Binding IsEditingTitle, Converter={StaticResource Visible}}" />
             </Grid>
             <Grid Margin="0,8,0,0">
-                <TextBlock b:UI.Field="text" Text="{Binding Text, Converter={StaticResource NoteText}}" FontSize="14" LineHeight="23.8"
+                <TextBlock b:UI.Field="text" b:RichText.Source="{Binding Text}" FontSize="14" LineHeight="23.8"
                            LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap" Foreground="{Binding BlockBodyColor}"
                            Visibility="{Binding IsEditingText, Converter={StaticResource Hidden}}" />
-                <TextBox Style="{StaticResource EditBox}" b:EditBox.Lists="True" b:EditBox.Mode="multi" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NoteText}}"
+                <c:RichEditBox b:EditBox.Mode="multi" Markdown="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="14" Foreground="{Binding BlockBodyColor}"
                          Visibility="{Binding IsEditingText, Converter={StaticResource Visible}}" />
             </Grid>

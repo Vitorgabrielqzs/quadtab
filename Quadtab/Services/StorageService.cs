@@ -248,6 +248,10 @@ public static class StorageService
     public static string DuplicateBoard(string path)
     {
         var b = LoadBoard(path);
+        // A cópia ganha as próprias notas: mexer ou apagar em um quadro não afeta o outro.
+        foreach (var it in b.Itens)
+            if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(Full(rel)))
+                it.Arquivo = Rel(CreatePage(Path.GetFileNameWithoutExtension(rel), ReadPage(Full(rel))));
         var copy = CreateBoard(Path.GetRelativePath(BoardsDir, Path.GetDirectoryName(path)!) is "." ? "" :
             Path.GetRelativePath(BoardsDir, Path.GetDirectoryName(path)!), Path.GetFileNameWithoutExtension(path) + " (cópia)", b);
         return copy;

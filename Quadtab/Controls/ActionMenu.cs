@@ -21,18 +21,46 @@ public sealed record ActionItem(string Label, string? Icon, Action Run, bool Dan
 /// </summary>
 public sealed class ActionMenu : ContentControl
 {
-    readonly StackPanel _list = new();
+    const double ColumnWidth = 284;
+    readonly StackPanel _list = new() { Width = ColumnWidth };
+    readonly StackPanel _second = new() { Width = ColumnWidth, Margin = new Thickness(8, 0, 0, 0) };
+    readonly List<UIElement> _rows = [];
 
     public event Action? Closed;
 
+    /// <summary>Uma coluna quando cabe na altura disponível; senão, duas, para aparecer tudo sem rolar.</summary>
+    public void FitTo(double available)
+    {
+        _list.Children.Clear();
+        _second.Children.Clear();
+        foreach (var r in _rows) _list.Children.Add(r);
+        _list.Measure(new Size(ColumnWidth, double.PositiveInfinity));
+        double total = _list.DesiredSize.Height;
+        bool two = total + 12 > available;
+        Glass.Width = two ? ColumnWidth * 2 + 8 + 12 : ColumnWidth + 12;
+        _second.Visibility = two ? Visibility.Visible : Visibility.Collapsed;
+        if (!two) return;
+        _list.Children.Clear();
+        double used = 0;
+        foreach (var r in _rows)
+        {
+            r.Measure(new Size(ColumnWidth, double.PositiveInfinity));
+            (used < total / 2 ? _list : _second).Children.Add(r);
+            used += r.DesiredSize.Height;
+        }
+    }
+
     public ActionMenu()
     {
-        var glass = new GlassPanel { CornerRadius = 24, Padding = new Thickness(6), Width = 296 };
+        var glass = new GlassPanel { CornerRadius = 24, Padding = new Thickness(6), Width = ColumnWidth + 12 };
         glass.SetResourceReference(GlassPanel.BackgroundProperty, "Glass2Brush");
+        var columns = new StackPanel { Orientation = Orientation.Horizontal };
+        columns.Children.Add(_list);
+        columns.Children.Add(_second);
         // Mais alto que a janela: rola em vez de ficar cortado.
         glass.Child = new ScrollViewer
         {
-            Content = _list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = columns, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Focusable = false, Style = (Style)Application.Current.FindResource("OverlayScroll"),
         };
         Content = glass;
@@ -44,19 +72,21 @@ public sealed class ActionMenu : ContentControl
     public void SetItems(IEnumerable<ActionItem> items)
     {
         _list.Children.Clear();
+        _second.Children.Clear();
+        _rows.Clear();
         foreach (var it in items)
         {
             if (it.Separator)
             {
                 var sep = new Border { Height = 7, Margin = new Thickness(-6, 5, -6, 5) };
                 sep.SetResourceReference(Border.BackgroundProperty, "SepBrush");
-                _list.Children.Add(sep);
+                _rows.Add(sep);
             }
             if (it.IsHeader)
             {
                 var h = new TextBlock { Text = it.Label, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Padding = new Thickness(12, 9, 12, 7) };
                 h.SetResourceReference(TextBlock.ForegroundProperty, "Ink3Brush");
-                _list.Children.Add(h);
+                _rows.Add(h);
                 continue;
             }
             var row = new Button { Style = (Style)Application.Current.FindResource(it.Danger ? "MenuRowDanger" : "MenuRow"), ToolTip = it.Tip ?? ActionTips.For(it) };
@@ -83,7 +113,7 @@ public sealed class ActionMenu : ContentControl
                 Closed?.Invoke();
                 run();
             };
-            _list.Children.Add(row);
+            _rows.Add(row);
         }
     }
 }
@@ -122,8 +152,8 @@ public static class ActionTips
         ["Cenas e apresentação…"] = "Salva vistas do quadro e navega entre elas",
         ["Apresentar"] = "Apresenta as cenas em tela cheia, com as setas ← →",
         ["Apresentar (setas ← →)"] = "Apresenta as cenas em tela cheia, com as setas ← →",
-        ["Exportar quadro (PNG, PDF)…"] = "Salva o quadro inteiro como imagem PNG ou PDF",
-        ["Exportar seleção…"] = "Salva só os itens selecionados como imagem PNG ou PDF",
+        ["Exportar quadro em PDF…"] = "Salva o quadro inteiro em PDF, com a qualidade máxima",
+        ["Exportar seleção em PDF…"] = "Salva só os itens selecionados em PDF, com a qualidade máxima",
         ["Abrir a pasta do cofre"] = "Abre no Explorador a pasta onde tudo fica guardado",
         ["Salvar a vista atual como cena"] = "Guarda o que está na tela agora como uma cena",
         ["Apagar a última cena"] = "Apaga a cena salva por último",

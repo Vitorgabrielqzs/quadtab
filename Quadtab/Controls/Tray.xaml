@@ -23,6 +23,7 @@
                 </TransformGroup>
             </c:GlassPanel.RenderTransform>
 
+            <ScrollViewer Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
             <StackPanel>
                 <Border Width="40" Height="5" CornerRadius="2.5" Background="{DynamicResource Fill2Brush}" Margin="0,0,0,12" />
                 <DockPanel Margin="0,0,0,8">
@@ -99,6 +100,7 @@
                     </Button>
                 </Grid>
             </StackPanel>
+            </ScrollViewer>
         </c:GlassPanel>
 
         <!-- Botão da bandeja (sempre visível) -->

@@ -77,8 +77,14 @@ public partial class MainViewModel : ObservableObject
 
         var usedNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool separated = false;
+        // Arquivo editado à mão ou danificado: sem itens nulos nem dois itens com o mesmo número.
+        board.Itens = (board.Itens ?? []).Where(m => m is not null).ToList();
+        var usedIds = new HashSet<int>();
+        int nextFree = board.Itens.Select(m => m.Id).DefaultIfEmpty(0).Max();
         foreach (var m in board.Itens)
         {
+            if (!usedIds.Add(m.Id)) { m.Id = ++nextFree; usedIds.Add(m.Id); }
+            Sanitize(m);
             MigrateNote(m);
             MigratePage(m);
             // Cópias antigas dividiam o mesmo arquivo (e o mesmo título): cada nota ganha o seu.
@@ -93,6 +99,24 @@ public partial class MainViewModel : ObservableObject
             _seq = Math.Max(_seq, m.Id);
         }
         _lastEdit = File.Exists(path) ? File.GetLastWriteTime(path) : DateTime.Now;
+        // Arquivo antigo com seta presa a um item que não existe mais: a ponta fica solta, para a linha poder ser arrastada.
+        var known = new HashSet<int>(Items.Select(i => i.Id));
+        foreach (var l in Items.Select(i => i.Line).OfType<LineData>())
+            foreach (var end in new[] { l.De, l.Para })
+                if (end.Item is { } id && !known.Contains(id)) { end.Item = null; end.Lado = null; }
+        // Anexo em círculo ou preso a um item que não existe: fica solto (senão a arrumação nunca terminaria).
+        var byId = Items.ToDictionary(i => i.Id);
+        foreach (var item in Items)
+        {
+            var seen = new HashSet<int> { item.Id };
+            for (var p = item; p.AttachedTo is { } parent; p = byId[parent])
+                if (!byId.ContainsKey(parent) || !seen.Add(parent))
+                {
+                    p.AttachedTo = null;
+                    p.AttachSide = null;
+                    break;
+                }
+        }
         foreach (var (k, n) in GroupNames) OutlineGroups.Add(new OutlineGroup(k, n));
         RefreshOutline();
         _lastSnapshot = Snapshot();
@@ -129,6 +153,39 @@ public partial class MainViewModel : ObservableObject
         ItemKind.Drawing => "desenho",
         _ => "midia",
     };
+
+    /// <summary>Valores que o WPF não aceita (arquivo danificado ou editado à mão) viram valores válidos, para o quadro abrir sempre.</summary>
+    static void Sanitize(BoardItem m)
+    {
+        static double Coord(double v) => double.IsFinite(v) ? Math.Clamp(v, -1e7, 1e7) : 0;
+        static double? Size(double? v) => v is { } s && double.IsFinite(s) && s > 0 ? Math.Min(s, 1e5) : null;
+        m.X = Coord(m.X);
+        m.Y = Coord(m.Y);
+        m.Largura = Size(m.Largura);
+        m.Altura = Size(m.Altura);
+        m.Raio = double.IsFinite(m.Raio) ? Math.Clamp(m.Raio, 0, 1000) : 0;
+        if (m.Recorte is not { Length: 4 } || m.Recorte.Any(c => !double.IsFinite(c))) m.Recorte = null;
+        if (m.Estilo is { } st)
+        {
+            st.Tamanho = double.IsFinite(st.Tamanho) ? Math.Clamp(st.Tamanho, 8, 400) : 18;
+            st.Espessura = double.IsFinite(st.Espessura) ? Math.Clamp(st.Espessura, 0, 100) : 2;
+            st.Opacidade = double.IsFinite(st.Opacidade) ? Math.Clamp(st.Opacidade, 0, 1) : 1;
+        }
+        if (m.Linha is { } l)
+        {
+            l.De ??= new LineEnd();
+            l.Para ??= new LineEnd();
+            foreach (var end in new[] { l.De, l.Para })
+            {
+                end.X = Coord(end.X);
+                end.Y = Coord(end.Y);
+            }
+            if (l.DobraX is { } dx && !double.IsFinite(dx)) l.DobraX = null;
+            if (l.DobraY is { } dy && !double.IsFinite(dy)) l.DobraY = null;
+        }
+        m.Tracos = m.Tracos?.Where(t => t?.Pontos is not null).ToList();
+        m.Tabela = m.Tabela?.Where(r => r is not null).Select(r => r.Select(c => c ?? "").ToList()).ToList();
+    }
 
     /// <summary>Blocos com o título padrão antigo ("Bloco de vidro") ficam com o título livre.</summary>
     static void MigrateNote(BoardItem m)
@@ -449,6 +506,8 @@ public partial class MainViewModel : ObservableObject
             m.Texto = "Escreva aqui…";
         }
 
+        if (kind == ItemKind.Table) m.Tabela = [["Coluna 1", "Coluna 2", "Coluna 3"], ["", "", ""], ["", "", ""]];
+
         if (kind == ItemKind.PostIt && style is { } s)
         {
             if (s == NoteStyle.Lined)
@@ -479,6 +538,7 @@ public partial class MainViewModel : ObservableObject
         var st = vm.Style.Clone();
         st.Tamanho = 64;
         vm.Style = st;
+        Remember(vm.ToModel()); // 2 cliques no vazio repetem o título, não um texto pequeno
         return vm;
     }
 
@@ -733,6 +793,7 @@ public partial class MainViewModel : ObservableObject
 
     void RemoveCore(BoardItemViewModel vm)
     {
+        if (!Items.Contains(vm)) return; // já saiu junto com outro item (seta do item apagado)
         if (EditingItem == vm) EndEdit();
         foreach (var c in AttachedItems(vm).ToList()) Detach(c);
         if (vm.AttachedTo is not null) Detach(vm);
@@ -740,14 +801,9 @@ public partial class MainViewModel : ObservableObject
         vm.IsSelected = false;
         vm.PropertyChanged -= OnItemChanged;
         Items.Remove(vm);
-        // Linhas presas a este item ficam soltas onde estavam.
-        foreach (var l in Items.Where(i => i.Line is not null))
-        {
-            bool changed = false;
-            if (l.Line!.De.Item == vm.Id) { l.Line.De.Item = null; changed = true; }
-            if (l.Line!.Para.Item == vm.Id) { l.Line.Para.Item = null; changed = true; }
-            if (changed) l.Touch(nameof(BoardItemViewModel.Line));
-        }
+        // Seta ligada só sai junto com o item: nenhuma fica solta no quadro (Ctrl+Z traz os dois de volta).
+        foreach (var l in Items.Where(i => i.Line is { } d && (d.De.Item == vm.Id || d.Para.Item == vm.Id)).ToList())
+            RemoveCore(l);
         DeleteNoteFile(vm);
     }
 
@@ -803,6 +859,7 @@ public partial class MainViewModel : ObservableObject
             int old = m.Id;
             m.Id = ++_seq;
             ids[old] = m.Id;
+            Sanitize(m);
             m.X += offset.X;
             m.Y += offset.Y;
             m.Z = ++top;
@@ -916,12 +973,26 @@ public partial class MainViewModel : ObservableObject
             else if (vm.Kind == ItemKind.TextBox) s.CorTexto = c.Ink.ToString();
             else
             {
-                s.Preenchimento = c.Paper.ToString();
+                s.Preenchimento = ColorMath.WithAlpha(c.Paper, FillAlpha(vm)).ToString(); // trocar a cor mantém a transparência do fundo
                 s.Borda = (c.IsStrong ? c.Paper : c.Ink).ToString();
                 s.CorTexto = c.IsDark ? "#FFFFFFFF" : "#FF1D2130"; // texto branco só dentro de item escuro
             }
             vm.Style = s;
         }
+    }
+
+    /// <summary>Quanto do fundo da forma aparece (0 a 1).</summary>
+    public static double FillAlpha(BoardItemViewModel vm) =>
+        vm.FillBrush is System.Windows.Media.SolidColorBrush b ? b.Color.A / 255.0 : 1;
+
+    /// <summary>Transparência só do fundo da forma; a borda e o texto continuam firmes. Arrastar a barra conta como um desfazer só.</summary>
+    public void SetFillTransparency(BoardItemViewModel vm, double percent)
+    {
+        Checkpoint(coalesce: true);
+        var color = vm.Style.Preenchimento is null ? vm.Color.Paper : ((System.Windows.Media.SolidColorBrush)vm.FillBrush).Color;
+        var s = vm.Style.Clone();
+        s.Preenchimento = ColorMath.WithAlpha(color, 1 - Math.Clamp(percent, 0, 100) / 100).ToString();
+        vm.Style = s;
     }
 
     public void SetStyle(BoardItemViewModel vm, NoteStyle style)

@@ -66,12 +66,14 @@ public partial class MainWindow : Window
         CtxTray.CloseRequested += CloseContextTray;
         Palette.Board = Board;
         Tray.Overlay = Overlay;
+        Format.Overlay = Overlay;
         Tray.Root = WindowRoot;
         // Post-it da bandeja: última cor e último estilo usados.
         Tray.AddRequested += p => Board.AddAtCenter(p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Tray.ShapesRequested += ShowShapePicker;
         Tray.TitleRequested += () => _vm.AddTitle(Board.ViewCenter.X, Board.ViewCenter.Y);
         Menu.FontsRequested += ShowFonts;
+        Menu.ContentChanged += RefitMenu;
         Tray.DropRequested += (p, pt) => Board.TryAddAt(WindowRoot, pt, p.Kind, p.Color ?? _vm.LastColor, p.Style ?? NoteStyleFor(p.Kind));
         Editor.CloseRequested += ClosePage;
         Editor.ExpandChanged += ApplyEditorLayout;
@@ -136,13 +138,15 @@ public partial class MainWindow : Window
         PreviewMouseDown += (_, e) => Sparks.Fire(e.GetPosition(Sparks));
         PreviewMouseDown += OnPreviewMouseDown;
         PreviewMouseRightButtonUp += OnPreviewMouseRightUp;
-        PreviewMouseWheel += (_, _) => { CloseMenu(); CloseActions(); };
+        PreviewMouseWheel += (_, _) => { CloseMenu(); CloseActions(); Format.Hide(); };
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewKeyUp += (_, e) =>
         {
             if (e.Key == Key.Space) Board.SpaceHeld = false;
         };
-        Deactivated += (_, _) => Board.SpaceHeld = false;
+        // Tela cheia: cobre a barra de tarefas só enquanto o app está em uso; trocar de programa não fica preso atrás dele.
+        Activated += (_, _) => Topmost = _fullscreen;
+        Deactivated += (_, _) => { Board.SpaceHeld = false; Topmost = false; };
         Closing += (_, _) => { if (!_closing) SaveAll(); };
     }
 
@@ -252,6 +256,9 @@ public partial class MainWindow : Window
             case nameof(MainViewModel.BoardSearch): _hit = -1; UpdateSearchCount(); break;
             case nameof(MainViewModel.Zoom): ShowZoom(); break;
             case nameof(MainViewModel.TrayOpen):
+                // A bandeja cabe no quadro: o botão dela fica embaixo; o que passar rola por dentro.
+                Tray.SheetGlass.MaxHeight = Math.Max(200, BoardArea.ActualHeight - 110);
+                Tray.SheetGlass.Width = Math.Min(620, Math.Max(300, BoardArea.ActualWidth - 48));
                 var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(0.6) };
                 t.Tick += (_, _) => { t.Stop(); RefreshBoardGlass(); };
                 t.Start();
@@ -428,7 +435,9 @@ public partial class MainWindow : Window
         // Nunca maior que a janela: o que passar rola por dentro (nada fica cortado).
         el.MaxHeight = Math.Max(120, WindowRoot.ActualHeight - 16);
         el.MaxWidth = Math.Max(200, WindowRoot.ActualWidth - 16);
-        el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        // UpdateLayout, não só Measure: o menu estava fechado e Measure devolveria o tamanho da última vez,
+        // e aí um menu mais alto abriria baixo demais e ficaria cortado.
+        el.UpdateLayout();
         var size = el.DesiredSize;
         double w = WindowRoot.ActualWidth, h = WindowRoot.ActualHeight;
         double x = Math.Clamp(windowPoint.X, 8, Math.Max(8, w - size.Width - 8));
@@ -454,9 +463,20 @@ public partial class MainWindow : Window
         CloseContextTray();
         if (item is null) return;
         Menu.ShowForItem(item);
+        Menu.Visibility = Visibility.Visible;
+        Menu.FitTo(WindowRoot.ActualHeight - 16);
         Place(Menu, MenuScale, windowPoint);
+        _menuPoint = windowPoint;
         _menuOpen = true;
         Dispatcher.BeginInvoke(Menu.GlassPanel.RefreshBackdrop, DispatcherPriority.Loaded);
+    }
+
+    Point _menuPoint;
+
+    void RefitMenu()
+    {
+        Menu.FitTo(WindowRoot.ActualHeight - 16);
+        Place(Menu, MenuScale, _menuPoint, pop: false);
     }
 
     void CloseMenu()
@@ -476,6 +496,7 @@ public partial class MainWindow : Window
         CloseContextTray();
         if (owner is not null && owner == _ownerJustClosed) { _ownerJustClosed = null; return; }
         Actions.SetItems(items);
+        Actions.FitTo(WindowRoot.ActualHeight - 16);
         Place(Actions, ActionsScale, windowPoint);
         _actionsOpen = true;
         _actionsOwner = owner;
@@ -644,9 +665,9 @@ public partial class MainWindow : Window
             new("Apresentar", "IcPresent", StartPresenting),
             new(_fullscreen ? "Sair da tela cheia" : "Tela cheia", _fullscreen ? "IcExitFullscreen" : "IcFullscreen", () => SetFullscreen(!_fullscreen))
                 { Tip = "Deixa o quadro em tela cheia · F11" },
-            new("Exportar quadro (PNG, PDF)…", "IcExport", () => Export(selectionOnly: false), Separator: true),
+            new("Exportar quadro em PDF…", "IcExport", () => Export(selectionOnly: false), Separator: true),
         };
-        if (sel.Count > 0) list.Add(new("Exportar seleção…", "IcExport", () => Export(selectionOnly: true)));
+        if (sel.Count > 0) list.Add(new("Exportar seleção em PDF…", "IcExport", () => Export(selectionOnly: true)));
         list.Add(new("Abrir a pasta do cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true));
         ShowActions(p, list, MoreButton);
     }
@@ -766,27 +787,38 @@ public partial class MainWindow : Window
 
     // ---------- exportar ----------
 
-    void Export(bool selectionOnly)
+    bool _exporting;
+
+    async void Export(bool selectionOnly)
     {
         var items = selectionOnly ? _vm.SelectedItems.ToList() : _vm.Items.ToList();
-        if (items.Count == 0) return;
+        if (items.Count == 0 || _exporting) return;
         var dlg = new SaveFileDialog
         {
             Title = selectionOnly ? "Exportar seleção" : "Exportar quadro",
             FileName = _vm.BoardTitle + (selectionOnly ? " (seleção)" : ""),
-            Filter = "Imagem PNG|*.png|Documento PDF|*.pdf",
+            Filter = "Documento PDF|*.pdf",
+            DefaultExt = ".pdf",
+            AddExtension = true,
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
         };
         if (dlg.ShowDialog(this) != true) return;
         var sel = _vm.SelectedItems.ToList();
+        _vm.EndEdit();
         _vm.ClearSelection(); // o contorno azul não vai para a imagem
+        _exporting = true;
+        ShowExportBusy(selectionOnly);
         try
         {
+            await Task.Delay(250); // o bloco aparece por inteiro antes de o desenho ocupar a tela
             // O título do mapa é o maior texto solto; o quadro todo abre a partir do centro dele.
             var title = selectionOnly ? null : items.Where(i => i.Kind == ItemKind.Text).OrderByDescending(i => i.FontSizeValue).ThenBy(i => i.Y).FirstOrDefault();
             var image = Board.RenderRegion(items, 4, onlyThese: selectionOnly, centerOn: title); // 4×: dá para aproximar e ler na imagem
-            if (dlg.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) ExportService.SavePdf(image, dlg.FileName);
-            else ExportService.SavePng(image, dlg.FileName);
+            _vm.SelectMany(sel, add: false);
+            sel.Clear();
+            // A compressão é a parte demorada: fora da tela, que continua respondendo (a imagem já está congelada).
+            string path = dlg.FileName;
+            await Task.Run(() => ExportService.SavePdf(image, path));
         }
         catch (IOException) { MessageBox.Show(this, "Não foi possível salvar o arquivo (ele está aberto em outro programa?).", "Quadtab"); }
         catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
@@ -794,7 +826,39 @@ public partial class MainWindow : Window
             App.Log(ex);
             MessageBox.Show(this, "Não há memória para uma imagem deste tamanho.", "Quadtab");
         }
-        finally { _vm.SelectMany(sel, add: false); }
+        finally
+        {
+            if (sel.Count > 0) _vm.SelectMany(sel, add: false);
+            _exporting = false;
+            HideExportBusy();
+            MemoryService.Request(); // a imagem grande não fica ocupando memória
+        }
+    }
+
+    void ShowExportBusy(bool selectionOnly)
+    {
+        ExportDetail.Text = selectionOnly ? "Salvando a seleção em PDF" : "Salvando o quadro em PDF";
+        ExportBusy.Visibility = Visibility.Visible;
+        // Surge como a bandeja: de 95% a 100%, com a mola de painel.
+        Anim.Set(ExportScale, ScaleTransform.ScaleXProperty, 0.95);
+        Anim.Set(ExportScale, ScaleTransform.ScaleYProperty, 0.95);
+        Anim.Set(ExportSheet, OpacityProperty, 0.0);
+        Anim.To(ExportScale, ScaleTransform.ScaleXProperty, 1, 0.55, Anim.Panel);
+        Anim.To(ExportScale, ScaleTransform.ScaleYProperty, 1, 0.55, Anim.Panel);
+        Anim.To(ExportSheet, OpacityProperty, 1, 0.2, Anim.Ease);
+        ExportSpin.BeginAnimation(RotateTransform.AngleProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.9)) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+        Board.RefreshGlass();
+    }
+
+    void HideExportBusy()
+    {
+        Anim.To(ExportSheet, OpacityProperty, 0, 0.25, Anim.Ease, () =>
+        {
+            if (_exporting) return;
+            ExportBusy.Visibility = Visibility.Collapsed;
+            ExportSpin.BeginAnimation(RotateTransform.AngleProperty, null);
+        });
     }
 
     /// <summary>Miniatura do quadro para a galeria (sem seleção).</summary>
@@ -891,6 +955,7 @@ public partial class MainWindow : Window
             AppRoot.Margin = new Thickness(14);
             Board.FullBleed = false;
         }
+        Topmost = on && IsActive; // por cima da barra de tarefas, que cortava a parte de baixo
         ApplySidebar(animate: true);
         GlassPanel.ShadowsEnabled = !on; // na tela cheia, sem sombras (ficavam cortadas sobre o quadro)
         ApplyTitle(animate: true);

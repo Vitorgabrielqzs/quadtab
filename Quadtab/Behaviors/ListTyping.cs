@@ -14,7 +14,7 @@ public static partial class ListText
     // Começo de linha: recuo + marca e espaço (com caixa de seleção opcional) ou número com ponto (e espaço ou fim da linha).
     [GeneratedRegex(@"^([ \t]*)(?:([-*•])( \[[ xX]\])? |(\d{1,9})\.(?: |$))")] private static partial Regex Marker();
     [GeneratedRegex(@"^([ \t]*)(\d{1,9})\.( |$)")] private static partial Regex Numbered();
-    [GeneratedRegex(@"(?m)^([ \t]*)- (?!\[[ xX]\] )")] private static partial Regex MdBullet();
+    [GeneratedRegex(@"(?m)^([ \t]*)[-*] (?!\[[ xX]\] )")] private static partial Regex MdBullet();
     [GeneratedRegex(@"(?m)^([ \t]*)• ")] private static partial Regex ShownBullet();
 
     public static string ToDisplay(string md) => MdBullet().Replace(md, "$1• ");
