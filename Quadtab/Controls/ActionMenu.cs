@@ -13,6 +13,12 @@ public sealed record ActionItem(string Label, string? Icon, Action Run, bool Dan
 
     /// <summary>Balão de ajuda da linha (o que ela faz).</summary>
     public string? Tip { get; init; }
+
+    /// <summary>Roda ao passar o mouse na linha (prévia, ex.: a caligrafia muda no item enquanto o mouse está em cima).</summary>
+    public Action? Preview { get; init; }
+
+    /// <summary>Letra do texto da linha (ex.: cada caligrafia escrita nela mesma).</summary>
+    public FontFamily? LabelFont { get; init; }
 }
 
 /// <summary>
@@ -105,8 +111,11 @@ public sealed class ActionMenu : ContentControl
                 DockPanel.SetDock(check, Dock.Right);
                 dock.Children.Add(check);
             }
-            dock.Children.Add(new TextBlock { Text = it.Label, VerticalAlignment = VerticalAlignment.Center });
+            var label = new TextBlock { Text = it.Label, VerticalAlignment = VerticalAlignment.Center };
+            if (it.LabelFont is { } lf) { label.FontFamily = lf; label.FontSize = 19; }
+            dock.Children.Add(label);
             row.Content = dock;
+            if (it.Preview is { } preview) row.MouseEnter += (_, _) => preview();
             var run = it.Run;
             row.Click += (_, _) =>
             {

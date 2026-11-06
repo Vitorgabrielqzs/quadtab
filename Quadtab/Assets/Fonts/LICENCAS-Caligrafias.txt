@@ -1,0 +1,8 @@
+Caligrafias embutidas no Quadtab (baixadas do Google Fonts, uso livre, inclusive comercial):
+
+SIL Open Font License 1.1 (https://openfontlicense.org):
+  Abril Fatface, Amatic SC, Bebas Neue, Caveat, Dancing Script, DM Serif Display,
+  Fredoka, Lobster, Pacifico, Patrick Hand, Playfair Display, Space Mono
+
+Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0):
+  Permanent Marker

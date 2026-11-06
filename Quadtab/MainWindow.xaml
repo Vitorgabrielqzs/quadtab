@@ -316,6 +316,7 @@
         </Canvas>
 
         <c:QuickOpen x:Name="Quick" />
+        <c:DesignsPanel x:Name="DesignsView" />
 
         <!-- Por cima de tudo, sem receber cliques: balões de ajuda e faíscas -->
         <Canvas x:Name="TipLayer" IsHitTestVisible="False" />

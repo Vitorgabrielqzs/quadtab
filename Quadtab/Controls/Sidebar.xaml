@@ -66,7 +66,7 @@
             <StackPanel>
                 <Button x:Name="Row" Tag="{Binding}" ToolTip="{Binding Tip}" AllowDrop="True" Focusable="True" FocusVisualStyle="{x:Null}"
                         Click="OnNodeClick" MouseDoubleClick="OnNodeDoubleClick" PreviewMouseRightButtonUp="OnNodeRightClick"
-                        PreviewMouseLeftButtonDown="OnNodeMouseDown" PreviewMouseMove="OnNodeMouseMove" Drop="OnNodeDrop" KeyDown="OnNodeKey">
+                        PreviewMouseLeftButtonDown="OnNodeMouseDown" PreviewMouseMove="OnNodeMouseMove" Drop="OnNodeDrop" DragOver="OnNodeDragOver" DragLeave="OnNodeDragLeave" KeyDown="OnNodeKey">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource SideRow}">
                             <Style.Triggers>
@@ -75,6 +75,11 @@
                                     <Setter Property="Background" Value="{DynamicResource Fill2Brush}" />
                                     <Setter Property="b:UI.HoverBackground" Value="{DynamicResource Fill2Brush}" />
                                     <Setter Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <!-- marcado com Ctrl+clique (vários quadros juntos) -->
+                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                    <Setter Property="Background" Value="#2E0A84FF" />
+                                    <Setter Property="b:UI.HoverBackground" Value="#3D0A84FF" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsMore}" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
@@ -227,6 +232,18 @@
                     <StackPanel Orientation="Horizontal">
                         <c:Icon Data="{StaticResource IcPlus}" Size="17" Margin="0,0,10,0" />
                         <TextBlock Text="Novo quadro" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="DesignsButton" Style="{StaticResource SideRow}" Click="OnDesigns" ToolTip="Modelos prontos de mapas mentais para importar como quadro novo">
+                    <StackPanel Orientation="Horizontal">
+                        <c:Icon Data="{StaticResource IcDesigns}" Size="17" Margin="0,0,10,0" />
+                        <TextBlock Text="Designs" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource SideRow}" Click="OnNewFolder" ToolTip="Cria uma pasta para guardar quadros · arraste quadros para dentro dela">
+                    <StackPanel Orientation="Horizontal">
+                        <c:Icon Data="{StaticResource IcFolderPlus}" Size="17" Margin="0,0,10,0" />
+                        <TextBlock Text="Nova pasta" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource SideRow}" Click="OnSearch" ToolTip="Procura em quadros, notas e textos · Ctrl+K">

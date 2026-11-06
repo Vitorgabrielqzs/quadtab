@@ -1732,18 +1732,19 @@ public partial class BoardView : UserControl
     {
         var pa = AnchorOf(a, sideA);
         var pb = AnchorOf(b, sideB);
-        var line = Vm.AddItem(new BoardItem
+        var model = new BoardItem
         {
             Tipo = "linha",
             Cor = "branco",
             Linha = new LineData
             {
                 De = new LineEnd { X = pa.X, Y = pa.Y, Item = a.Id, Lado = sideA },
-                Para = new LineEnd { X = pb.X, Y = pb.Y, Item = b.Id, Lado = sideB }, // sem seta até o usuário pedir
-                Tipo = DrawSettings.LineType,
+                Para = new LineEnd { X = pb.X, Y = pb.Y, Item = b.Id, Lado = sideB },
             },
             Fixacao = "nenhuma",
-        });
+        };
+        DrawSettings.ApplyDefault(model); // cor, tipo, traço e pontas da última linha editada
+        var line = Vm.AddItem(model);
         FitLineBox(line);
         if (!Vm.DiagramMode) Vm.DiagramMode = true; // com o modo diagrama desligado o conector ficaria invisível
         return line;
@@ -1893,10 +1894,12 @@ public partial class BoardView : UserControl
         var data = new LineData
         {
             De = new LineEnd { X = start.X, Y = start.Y, Item = a?.Id, Lado = a is null ? null : SideFor(a, start) },
-            Para = new LineEnd { X = end.X, Y = end.Y, Item = b?.Id, Lado = b is null ? null : SideFor(b, end), Ponta = DrawSettings.ArrowEnd ? "seta" : "nenhuma" },
-            Tipo = DrawSettings.LineType,
+            Para = new LineEnd { X = end.X, Y = end.Y, Item = b?.Id, Lado = b is null ? null : SideFor(b, end) },
         };
-        var line = Vm.AddItem(new BoardItem { Tipo = "linha", Linha = data, Fixacao = "nenhuma" });
+        var model = new BoardItem { Tipo = "linha", Linha = data, Fixacao = "nenhuma" };
+        DrawSettings.ApplyDefault(model, withEnds: false); // cor, tipo e traço do padrão; a seta vem da ferramenta (Linha ou Seta)
+        data.Para.Ponta = DrawSettings.ArrowEnd ? "seta" : "nenhuma";
+        var line = Vm.AddItem(model);
         if (a is not null) RefreshLines([a], default);
         if (b is not null) RefreshLines([b], default);
         FitLineBox(line);
@@ -2066,8 +2069,43 @@ public static class DrawSettings
 {
     public static Color Color = Color.FromRgb(0x1D, 0x21, 0x30);
     public static double Thickness = 4;
-    public static string LineType = "reta";
-    public static bool ArrowEnd; // linhas nascem sem seta; o "Seta" da bandeja liga
+    public static bool ArrowEnd; // ferramenta Linha: o "Linha" da bandeja desliga e o "Seta" liga
+
+    /// <summary>Estilo padrão das linhas novas (salvo em estado.json, vale também depois de fechar o app).</summary>
+    static LineDefault Default => StorageService.State.EstiloLinha ??= new LineDefault();
+
+    /// <summary>Reta, curva ou ângulo: o da última linha editada (ou o escolhido na barra da ferramenta Linha).</summary>
+    public static string LineType
+    {
+        get => Default.Tipo;
+        set { Default.Tipo = value; StorageService.SaveState(); }
+    }
+
+    /// <summary>Guarda o estilo de uma linha como padrão das próximas. Chamado quando o usuário edita a linha pelo menu.</summary>
+    public static void RememberLine(BoardItemViewModel line)
+    {
+        if (line.Line is not { } l) return;
+        var d = Default;
+        d.Cor = line.Style.Borda;
+        d.Tipo = l.Tipo;
+        d.Traco = l.Traco;
+        d.PontaDe = l.De.Ponta;
+        d.PontaPara = l.Para.Ponta;
+        StorageService.SaveState();
+    }
+
+    /// <summary>Aplica o estilo padrão a uma linha que vai nascer (cor, tipo, traço e, se pedido, as pontas).</summary>
+    public static void ApplyDefault(BoardItem item, bool withEnds = true)
+    {
+        if (item.Linha is not { } l) return;
+        var d = Default;
+        if (!string.IsNullOrEmpty(d.Cor)) item.Estilo = new ItemStyle { Borda = d.Cor, Espessura = 2.5 };
+        l.Tipo = d.Tipo;
+        l.Traco = d.Traco;
+        if (!withEnds) return;
+        l.De.Ponta = d.PontaDe;
+        l.Para.Ponta = d.PontaPara;
+    }
 
     public static InkStroke Stroke(BoardTool tool, List<double> points) => new()
     {

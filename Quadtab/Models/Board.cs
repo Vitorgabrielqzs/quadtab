@@ -110,4 +110,24 @@ public sealed class AppState
 
     /// <summary>Molde do último item criado: 2 cliques com o botão direito colocam outro igual.</summary>
     public BoardItem? UltimoItem { get; set; }
+
+    /// <summary>Estilo das linhas novas: o último que o usuário escolheu no menu de uma linha.</summary>
+    public LineDefault EstiloLinha { get; set; } = new();
+
+    /// <summary>
+    /// Ordem dos quadros dentro de cada pasta (chave: pasta relativa a Quadros\; valor: nomes dos arquivos).
+    /// É a ordem em que foram arrastados para a pasta; arrastar para cima ou para baixo muda.
+    /// </summary>
+    public Dictionary<string, List<string>> OrdemPastas { get; set; } = [];
+}
+
+/// <summary>Estilo padrão das linhas novas (cor, traçado, tipo de traço e pontas). Muda quando o usuário edita uma linha.</summary>
+public sealed class LineDefault
+{
+    /// <summary>Cor da linha (#AARRGGBB). Null = o cinza padrão.</summary>
+    public string? Cor { get; set; }
+    public string Tipo { get; set; } = "reta";      // reta | curva | angulo
+    public string Traco { get; set; } = "solido";   // solido | barbante
+    public string PontaDe { get; set; } = "nenhuma";
+    public string PontaPara { get; set; } = "nenhuma";
 }

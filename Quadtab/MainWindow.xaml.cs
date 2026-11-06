@@ -40,7 +40,7 @@ public partial class MainWindow : Window
         // O vidro sobre o fundo enxerga uma cópia saturada das manchas (saturate 190%, sem custo de efeito).
         ApplyGlassBackdropColors();
         WindowRoot.SizeChanged += (_, e) => LayoutGlassBackdrop(e.NewSize);
-        foreach (var g in new[] { SidebarGlass, TitleCap, MoreCap, WindowCap, Editor.Glass, Quick.Glass })
+        foreach (var g in new[] { SidebarGlass, TitleCap, MoreCap, WindowCap, Editor.Glass, Quick.Glass, DesignsView.Glass })
             g.BackdropSource = _glassBackdrop;
 
         // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
@@ -490,11 +490,16 @@ public partial class MainWindow : Window
     /// Menu genérico de ações (lateral, galeria, "…", opções extras do item).
     /// owner = botão que abre o menu: clicar nele com o menu aberto fecha o menu.
     /// </summary>
-    public void ShowActions(Point windowPoint, IEnumerable<ActionItem> items, FrameworkElement? owner = null)
+    /// <summary>Roda quando o menu de ações fecha (escolhendo ou não): desfaz a prévia das caligrafias.</summary>
+    Action? _actionsDismiss;
+
+    public void ShowActions(Point windowPoint, IEnumerable<ActionItem> items, FrameworkElement? owner = null, Action? onClose = null)
     {
         CloseMenu();
         CloseContextTray();
+        CloseActions();
         if (owner is not null && owner == _ownerJustClosed) { _ownerJustClosed = null; return; }
+        _actionsDismiss = onClose;
         Actions.SetItems(items);
         Actions.FitTo(WindowRoot.ActualHeight - 16);
         Place(Actions, ActionsScale, windowPoint);
@@ -509,6 +514,9 @@ public partial class MainWindow : Window
         _actionsOpen = false;
         _actionsOwner = null;
         Actions.Visibility = Visibility.Collapsed;
+        var dismiss = _actionsDismiss;
+        _actionsDismiss = null;
+        dismiss?.Invoke();
     }
 
     /// <summary>Bandeja junto ao cursor. Um segundo clique direito fecha.</summary>
@@ -559,7 +567,7 @@ public partial class MainWindow : Window
                    && Math.Abs(p.Y - _lastRightPos.Y) <= SystemParameters.MinimumVerticalDragDistance * 2;
         _lastRightDown = dbl ? 0 : now; // um terceiro clique começa de novo
         _lastRightPos = p;
-        return dbl && BoardArea.IsVisible && !Quick.IsOpen && !App.Library.GalleryOpen && !_presenting && Board.IsInside(WindowRoot, p);
+        return dbl && BoardArea.IsVisible && !Quick.IsOpen && !DesignsView.IsOpen && !App.Library.GalleryOpen && !_presenting && Board.IsInside(WindowRoot, p);
     }
 
     void OnPreviewMouseRightUp(object sender, MouseButtonEventArgs e)
@@ -599,9 +607,24 @@ public partial class MainWindow : Window
     /// <summary>Caligrafias do título e do texto solto; a atual fica marcada.</summary>
     void ShowFonts(BoardItemViewModel item, Point at)
     {
-        var current = item.Style.Fonte == "Nunito" ? "Inter" : item.Style.Fonte;
+        // Passar o mouse numa caligrafia já mostra o item com ela; fechar sem escolher volta à de antes.
+        // Ao escolher, o menu fecha (volta à original) e SetFont aplica a nova com Ctrl+Z.
+        var original = item.Style;
+        var current = original.Fonte == "Nunito" ? "Inter" : original.Fonte;
+        void Show(string font)
+        {
+            var st = original.Clone();
+            st.Fonte = font;
+            item.Style = st;
+        }
         ShowActions(at, BoardItemViewModel.TitleFonts.Select(f =>
-            new ActionItem((f.Font == current ? "✓ " : "") + f.Name, "IcText", () => _vm.SetFont(item, f.Font)) { Tip = "Muda a letra para " + f.Font }).ToList());
+            new ActionItem(f.Name, null, () => _vm.SetFont(item, f.Font), Checked: f.Font == current)
+            {
+                Tip = "Muda a letra para " + f.Font,
+                Preview = () => Show(f.Font),
+                LabelFont = BoardItemViewModel.ResolveFont(f.Font),
+            }).ToList(),
+            onClose: () => { if (!ReferenceEquals(item.Style, original)) item.Style = original; });
     }
 
     /// <summary>Opções extras de um item: agrupar, alinhar, camadas, estilo e descrição.</summary>
@@ -1055,7 +1078,20 @@ public partial class MainWindow : Window
     public void ShowSearch()
     {
         CloseActions();
+        DesignsView.Hide();
         Quick.Show();
+    }
+
+    /// <summary>Aba "Designs": modelos prontos de mapas mentais. Clicar de novo no botão fecha.</summary>
+    public void ShowDesigns(FrameworkElement? owner = null)
+    {
+        CloseMenu();
+        CloseActions();
+        CloseContextTray();
+        if (DesignsView.IsOpen) { DesignsView.Hide(); return; }
+        Quick.Hide();
+        App.Library.GalleryOpen = false;
+        DesignsView.Show();
     }
 
     public void ShowSettings(Point at, FrameworkElement? owner = null)
@@ -1106,7 +1142,7 @@ public partial class MainWindow : Window
             if (key == Key.Escape && (_menuOpen || _actionsOpen || _ctxOpen)) { CloseMenu(); CloseActions(); CloseContextTray(); e.Handled = true; }
             return;
         }
-        if (Quick.IsOpen) return;
+        if (Quick.IsOpen || DesignsView.IsOpen) return;
 
         if (_presenting)
         {

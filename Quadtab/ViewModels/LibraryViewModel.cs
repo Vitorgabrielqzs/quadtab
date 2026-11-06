@@ -52,6 +52,13 @@ public partial class SideNode : ObservableObject
     [ObservableProperty] public partial bool IsImportant { get; set; }
     [ObservableProperty] public partial bool IsRenaming { get; set; }
 
+    /// <summary>Marcado com Ctrl+clique: vários quadros podem ser arrastados ou movidos juntos.</summary>
+    [ObservableProperty] public partial bool IsChecked { get; set; }
+
+    /// <summary>Pasta de quadros na lista principal (não a árvore do Cofre).</summary>
+    public bool IsBoardFolder => Kind == SideKind.Folder && Section != "cofre";
+    public bool CanRename => HasActions || IsBoardFolder;
+
     public bool CanExpand => Expandable && Kind is SideKind.Board or SideKind.Page or SideKind.Folder;
     public bool HasActions => Kind is SideKind.Board or SideKind.Page;
     public bool IsMore => Kind == SideKind.More;
@@ -282,8 +289,11 @@ public partial class LibraryViewModel : ObservableObject
 
     public void Refresh()
     {
-        var boards = BoardsByRecent().ToList();
-        Fill(Boards, boards.Take(MaxBoards).Select(p => Node(p, 0, "quadros")), boards.Count > MaxBoards ? "todos" : null, "quadros");
+        // Pastas primeiro (com os quadros dentro, na ordem da pasta); depois os quadros soltos, pelo último aberto.
+        var boards = BoardsByRecent().Where(p => StorageService.FolderKey(p).Length == 0).ToList();
+        var folders = BoardFolderNodes(StorageService.BoardsDir, 0).ToList();
+        Fill(Boards, folders.Concat(boards.Take(MaxBoards).Select(p => Node(p, 0, "quadros"))), boards.Count > MaxBoards ? "todos" : null, "quadros");
+        foreach (var n in AllNodes().Where(n => n.Kind == SideKind.Board && _checked.Contains(n.Path, StringComparer.OrdinalIgnoreCase))) n.IsChecked = true;
 
         List<string> Marked(List<string> rel) => rel.Select(StorageService.Full).Where(File.Exists).ToList();
         var pinned = Marked(StorageService.State.Fixados);
@@ -329,6 +339,11 @@ public partial class LibraryViewModel : ObservableObject
                 foreach (var (_, text) in Rendering.Markdown.Headings(StorageService.ReadPage(n.Path)).Take(MaxChildren))
                     n.Children.Add(new SideNode(SideKind.Heading, n.Path, text, n.Depth + 1, n.Section) { Icon = "IcTitle" });
                 break;
+            case SideKind.Folder when n.IsBoardFolder:
+                foreach (var c in BoardFolderNodes(n.Path, n.Depth + 1)) n.Children.Add(c);
+                foreach (var b in StorageService.FolderBoards(n.Path)) n.Children.Add(Node(b, n.Depth + 1, "quadros"));
+                if (n.Children.Count == 0) n.Children.Add(new SideNode(SideKind.More, "vazia", "Pasta vazia · arraste quadros para cá", n.Depth + 1, n.Section));
+                break;
             case SideKind.Folder:
                 foreach (var c in FolderEntries(n.Path, n.Depth + 1)) n.Children.Add(c);
                 break;
@@ -366,6 +381,19 @@ public partial class LibraryViewModel : ObservableObject
         ItemKind.Table => "IcTable",
         _ => "IcBoard",
     };
+
+    /// <summary>Subpastas de uma pasta de quadros (pelo nome), como linhas da lista principal.</summary>
+    IEnumerable<SideNode> BoardFolderNodes(string dir, int depth)
+    {
+        if (!Directory.Exists(dir)) yield break;
+        foreach (var d in Directory.EnumerateDirectories(dir).Where(d => !System.IO.Path.GetFileName(d).StartsWith('.'))
+                     .OrderBy(d => d, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var n = new SideNode(SideKind.Folder, d, System.IO.Path.GetFileName(d), depth, "quadros") { Icon = "IcFolder" };
+            if (n.IsOpen) LoadChildren(n); // aberta da última vez: já mostra os quadros
+            yield return n;
+        }
+    }
 
     /// <summary>Árvore da pasta Cofre: subpastas primeiro, depois os arquivos (sem os ocultos).</summary>
     static IEnumerable<SideNode> FolderEntries(string dir, int depth)
@@ -518,7 +546,7 @@ public partial class LibraryViewModel : ObservableObject
     public void StartRename(string path)
     {
         bool first = true;
-        foreach (var n in AllNodes().Where(n => n.HasActions))
+        foreach (var n in AllNodes().Where(n => n.CanRename))
         {
             bool on = first && string.Equals(n.Path, path, StringComparison.OrdinalIgnoreCase);
             n.IsRenaming = on;
@@ -542,6 +570,11 @@ public partial class LibraryViewModel : ObservableObject
             }
             else target = StorageService.RenameBoard(node.Path, newName);
             RenameMarks(oldRel, StorageService.Rel(target));
+        }
+        else if (node.IsBoardFolder)
+        {
+            RenameFolder(node.Path, newName);
+            return;
         }
         else if (node.Kind == SideKind.Page)
         {
@@ -569,16 +602,142 @@ public partial class LibraryViewModel : ObservableObject
     public void ToggleFavorite(string path) => StorageService.ToggleFavorite(path);
     public void TogglePinned(string path) => StorageService.TogglePinned(path);
 
-    public void Move(string boardPath, string folderPath)
+    /// <summary>Move um quadro para uma pasta (no fim dela); devolve o caminho novo.</summary>
+    public string Move(string boardPath, string folderPath)
     {
         var rel = System.IO.Path.GetRelativePath(StorageService.BoardsDir, folderPath);
         if (rel == ".") rel = "";
-        if (rel.StartsWith("..", StringComparison.Ordinal)) return; // só dentro de Quadros\
+        if (rel.StartsWith("..", StringComparison.Ordinal) || !File.Exists(boardPath)) return boardPath; // só dentro de Quadros\
+        if (string.Equals(StorageService.FolderKey(boardPath), StorageService.FolderKey(folderPath), StringComparison.OrdinalIgnoreCase)) return boardPath; // já está lá
         bool isCurrent = App.ViewModel is { } cur && string.Equals(cur.FilePath, boardPath, StringComparison.OrdinalIgnoreCase);
-        if (isCurrent) App.ViewModel!.Flush();
-        var target = StorageService.MoveBoard(boardPath, rel);
-        RenameMarks(StorageService.Rel(boardPath), StorageService.Rel(target));
+        // O quadro aberto é salvo e fechado antes de mudar de lugar: o salvamento automático nunca grava no caminho antigo.
+        if (isCurrent) App.ViewModel!.Close();
+        string target = boardPath;
+        try
+        {
+            target = StorageService.MoveBoard(boardPath, rel);
+            RenameMarks(StorageService.Rel(boardPath), StorageService.Rel(target));
+            int i = _checked.FindIndex(c => string.Equals(c, boardPath, StringComparison.OrdinalIgnoreCase));
+            if (i >= 0) _checked[i] = target;
+        }
+        catch (IOException ex) { App.Log(ex); }
+        catch (UnauthorizedAccessException ex) { App.Log(ex); }
         if (isCurrent) App.OpenBoard(target, makeThumb: false);
+        return target;
+    }
+
+    /// <summary>
+    /// Move vários quadros para uma pasta, na ordem recebida. Com <paramref name="anchor"/>, entram logo antes
+    /// (ou depois) desse quadro; sem, vão para o fim. Serve também para reordenar dentro da mesma pasta.
+    /// </summary>
+    public void MoveInto(IReadOnlyList<string> boards, string folderPath, string? anchor = null, bool after = false)
+    {
+        var folderKey = StorageService.FolderKey(folderPath);
+        if (System.IO.Path.GetRelativePath(StorageService.BoardsDir, folderPath).StartsWith("..", StringComparison.Ordinal)) return;
+        var before = StorageService.FolderBoards(folderPath); // ordem antes de mexer (para achar o lugar da âncora)
+        var moved = new List<string>();
+        foreach (var b in boards.Distinct(StringComparer.OrdinalIgnoreCase).ToList())
+            if (File.Exists(b)) moved.Add(Move(b, folderPath));
+        if (folderKey.Length > 0 && moved.Count > 0)
+        {
+            bool IsMoved(string f) => moved.Contains(f, StringComparer.OrdinalIgnoreCase);
+            var now = StorageService.FolderBoards(folderPath).Where(f => !IsMoved(f)).ToList();
+            // Os que já estavam ficam na ordem de antes; os recém-chegados vão para o fim, salvo se houver âncora.
+            var rest = before.Where(f => now.Contains(f, StringComparer.OrdinalIgnoreCase))
+                .Concat(now.Where(f => !before.Contains(f, StringComparer.OrdinalIgnoreCase))).ToList();
+            int at = rest.Count;
+            if (anchor is not null)
+            {
+                int a = rest.FindIndex(f => string.Equals(f, anchor, StringComparison.OrdinalIgnoreCase));
+                if (a >= 0) at = a + (after ? 1 : 0);
+                else
+                {
+                    // A âncora é um dos que estão sendo movidos: o grupo fica onde ela estava.
+                    int old = before.FindIndex(f => string.Equals(f, anchor, StringComparison.OrdinalIgnoreCase));
+                    if (old >= 0) at = before.Take(old).Count(f => !IsMoved(f));
+                }
+            }
+            rest.InsertRange(Math.Clamp(at, 0, rest.Count), moved);
+            StorageService.SetFolderOrder(folderPath, rest);
+        }
+        // A pasta de destino abre, para ver onde os quadros foram parar.
+        if (folderKey.Length > 0) MainViewModel.SaveOpen("quadros:" + folderPath, true);
+        StorageService.NotifyLibrary();
+    }
+
+    /// <summary>Sobe ou desce um quadro uma posição dentro da pasta dele.</summary>
+    public void Step(string board, int dir)
+    {
+        var folder = System.IO.Path.GetDirectoryName(board)!;
+        var list = StorageService.FolderBoards(folder);
+        int i = list.FindIndex(f => string.Equals(f, board, StringComparison.OrdinalIgnoreCase));
+        int j = i + dir;
+        if (i < 0 || j < 0 || j >= list.Count) return;
+        (list[i], list[j]) = (list[j], list[i]);
+        StorageService.SetFolderOrder(folder, list);
+        StorageService.NotifyLibrary();
+    }
+
+    // ---------- pastas ----------
+
+    /// <summary>Cria uma pasta (na raiz ou dentro de outra) e já abre o nome para escrever. Com quadros, eles entram nela.</summary>
+    public void CreateFolder(string? parent = null, IReadOnlyList<string>? boards = null)
+    {
+        var rel = parent is null ? "" : StorageService.FolderKey(parent);
+        var path = StorageService.CreateFolder(rel, "Nova pasta");
+        MainViewModel.SaveOpen("quadros:" + path, true);
+        if (parent is not null) MainViewModel.SaveOpen("quadros:" + parent, true);
+        if (boards is { Count: > 0 }) MoveInto(boards, path);
+        Refresh();
+        StartRename(path);
+    }
+
+    public void RenameFolder(string path, string newName)
+    {
+        var cur = App.ViewModel?.FilePath;
+        bool inside = cur is not null && cur.StartsWith(path + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        if (inside) App.ViewModel!.Close();
+        string target = path;
+        try { target = StorageService.RenameFolder(StorageService.FolderKey(path), newName); }
+        catch (IOException ex) { App.Log(ex); }
+        catch (UnauthorizedAccessException ex) { App.Log(ex); }
+        if (StorageService.State.Abertos.Contains("quadros:" + path)) MainViewModel.SaveOpen("quadros:" + target, true);
+        if (inside) App.OpenBoard(System.IO.Path.Combine(target, System.IO.Path.GetRelativePath(path, cur!)), makeThumb: false);
+        else StorageService.NotifyLibrary();
+    }
+
+    /// <summary>Apaga a pasta: os quadros dela (e das subpastas) vão para Apagados recentemente, com as notas.</summary>
+    public void DeleteFolder(string path)
+    {
+        foreach (var b in Directory.EnumerateFiles(path, "*" + StorageService.BoardExt, SearchOption.AllDirectories).ToList())
+            Trash(b);
+        try { Directory.Delete(path, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        StorageService.State.OrdemPastas.Remove(StorageService.FolderKey(path));
+        StorageService.SaveState();
+        StorageService.NotifyLibrary();
+    }
+
+    // ---------- vários quadros marcados (Ctrl+clique) ----------
+
+    readonly List<string> _checked = [];
+
+    /// <summary>Quadros marcados, na ordem em que foram marcados.</summary>
+    public IReadOnlyList<string> Checked => _checked.Where(File.Exists).ToList();
+
+    public void ToggleChecked(SideNode n)
+    {
+        if (n.Kind != SideKind.Board) return;
+        int i = _checked.FindIndex(c => string.Equals(c, n.Path, StringComparison.OrdinalIgnoreCase));
+        if (i >= 0) _checked.RemoveAt(i); else _checked.Add(n.Path);
+        foreach (var x in AllNodes().Where(x => x.Kind == SideKind.Board && string.Equals(x.Path, n.Path, StringComparison.OrdinalIgnoreCase)))
+            x.IsChecked = i < 0;
+    }
+
+    public void ClearChecked()
+    {
+        if (_checked.Count == 0) return;
+        _checked.Clear();
+        foreach (var x in AllNodes()) x.IsChecked = false;
     }
 
     public void Trash(string path)

@@ -230,6 +230,7 @@ public partial class BoardMenu : UserControl
         change(l);
         _item.Touch(nameof(BoardItemViewModel.Line));
         Vm.CommitMove();
+        DrawSettings.RememberLine(_item); // o que o usuário acabou de escolher vira o padrão das próximas linhas
         Refresh();
     }
 

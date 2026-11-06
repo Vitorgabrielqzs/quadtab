@@ -270,21 +270,66 @@ public static class StorageService
         return target;
     }
 
-    public static void CreateFolder(string parentRel, string name)
+    public static string CreateFolder(string parentRel, string name)
     {
         var p = Unique(Path.Combine(BoardsDir, parentRel), SafeName(name), "");
         Directory.CreateDirectory(p);
         NotifyLibrary();
+        return p;
     }
 
-    public static void RenameFolder(string rel, string newName)
+    /// <summary>Renomeia uma pasta de quadros; devolve o caminho novo. A ordem dos quadros dentro dela continua.</summary>
+    public static string RenameFolder(string rel, string newName)
     {
         var src = Path.Combine(BoardsDir, rel);
+        if (string.Equals(Path.GetFileName(src), SafeName(newName), StringComparison.Ordinal)) return src;
         var target = Unique(Path.GetDirectoryName(src)!, SafeName(newName), "");
         Directory.Move(src, target);
         foreach (var f in Directory.EnumerateFiles(target, "*" + BoardExt, SearchOption.AllDirectories))
-            ReplaceInState(Path.Combine(src, Path.GetRelativePath(target, f)), f);
+            ReplaceInState(Path.Combine(src, Path.GetRelativePath(target, f)), f, order: false);
+        // A ordem salva acompanha o nome novo (a pasta e as subpastas dela).
+        var newRel = FolderKey(target);
+        foreach (var key in State.OrdemPastas.Keys.ToList())
+            if (string.Equals(key, rel, StringComparison.OrdinalIgnoreCase) || key.StartsWith(rel + "\\", StringComparison.OrdinalIgnoreCase))
+            {
+                var list = State.OrdemPastas[key];
+                State.OrdemPastas.Remove(key);
+                State.OrdemPastas[newRel + key[rel.Length..]] = list;
+            }
+        SaveState();
         NotifyLibrary();
+        return target;
+    }
+
+    /// <summary>Pasta de um quadro (ou a própria pasta), relativa a Quadros\. "" = a raiz.</summary>
+    public static string FolderKey(string path)
+    {
+        var dir = path.EndsWith(BoardExt, StringComparison.OrdinalIgnoreCase) ? Path.GetDirectoryName(path)! : path;
+        var rel = Path.GetRelativePath(BoardsDir, dir);
+        return rel == "." ? "" : rel.TrimEnd(Path.DirectorySeparatorChar);
+    }
+
+    /// <summary>Quadros de uma pasta (sem as subpastas), na ordem salva; os que não estão na lista vêm depois, pelo nome.</summary>
+    public static List<string> FolderBoards(string folder)
+    {
+        if (!Directory.Exists(folder)) return [];
+        var files = Directory.EnumerateFiles(folder, "*" + BoardExt).ToList();
+        var order = State.OrdemPastas.TryGetValue(FolderKey(folder), out var o) ? o : [];
+        int Rank(string f)
+        {
+            int i = order.FindIndex(n => string.Equals(n, Path.GetFileName(f), StringComparison.OrdinalIgnoreCase));
+            return i < 0 ? int.MaxValue : i;
+        }
+        return files.OrderBy(Rank).ThenBy(f => Path.GetFileName(f), StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    /// <summary>Grava a ordem dos quadros de uma pasta (caminhos completos, na ordem nova).</summary>
+    public static void SetFolderOrder(string folder, IEnumerable<string> boards)
+    {
+        var key = FolderKey(folder);
+        if (key.Length == 0) return; // a raiz segue a ordem do último aberto
+        State.OrdemPastas[key] = boards.Select(Path.GetFileName).OfType<string>().ToList();
+        SaveState();
     }
 
     /// <summary>Apaga uma pasta: os quadros dela vão para a lixeira.</summary>
@@ -296,11 +341,30 @@ public static class StorageService
         NotifyLibrary();
     }
 
-    static void ReplaceInState(string oldPath, string newPath)
+    static void ReplaceInState(string oldPath, string newPath, bool order = true)
     {
         string o = Rel(oldPath), n = Rel(newPath);
         for (int i = 0; i < State.Recentes.Count; i++) if (State.Recentes[i] == o) State.Recentes[i] = n;
         for (int i = 0; i < State.Favoritos.Count; i++) if (State.Favoritos[i] == o) State.Favoritos[i] = n;
+        for (int i = 0; i < State.Fixados.Count; i++) if (State.Fixados[i] == o) State.Fixados[i] = n;
+        if (order)
+        {
+            // Ordem das pastas: renomear mantém o lugar; mudar de pasta tira da antiga e põe no fim da nova.
+            string oldKey = FolderKey(oldPath), newKey = FolderKey(newPath);
+            string oldName = Path.GetFileName(oldPath), newName = Path.GetFileName(newPath);
+            if (State.OrdemPastas.TryGetValue(oldKey, out var from))
+            {
+                int i = from.FindIndex(x => string.Equals(x, oldName, StringComparison.OrdinalIgnoreCase));
+                if (i >= 0 && string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase)) from[i] = newName;
+                else if (i >= 0) from.RemoveAt(i);
+            }
+            if (newKey.Length > 0 && !string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!State.OrdemPastas.TryGetValue(newKey, out var to)) State.OrdemPastas[newKey] = to = FolderBoards(Path.Combine(BoardsDir, newKey))
+                    .Where(f => !string.Equals(f, newPath, StringComparison.OrdinalIgnoreCase)).Select(Path.GetFileName).OfType<string>().ToList();
+                if (!to.Contains(newName, StringComparer.OrdinalIgnoreCase)) to.Add(newName);
+            }
+        }
         if (State.QuadroAberto == o) State.QuadroAberto = n;
         var oldThumb = ThumbPath(oldPath);
         if (File.Exists(oldThumb)) try { File.Move(oldThumb, ThumbPath(newPath), true); } catch { }

@@ -274,16 +274,33 @@ public partial class BoardItemViewModel : ObservableObject
     public double ItemOpacity => Style.Opacidade;
     public Brush TextBrush => BrushFromHex(Style.CorTexto, System.Windows.Media.Color.FromRgb(0x1D, 0x21, 0x30));
     public FontFamily FontFamilyValue => (FontFamily)Application.Current.FindResource(Style.Fonte == "Nunito" ? "Nunito" : "Inter");
-    /// <summary>Caligrafias do título e do texto solto (as do Windows, menos a Inter, que vem com o app).</summary>
+    /// <summary>
+    /// Caligrafias do título e do texto solto. Todas vêm dentro do app (Assets\Fonts, Google Fonts, licença livre),
+    /// então ficam iguais em qualquer computador. O nome gravado em estilo.fonte é o da família.
+    /// </summary>
     public static readonly (string Name, string Font)[] TitleFonts =
     [
-        ("Padrão", "Inter"), ("Clássica", "Georgia"), ("Jornal", "Times New Roman"), ("Forte", "Impact"),
-        ("Manuscrita", "Segoe Script"), ("Caderno", "Segoe Print"), ("Caneta", "Ink Free"), ("Elegante", "Gabriola"),
-        ("Divertida", "Comic Sans MS"), ("Máquina", "Consolas"),
+        ("Padrão", "Inter"), ("Bilhete", "Caveat"), ("Caderno", "Patrick Hand"), ("Marcador", "Permanent Marker"),
+        ("Rabisco", "Amatic SC"), ("Assinatura", "Dancing Script"), ("Surfe", "Pacifico"), ("Letreiro", "Lobster"),
+        ("Cartaz", "Bebas Neue"), ("Revista", "Abril Fatface"), ("Elegante", "Playfair Display"), ("Editorial", "DM Serif Display"),
+        ("Bolinha", "Fredoka"), ("Máquina", "Space Mono"),
     ];
 
+    static readonly HashSet<string> EmbeddedFonts = TitleFonts.Select(f => f.Font).Where(f => f != "Inter").ToHashSet();
+    static readonly Dictionary<string, FontFamily> FontCache = [];
+
+    /// <summary>Família de uma caligrafia: as embutidas vêm do app; nomes antigos (Georgia, Impact...) continuam do Windows.</summary>
+    public static FontFamily ResolveFont(string name)
+    {
+        if (name is "Inter" or "Nunito") return (FontFamily)Application.Current.FindResource("Inter");
+        if (FontCache.TryGetValue(name, out var f)) return f;
+        f = EmbeddedFonts.Contains(name) ? new FontFamily(new Uri("pack://application:,,,/"), "./Assets/Fonts/#" + name) : new FontFamily(name);
+        FontCache[name] = f;
+        return f;
+    }
+
     // Textos antigos guardam "Nunito", mas sempre apareceram em Inter: continuam iguais.
-    public FontFamily TitleFont => Style.Fonte is "Inter" or "Nunito" ? (FontFamily)Application.Current.FindResource("Inter") : new FontFamily(Style.Fonte);
+    public FontFamily TitleFont => ResolveFont(Style.Fonte);
     public FontWeight TitleWeight => Style.Fonte is "Inter" or "Nunito" ? FontWeights.ExtraBold : FontWeights.Normal;
     public double FontSizeValue => Style.Tamanho;
     public FontWeight FontWeightValue => Style.Negrito ? FontWeights.Bold : FontWeights.Normal;
