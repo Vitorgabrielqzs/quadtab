@@ -12,7 +12,7 @@ using Quadtab.ViewModels;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Bandeja que abre junto ao cursor (botão direito no vazio). Tudo o que ela cria nasce no ponto clicado.
+/// Aqui usamos a classe ContextTray para a bandeja que abre junto ao cursor (botão direito no vazio). Tudo o que ela cria nasce no ponto clicado.
 /// Tem duas páginas: a principal (elementos e ferramentas) e a biblioteca de formas.
 /// </summary>
 public sealed class ContextTray : ContentControl
@@ -43,6 +43,7 @@ public sealed class ContextTray : ContentControl
 
     MainViewModel Vm => App.ViewModel;
 
+    /// <summary>Abre a página principal; tudo nasce em "world".</summary>
     public void Show(Point world)
     {
         _world = world;
@@ -90,12 +91,14 @@ public sealed class ContextTray : ContentControl
             b.Click += (_, _) => run();
             grid.Children.Add(b);
         }
-        Tile("Nota", "IcPage", () => { Vm.Add(ItemKind.Page, "branco", _world.X, _world.Y); Done(); }, "Cola uma nota aqui");
-        Tile("Texto", "IcText", () => { Vm.Add(ItemKind.Text, "branco", _world.X, _world.Y); Done(); }, "Cola um texto grande aqui");
+        // Cria um item do tipo no ponto clicado e fecha.
+        Action Add(ItemKind kind) => () => { Vm.Add(kind, "branco", _world.X, _world.Y); Done(); };
+        Tile("Nota", "IcPage", Add(ItemKind.Page), "Cola uma nota aqui");
+        Tile("Texto", "IcText", Add(ItemKind.Text), "Cola um texto grande aqui");
         Tile("Título", "IcTitle", () => { Vm.AddTitle(_world.X, _world.Y); Done(); }, "Cola um título; cor e caligrafia ficam no botão direito");
-        Tile("Bloco", "IcBlock", () => { Vm.Add(ItemKind.Block, "branco", _world.X, _world.Y); Done(); }, "Cola um bloco com título livre aqui");
+        Tile("Bloco", "IcBlock", Add(ItemKind.Block), "Cola um bloco com título livre aqui");
         Tile("Post-it", "IcNote", () => { Vm.Add(ItemKind.PostIt, Vm.LastColor, _world.X, _world.Y, Vm.NewStyle); Done(); }, "Cola um post-it da última cor e estilo usados");
-        Tile("Caixa", "IcTextBox", () => { Vm.Add(ItemKind.TextBox, "branco", _world.X, _world.Y); Done(); }, "Cola uma caixa de texto aqui");
+        Tile("Caixa", "IcTextBox", Add(ItemKind.TextBox), "Cola uma caixa de texto aqui");
         Tile("Formas", "IcShapes", ShowShapes, "Mostra a biblioteca de formas");
         Tile("Linha", "IcLinePlain", () => { Done(); DrawSettings.ArrowEnd = false; Board!.Tool = BoardTool.Line; }, "Desenha uma linha (de um item a outro para ligar)");
         Tile("Seta", "IcLine", () => { Done(); DrawSettings.ArrowEnd = true; Board!.Tool = BoardTool.Line; }, "Desenha uma seta (de um item a outro para ligar)");
@@ -124,6 +127,7 @@ public sealed class ContextTray : ContentControl
         return row;
     }
 
+    // Tabela 3×3 com cabeçalho, centrada no ponto clicado.
     void AddTable()
     {
         var size = BoardItemViewModel.DefaultSize(ItemKind.Table);
@@ -135,6 +139,7 @@ public sealed class ContextTray : ContentControl
         Done();
     }
 
+    // Escolher imagens/arquivos do computador (fecha a bandeja antes de abrir a janela do Windows).
     void PickFiles(string filter)
     {
         var world = _world;
@@ -149,10 +154,7 @@ public sealed class ContextTray : ContentControl
     {
         var root = new StackPanel();
         root.Children.Add(Back("Link"));
-        var box = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = 15, Margin = new Thickness(2, 6, 2, 4), Padding = new Thickness(8, 6, 8, 6) };
-        box.SetResourceReference(BackgroundProperty, "FillBrush");
-        box.SetResourceReference(ForegroundProperty, "InkBrush");
-        box.SetResourceReference(TextBox.CaretBrushProperty, "InkBrush");
+        var box = Input(15, new Thickness(2, 6, 2, 4), new Thickness(8, 6, 8, 6));
         if (Clipboard.ContainsText() && MediaService.IsUrl(Clipboard.GetText(), out var u)) box.Text = u;
         var hint = UiKit.Label("Cole o endereço e aperte Enter", 12.5);
         hint.Margin = new Thickness(6, 0, 0, 0);
@@ -178,14 +180,13 @@ public sealed class ContextTray : ContentControl
     string? _category;
     string _query = "";
 
+    // Busca, categorias e a grade de formas (clicar cola a forma).
     void ShowShapes()
     {
         var root = new StackPanel();
         root.Children.Add(Back("Formas"));
-        var search = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = 14, Margin = new Thickness(2, 6, 2, 6), Padding = new Thickness(8, 5, 8, 5), Text = _query };
-        search.SetResourceReference(BackgroundProperty, "FillBrush");
-        search.SetResourceReference(ForegroundProperty, "InkBrush");
-        search.SetResourceReference(TextBox.CaretBrushProperty, "InkBrush");
+        var search = Input(14, new Thickness(2, 6, 2, 6), new Thickness(8, 5, 8, 5));
+        search.Text = _query;
         root.Children.Add(search);
         var cats = new WrapPanel();
         cats.Children.Add(UiKit.Chip("Todas", _category is null, () => { _category = null; ShowShapes(); }));
@@ -219,6 +220,7 @@ public sealed class ContextTray : ContentControl
         Dispatcher.BeginInvoke(() => search.Focus(), System.Windows.Threading.DispatcherPriority.Input);
     }
 
+    // Forma escolhida, centrada no ponto clicado.
     void AddShape(string key)
     {
         var size = BoardItemViewModel.DefaultSize(ItemKind.Shape);
@@ -231,6 +233,17 @@ public sealed class ContextTray : ContentControl
         Done();
     }
 
+    // Campo de texto no estilo da bandeja (link e busca de formas).
+    static TextBox Input(double size, Thickness margin, Thickness padding)
+    {
+        var box = new TextBox { Style = (Style)Application.Current.FindResource("EditBox"), FontSize = size, Margin = margin, Padding = padding };
+        box.SetResourceReference(BackgroundProperty, "FillBrush");
+        box.SetResourceReference(ForegroundProperty, "InkBrush");
+        box.SetResourceReference(TextBox.CaretBrushProperty, "InkBrush");
+        return box;
+    }
+
+    // Cabeçalho das páginas internas: voltar, título e fechar.
     FrameworkElement Back(string title)
     {
         var dock = new DockPanel();

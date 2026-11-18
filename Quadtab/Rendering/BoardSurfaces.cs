@@ -6,23 +6,22 @@ using Quadtab.Models;
 namespace Quadtab.Rendering;
 
 /// <summary>
-/// Texturas e pincéis do quadro, criados uma vez e compartilhados (congelados = mais rápidos no WPF).
+/// Aqui usamos a classe BoardSurfaces para criar as texturas e pincéis do quadro, criados uma vez e compartilhados (congelados = mais rápidos no WPF).
 /// Também guarda o modelo e o zoom atuais, que alguns itens precisam conhecer.
 /// </summary>
 public static class BoardSurfaces
 {
-    public const double CorkTile = 384, GrainTile = 256, DotTile = 26;
+    public const double CorkTile = 384, DotTile = 26;
 
-    static BitmapSource? _cork, _grain, _blurredCork, _glassCork;
-    static ImageBrush? _corkBrush, _grainBrush;
+    // ---------- texturas (criadas na primeira vez que alguém pede) ----------
+    static BitmapSource? _cork, _blurredCork;
+    static ImageBrush? _corkBrush;
     static DrawingBrush? _dots;
     static Color? _corkAverage;
 
     public static BitmapSource Cork => _cork ??= Load("Assets/cork.png");
-    public static BitmapSource Grain => _grain ??= Load("Assets/paper-grain.png");
 
     public static ImageBrush CorkBrush => _corkBrush ??= Tile(Cork, CorkTile);
-    public static ImageBrush GrainBrush => _grainBrush ??= Tile(Grain, GrainTile);
 
     /// <summary>Pontos #C2C2B8 de raio 1.3 a cada 26 px (modelo Pontilhado).</summary>
     public static DrawingBrush DotsBrush => _dots ??= CreateDots();
@@ -30,9 +29,7 @@ public static class BoardSurfaces
     /// <summary>Cortiça já desfocada e saturada: é o "fundo" visto através dos blocos de vidro.</summary>
     public static BitmapSource BlurredCork => _blurredCork ??= CreateBlurredCork(12, 1.7);
 
-    /// <summary>Cortiça como aparece através dos painéis de vidro: blur 26 e saturação 190%.</summary>
-    public static BitmapSource GlassCork => _glassCork ??= CreateBlurredCork(26, 1.9);
-
+    /// <summary>Cor média da cortiça (calculada junto com o desfoque).</summary>
     public static Color CorkAverage { get { _ = BlurredCork; return _corkAverage!.Value; } }
 
     // ---- estado atual do quadro ----
@@ -44,6 +41,7 @@ public static class BoardSurfaces
     /// <summary>Avisa quando o modelo ou o nível da textura muda (não a cada quadro de zoom).</summary>
     public static event Action? Changed;
 
+    /// <summary>Guarda o modelo e o nível da textura; avisa só se algo mudou.</summary>
     public static void Update(BoardModel model, double zoom)
     {
         TileOnScreen(CorkTile, zoom, out double world);
@@ -96,6 +94,7 @@ public static class BoardSurfaces
 
     // ---------- criação ----------
 
+    // Imagem embutida no .exe (pack://), já carregada e congelada.
     static BitmapSource Load(string path)
     {
         var img = new BitmapImage();
@@ -107,6 +106,7 @@ public static class BoardSurfaces
         return img;
     }
 
+    // Pincel que repete a imagem num quadrado de "size" unidades.
     static ImageBrush Tile(ImageSource src, double size)
     {
         var b = new ImageBrush(src)
@@ -121,6 +121,7 @@ public static class BoardSurfaces
         return b;
     }
 
+    // Pincel de pontinhos do modelo Pontilhado.
     static DrawingBrush CreateDots()
     {
         var g = new DrawingGroup();
@@ -143,6 +144,7 @@ public static class BoardSurfaces
         return b;
     }
 
+    /// <summary>Desfoca (gaussiano) e satura a cortiça, e calcula a cor média dela.</summary>
     static BitmapSource CreateBlurredCork(double sigma, double saturation)
     {
         var src = new FormatConvertedBitmap(Cork, PixelFormats.Bgra32, null, 0);
@@ -185,6 +187,7 @@ public static class BoardSurfaces
         return (new Point(c.X - dx * len / 2, c.Y - dy * len / 2), new Point(c.X + dx * len / 2, c.Y + dy * len / 2));
     }
 
+    /// <summary>Degradê linear igual ao linear-gradient(deg, ...) do CSS.</summary>
     public static LinearGradientBrush CssGradient(double deg, Rect area, params (Color Color, double Offset)[] stops)
     {
         var (s, e) = CssAngle(deg, area.X, area.Y, area.Width, area.Height);

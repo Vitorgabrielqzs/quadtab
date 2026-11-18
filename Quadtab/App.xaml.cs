@@ -1,11 +1,19 @@
 ﻿using System.IO;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Quadtab.Models;
 using Quadtab.Services;
 using Quadtab.ViewModels;
 
 namespace Quadtab;
 
+/// <summary>
+/// Aqui usamos a classe App como ponto de entrada: inicia o cofre e o tema, abre a janela e guarda o quadro
+/// aberto (ViewModel) e a biblioteca (Library). Também troca de quadro, cuida da prévia de designs e registra erros.
+/// </summary>
 public partial class App : Application
 {
     /// <summary>Quadro aberto agora.</summary>
@@ -16,17 +24,19 @@ public partial class App : Application
 
     static MainWindow? Window => Current?.MainWindow as MainWindow;
 
+    // ---------- início ----------
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandled;
+        StorageService.WriteFailed += OnWriteFailed;
 
         // Desenho pela placa de vídeo (nunca forçar o modo por software).
-        System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.Default;
+        RenderOptions.ProcessRenderMode = RenderMode.Default;
 
         // O WPF limita as animações a ~60 fps por padrão; em telas de 120 Hz ou mais, vai até 120.
-        System.Windows.Media.Animation.Timeline.DesiredFrameRateProperty.OverrideMetadata(
-            typeof(System.Windows.Media.Animation.Timeline), new FrameworkPropertyMetadata { DefaultValue = 120 });
+        Timeline.DesiredFrameRateProperty.OverrideMetadata(typeof(Timeline), new FrameworkPropertyMetadata { DefaultValue = 120 });
 
         StorageService.Initialize();
         ThemeService.Initialize();
@@ -42,10 +52,11 @@ public partial class App : Application
             Library.Visit(start);
         }
 
-        var window = new MainWindow(ViewModel);
-        MainWindow = window;
-        window.Show();
+        MainWindow = new MainWindow(ViewModel);
+        MainWindow.Show();
     }
+
+    // ---------- quadros ----------
 
     /// <summary>Abre outro quadro (salva o atual antes).</summary>
     public static void OpenBoard(string path, bool makeThumb = true)
@@ -67,6 +78,8 @@ public partial class App : Application
         if (!empty) Library.Visit(path);
         MemoryService.Request();
     }
+
+    // ---------- prévia de design ----------
 
     static string? _previewReturn;
     static Design? _previewDesign;
@@ -96,8 +109,7 @@ public partial class App : Application
             var board = d.Build();
             board.Camera = vm.Camera ?? board.Camera;
             var path = StorageService.CreateBoard("", d.Name, board);
-            _previewDesign = null;
-            _previewReturn = null;
+            _previewDesign = null; _previewReturn = null;
             OpenBoard(path, makeThumb: false);
         }
         catch (Exception ex) { Log(ex); }
@@ -108,10 +120,11 @@ public partial class App : Application
     {
         if (ViewModel is not { IsPreview: true }) return;
         var back = _previewReturn is { } p && File.Exists(p) ? p : StorageService.EmptyBoardPath;
-        _previewDesign = null;
-        _previewReturn = null;
+        _previewDesign = null; _previewReturn = null;
         OpenBoard(back, makeThumb: false);
     }
+
+    // ---------- notas e itens ----------
 
     /// <summary>Abre uma página no editor ao lado do quadro.</summary>
     public static void OpenPage(string path)
@@ -152,6 +165,16 @@ public partial class App : Application
             it.FilePath = StorageService.Rel(target);
             it.Title = title;
         }
+        // Outros quadros que usam a nota passam a apontar para o nome novo (senão, ao abrir, recriariam a nota antiga).
+        StorageService.UpdateBoardsUsing(path, ViewModel.FilePath, (_, hits) =>
+        {
+            foreach (var h in hits)
+            {
+                h.Arquivo = StorageService.Rel(target);
+                h.Titulo = title;
+            }
+            return true;
+        });
         Window?.PageRenamed(path, target);
     }
 
@@ -160,6 +183,19 @@ public partial class App : Application
     {
         foreach (var it in ViewModel.Items.Where(i => i.FileFullPath is { } f && string.Equals(f, path, StringComparison.OrdinalIgnoreCase)).ToList())
             ViewModel.Remove(it);
+        // Os outros quadros que usam a nota também a perdem (com as setas ligadas a ela): nenhum fica com link quebrado.
+        StorageService.UpdateBoardsUsing(path, ViewModel.FilePath, (b, hits) =>
+        {
+            var ids = hits.Select(h => h.Id).ToHashSet();
+            bool Linked(LineEnd? end) => end?.Item is { } id && ids.Contains(id);
+            b.Itens.RemoveAll(i => ids.Contains(i.Id) || i.Linha is { } l && (Linked(l.De) || Linked(l.Para)));
+            foreach (var i in b.Itens.Where(i => i.AnexadoA is { } p && ids.Contains(p)))
+            {
+                i.AnexadoA = null;
+                i.AnexoLado = null;
+            }
+            return true;
+        });
         if (!File.Exists(path)) return;
         StorageService.DeletePage(path);
         PageDeleted(path);
@@ -169,6 +205,8 @@ public partial class App : Application
 
     /// <summary>Miniatura do quadro atual para a galeria.</summary>
     public static void MakeThumbnail() => Window?.MakeThumbnail();
+
+    // ---------- saída e erros ----------
 
     protected override void OnExit(ExitEventArgs e)
     {
@@ -188,14 +226,37 @@ public partial class App : Application
         e.Handled = true;
     }
 
-    /// <summary>Registra um erro em erros.log (nunca lança).</summary>
+    // Uma gravação falhou (pode vir de outra thread): registra e o status do quadro mostra o erro.
+    static void OnWriteFailed(string path, Exception ex)
+    {
+        Log(new IOException($"Não foi possível gravar \"{path}\".", ex));
+        Current?.Dispatcher.BeginInvoke(() => { if (ViewModel is { } vm) vm.SaveError = true; });
+    }
+
+    static readonly object LogLock = new();
+    static string? _lastLog;
+    static DateTime _lastLogAt;
+
+    /// <summary>
+    /// Registra um erro em erros.log (nunca lança). A mesma falha repetida entra uma vez por minuto, e o arquivo
+    /// passa para erros-antigo.log ao chegar a 1 MB (não cresce sem fim).
+    /// </summary>
     public static void Log(Exception ex)
     {
         try
         {
-            Directory.CreateDirectory(StorageService.LogDir);
-            File.AppendAllText(Path.Combine(StorageService.LogDir, "erros.log"),
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\n\n");
+            var text = ex.ToString();
+            lock (LogLock)
+            {
+                if (text == _lastLog && DateTime.Now - _lastLogAt < TimeSpan.FromMinutes(1)) return;
+                _lastLog = text;
+                _lastLogAt = DateTime.Now;
+                Directory.CreateDirectory(StorageService.LogDir);
+                var file = Path.Combine(StorageService.LogDir, "erros.log");
+                if (File.Exists(file) && new FileInfo(file).Length > 1_000_000)
+                    File.Move(file, Path.Combine(StorageService.LogDir, "erros-antigo.log"), overwrite: true);
+                File.AppendAllText(file, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}\n\n");
+            }
         }
         catch { }
     }

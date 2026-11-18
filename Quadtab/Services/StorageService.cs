@@ -6,6 +6,7 @@ using Quadtab.Models;
 
 namespace Quadtab.Services;
 
+// Aqui usamos o BoardJsonContext para gerar o código do JSON na compilação (mais rápido e sem reflexão).
 [JsonSerializable(typeof(Board))]
 [JsonSerializable(typeof(AppState))]
 [JsonSerializable(typeof(List<BoardItem>))]
@@ -18,7 +19,7 @@ public sealed record TrashEntry(string TrashPath, string OriginalRel, DateTime D
 }
 
 /// <summary>
-/// O cofre: a pasta Documentos\Quadtab com tudo do usuário.
+/// Aqui usamos a classe StorageService para ler e gravar o cofre: a pasta Documentos\Cofre com tudo do usuário.
 ///   Quadros\   um .quadtab (JSON) por quadro, em subpastas = pastas do app
 ///   Páginas\   páginas em Markdown (.md)
 ///   Anexos\    imagens, PDFs e outros arquivos colados
@@ -41,8 +42,10 @@ public static class StorageService
         AllowTrailingCommas = true,
     });
 
+    // Uma gravação por vez (o salvamento automático roda em outra thread).
     static readonly SemaphoreSlim WriteLock = new(1, 1);
 
+    // ---------- pastas do cofre ----------
     public static string Root { get; private set; } = "";
     public static string BoardsDir => Path.Combine(Root, "Quadros");
     /// <summary>Notas (.md). A pasta se chamava "Páginas"; é renomeada ao abrir.</summary>
@@ -74,6 +77,12 @@ public static class StorageService
 
     public static void NotifyLibrary() => LibraryChanged?.Invoke();
 
+    /// <summary>Uma gravação falhou (disco cheio, arquivo travado, sem permissão): a interface avisa o usuário.</summary>
+    public static event Action<string, Exception>? WriteFailed;
+
+    // ---------- abertura e migrações ----------
+
+    /// <summary>Escolhe o cofre, migra versões antigas, cria as pastas e o quadro de exemplo (cofre novo).</summary>
     public static void Initialize()
     {
         var dev = Environment.GetEnvironmentVariable("QUADTAB_DADOS");
@@ -84,7 +93,16 @@ public static class StorageService
         // Tudo fica em Documentos\Cofre; o estado pode apontar para outro cofre (Ajustes).
         Root = defaultRoot;
         bool freshVault = !File.Exists(StatePath);
-        State = ReadJson(StatePath, Json.AppState) ?? new AppState();
+        State = ReadJson(StatePath, Json.AppState) ?? Damaged(StatePath, new AppState());
+        // estado.json editado à mão: listas nulas viram listas vazias.
+        State.Recentes ??= [];
+        State.Favoritos ??= [];
+        State.Fixados ??= [];
+        State.Abertos ??= [];
+        State.CoresRecentes ??= [];
+        State.CoresLinhaRecentes ??= [];
+        State.OrdemPastas ??= [];
+        State.EstiloLinha ??= new();
         if (!string.IsNullOrEmpty(State.Cofre) && Directory.Exists(State.Cofre)) Root = State.Cofre;
         else State.Cofre = null;
 
@@ -125,16 +143,6 @@ public static class StorageService
         catch (UnauthorizedAccessException) { }
     }
 
-    /// <summary>Troca a pasta do cofre (Ajustes).</summary>
-    public static void ChangeVault(string folder)
-    {
-        State.Cofre = folder;
-        State.QuadroAberto = null;
-        SaveState();
-        Initialize();
-        NotifyLibrary();
-    }
-
     /// <summary>A versão anterior usava Documentos\Quadtab: a pasta inteira passa a se chamar Cofre.</summary>
     static void MigrateOldVault(string old, string vault)
     {
@@ -168,6 +176,7 @@ public static class StorageService
 
     // ---------- caminhos ----------
 
+    /// <summary>Caminho relativo ao cofre (é o que vai para o JSON) e o caminho completo de volta.</summary>
     public static string Rel(string full) => Path.GetRelativePath(Root, full);
     public static string Full(string rel)
     {
@@ -178,6 +187,7 @@ public static class StorageService
         return Path.Combine(Root, rel);
     }
 
+    /// <summary>Nome sem caracteres proibidos pelo Windows.</summary>
     public static string SafeName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -185,6 +195,21 @@ public static class StorageService
         return string.IsNullOrWhiteSpace(s) ? "Sem título" : s;
     }
 
+    /// <summary>
+    /// Destino de um renomear: o mesmo caminho (nada muda), o mesmo nome com outras maiúsculas
+    /// (o Windows considera igual, então não ganha número) ou um nome livre.
+    /// </summary>
+    static string RenameTarget(string path, string newName, string ext)
+    {
+        var safe = SafeName(newName);
+        var dir = Path.GetDirectoryName(path)!;
+        var current = ext.Length > 0 ? Path.GetFileNameWithoutExtension(path) : Path.GetFileName(path);
+        if (string.Equals(current, safe, StringComparison.Ordinal)) return path;
+        if (string.Equals(current, safe, StringComparison.OrdinalIgnoreCase)) return Path.Combine(dir, safe + ext);
+        return Unique(dir, safe, ext);
+    }
+
+    // Caminho livre: "nome", "nome 2", "nome 3"...
     static string Unique(string folder, string name, string ext)
     {
         var p = Path.Combine(folder, name + ext);
@@ -201,15 +226,52 @@ public static class StorageService
     public static IEnumerable<string> BoardFolders() =>
         Directory.EnumerateDirectories(BoardsDir, "*", SearchOption.AllDirectories).Select(d => Path.GetRelativePath(BoardsDir, d));
 
+    /// <summary>Lê um quadro; arquivo estragado ganha uma cópia ".erro-data" e abre vazio.</summary>
     public static Board LoadBoard(string path)
     {
         // Só arquivos de quadro: uma nota (.md) nunca é lida como quadro (nem gera cópia de erro).
         if (!path.EndsWith(BoardExt, StringComparison.OrdinalIgnoreCase)) return new Board { Titulo = Path.GetFileNameWithoutExtension(path) };
-        var b = ReadJson(path, Json.Board);
+        var b = ReadBoard(path);
         if (b is not null) return b;
-        if (File.Exists(path))
-            try { File.Copy(path, path + $".erro-{DateTime.Now:yyyyMMdd-HHmmss}", true); } catch { }
-        return new Board { Titulo = Path.GetFileNameWithoutExtension(path) };
+        return Damaged(path, new Board { Titulo = Path.GetFileNameWithoutExtension(path) });
+    }
+
+    /// <summary>Lê um quadro sem efeitos colaterais: null se o arquivo não existe ou está estragado.</summary>
+    public static Board? ReadBoard(string path) => ReadJson(path, Json.Board) is { } b ? Clean(b, path) : null;
+
+    // Arquivo editado à mão: listas e textos nulos viram vazios (a lateral, a busca e a tela contam com eles).
+    static Board Clean(Board b, string path)
+    {
+        b.Itens = (b.Itens ?? []).Where(i => i is not null).ToList();
+        b.Cenas = (b.Cenas ?? []).Where(c => c is not null).ToList();
+        b.Titulo ??= Path.GetFileNameWithoutExtension(path);
+        b.Modelo ??= "liso";
+        foreach (var i in b.Itens)
+        {
+            i.Tipo ??= "postit";
+            i.Cor ??= "amarelo";
+            i.Fixacao ??= "alfinete";
+            i.Titulo ??= "";
+            i.Texto ??= "";
+        }
+        return b;
+    }
+
+    // Arquivo estragado: guarda uma cópia ".erro-data" (uma só por versão do arquivo) e segue com o valor padrão.
+    static T Damaged<T>(string path, T fallback)
+    {
+        if (!File.Exists(path)) return fallback;
+        try
+        {
+            var stamp = File.GetLastWriteTime(path);
+            var dir = Path.GetDirectoryName(path)!;
+            // A cópia herda a data do original: se já existe uma com a mesma data, essa versão já foi guardada.
+            bool saved = Directory.EnumerateFiles(dir, Path.GetFileName(path) + ".erro-*").Any(f => File.GetLastWriteTime(f) == stamp);
+            if (!saved) File.Copy(path, path + $".erro-{DateTime.Now:yyyyMMdd-HHmmss}", true);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return fallback;
     }
 
     public static string Serialize(Board board) => JsonSerializer.Serialize(board, Json.Board);
@@ -217,13 +279,14 @@ public static class StorageService
     public static List<BoardItem> DeserializeItems(string json) =>
         JsonSerializer.Deserialize(json, Json.ListBoardItem) ?? [];
 
-    public static Task SaveBoardAsync(string path, Board board)
+    /// <summary>Grava o quadro em segundo plano; devolve false se não conseguiu.</summary>
+    public static Task<bool> SaveBoardAsync(string path, Board board)
     {
         var text = Serialize(board);
         return Task.Run(() => WriteText(path, text));
     }
 
-    public static void SaveBoard(string path, Board board) => WriteText(path, Serialize(board));
+    public static bool SaveBoard(string path, Board board) => WriteText(path, Serialize(board));
 
     public static string CreateBoard(string folderRel, string name, Board? content = null)
     {
@@ -239,8 +302,8 @@ public static class StorageService
 
     public static string RenameBoard(string path, string newName)
     {
-        var target = Unique(Path.GetDirectoryName(path)!, SafeName(newName), BoardExt);
-        if (string.Equals(Path.GetFileNameWithoutExtension(path), SafeName(newName), StringComparison.Ordinal)) return path;
+        var target = RenameTarget(path, newName, BoardExt);
+        if (target == path) return path;
         File.Move(path, target);
         ReplaceInState(path, target);
         NotifyLibrary();
@@ -254,9 +317,7 @@ public static class StorageService
         foreach (var it in b.Itens)
             if (it is { Tipo: "pagina", Arquivo: { } rel } && File.Exists(Full(rel)))
                 it.Arquivo = Rel(CreatePage(Path.GetFileNameWithoutExtension(rel), ReadPage(Full(rel))));
-        var copy = CreateBoard(Path.GetRelativePath(BoardsDir, Path.GetDirectoryName(path)!) is "." ? "" :
-            Path.GetRelativePath(BoardsDir, Path.GetDirectoryName(path)!), Path.GetFileNameWithoutExtension(path) + " (cópia)", b);
-        return copy;
+        return CreateBoard(FolderKey(path), Path.GetFileNameWithoutExtension(path) + " (cópia)", b);
     }
 
     public static string MoveBoard(string path, string folderRel)
@@ -284,9 +345,16 @@ public static class StorageService
     public static string RenameFolder(string rel, string newName)
     {
         var src = Path.Combine(BoardsDir, rel);
-        if (string.Equals(Path.GetFileName(src), SafeName(newName), StringComparison.Ordinal)) return src;
-        var target = Unique(Path.GetDirectoryName(src)!, SafeName(newName), "");
-        Directory.Move(src, target);
+        var target = RenameTarget(src, newName, "");
+        if (target == src) return src;
+        if (string.Equals(src, target, StringComparison.OrdinalIgnoreCase))
+        {
+            // Só as maiúsculas mudam: o Windows vê o mesmo nome, então passa por um nome temporário.
+            var tmp = src + ".renomeando";
+            Directory.Move(src, tmp);
+            Directory.Move(tmp, target);
+        }
+        else Directory.Move(src, target);
         foreach (var f in Directory.EnumerateFiles(target, "*" + BoardExt, SearchOption.AllDirectories))
             ReplaceInState(Path.Combine(src, Path.GetRelativePath(target, f)), f, order: false);
         // A ordem salva acompanha o nome novo (a pasta e as subpastas dela).
@@ -338,17 +406,50 @@ public static class StorageService
     public static void DeleteFolder(string rel)
     {
         var dir = Path.Combine(BoardsDir, rel);
+        if (!Directory.Exists(dir)) return;
         foreach (var f in Directory.EnumerateFiles(dir, "*" + BoardExt, SearchOption.AllDirectories).ToList()) TrashBoard(f, notify: false);
-        try { Directory.Delete(dir, true); } catch { }
+        RemoveFolder(dir);
         NotifyLibrary();
     }
 
+    /// <summary>
+    /// Tira uma pasta (já sem os quadros) do cofre: arquivos que não são quadros (colocados pelo Explorador)
+    /// vão para .lixeira\Arquivos, nunca são apagados direto; depois somem as pastas vazias.
+    /// </summary>
+    public static void RemoveFolder(string dir)
+    {
+        if (!Directory.Exists(dir)) return;
+        var bin = Path.Combine(TrashDir, "Arquivos");
+        foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).ToList())
+        {
+            try
+            {
+                Directory.CreateDirectory(bin);
+                File.Move(f, TrashTarget(bin, Path.GetRelativePath(BoardsDir, f).Replace('\\', '¦')));
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        // Só pastas vazias (das mais fundas para cima): o que não pôde sair continua lá.
+        foreach (var d in Directory.EnumerateDirectories(dir, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length).Append(dir).ToList())
+            try { Directory.Delete(d); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
+    // Nome livre na lixeira: "data__nome"; se já existe um apagado no mesmo segundo, o segundo seguinte.
+    static string TrashTarget(string dir, string name)
+    {
+        var when = DateTime.Now;
+        string p;
+        while (File.Exists(p = Path.Combine(dir, $"{when:yyyyMMddHHmmss}__{name}"))) when = when.AddSeconds(1);
+        return p;
+    }
+
+    // Um quadro mudou de nome ou de pasta: atualiza recentes, favoritos, fixados, ordem das pastas e miniatura.
     static void ReplaceInState(string oldPath, string newPath, bool order = true)
     {
         string o = Rel(oldPath), n = Rel(newPath);
-        for (int i = 0; i < State.Recentes.Count; i++) if (State.Recentes[i] == o) State.Recentes[i] = n;
-        for (int i = 0; i < State.Favoritos.Count; i++) if (State.Favoritos[i] == o) State.Favoritos[i] = n;
-        for (int i = 0; i < State.Fixados.Count; i++) if (State.Fixados[i] == o) State.Fixados[i] = n;
+        foreach (var list in new[] { State.Recentes, State.Favoritos, State.Fixados })
+            for (int i = 0; i < list.Count; i++) if (list[i] == o) list[i] = n;
         if (order)
         {
             // Ordem das pastas: renomear mantém o lugar; mudar de pasta tira da antiga e põe no fim da nova.
@@ -373,6 +474,7 @@ public static class StorageService
         SaveState();
     }
 
+    /// <summary>Quadro aberto agora: vai para o topo dos recentes (até 12).</summary>
     public static void Touch(string path)
     {
         var rel = Rel(path);
@@ -383,6 +485,7 @@ public static class StorageService
         SaveState();
     }
 
+    // ---------- importantes e fixados ----------
     public static bool IsFavorite(string path) => State.Favoritos.Contains(Rel(path));
 
     public static bool IsPinned(string path) => State.Fixados.Contains(Rel(path));
@@ -405,12 +508,12 @@ public static class StorageService
 
     // ---------- lixeira (30 dias) ----------
 
+    /// <summary>Move o quadro para a lixeira (o nome guarda a data e a pasta de origem).</summary>
     public static void TrashBoard(string path, bool notify = true)
     {
         var rel = Path.GetRelativePath(BoardsDir, path).Replace('\\', '¦');
         Directory.CreateDirectory(TrashDir);
-        var target = Path.Combine(TrashDir, $"{DateTime.Now:yyyyMMddHHmmss}__{rel}");
-        File.Move(path, target, true);
+        File.Move(path, TrashTarget(TrashDir, rel));
         State.Recentes.Remove(Rel(path));
         State.Favoritos.Remove(Rel(path));
         SaveState();
@@ -425,13 +528,17 @@ public static class StorageService
     {
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var b in BoardFiles())
-            foreach (var it in LoadBoard(b).Itens)
-                if (it is { Tipo: "pagina", Arquivo: { } rel }) used.Add(Path.GetFullPath(Full(rel)));
+        {
+            // Quadro que não deu para ler: sem saber as notas dele, nenhuma é tratada como órfã.
+            if (NotesOf(b) is not { } notes) return;
+            used.UnionWith(notes);
+        }
         foreach (var note in PageFiles().ToList())
             if (!used.Contains(Path.GetFullPath(note)))
                 try { TrashPage(note); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
+    /// <summary>Quadros na lixeira, lidos do nome "data__pasta¦quadro.quadtab".</summary>
     public static IEnumerable<TrashEntry> TrashEntries()
     {
         if (!Directory.Exists(TrashDir)) yield break;
@@ -478,7 +585,7 @@ public static class StorageService
     {
         var dir = Path.Combine(TrashDir, "Notas");
         if (!Directory.Exists(dir)) yield break;
-        var board = ReadJson(trashedBoard, Json.Board);
+        var board = ReadBoard(trashedBoard);
         if (board is null) yield break;
         foreach (var it in board.Itens)
         {
@@ -489,20 +596,28 @@ public static class StorageService
         }
     }
 
+    // Apaga de vez o que está na lixeira há mais de 30 dias.
     static void PurgeTrash()
     {
         foreach (var e in TrashEntries().ToList())
             if ((DateTime.Now - e.DeletedAt).TotalDays > 30)
                 DeleteWithNotes(e.TrashPath);
+        // Arquivos soltos de pastas apagadas: mesmo prazo de 30 dias.
+        var bin = Path.Combine(TrashDir, "Arquivos");
+        if (!Directory.Exists(bin)) return;
+        foreach (var f in Directory.EnumerateFiles(bin).ToList())
+        {
+            var name = Path.GetFileName(f);
+            if (name.Length > 14 && DateTime.TryParseExact(name[..14], "yyyyMMddHHmmss", null, System.Globalization.DateTimeStyles.None, out var when)
+                && (DateTime.Now - when).TotalDays > 30)
+                try { File.Delete(f); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
     }
 
     // ---------- páginas (.md) ----------
 
     public static IEnumerable<string> PageFiles() =>
         Directory.Exists(PagesDir) ? Directory.EnumerateFiles(PagesDir, "*.md", SearchOption.AllDirectories) : [];
-
-    public static IEnumerable<string> PageFolders() =>
-        Directory.EnumerateDirectories(PagesDir, "*", SearchOption.AllDirectories).Select(d => Path.GetRelativePath(PagesDir, d));
 
     /// <summary>Acha uma página pelo nome (sem extensão, sem diferenciar maiúsculas).</summary>
     public static string? FindPage(string name) =>
@@ -515,6 +630,7 @@ public static class StorageService
     /// <summary>Título da nota: o "# Título" do arquivo ou, sem ele, o nome do arquivo.</summary>
     public static string PageTitle(string path) => Rendering.Markdown.TitleOf(ReadPage(path)) ?? Path.GetFileNameWithoutExtension(path);
 
+    /// <summary>Cria, renomeia e apaga notas (.md em Notas\).</summary>
     public static string CreatePage(string name, string content = "", string folderRel = "")
     {
         var folder = Path.Combine(PagesDir, folderRel);
@@ -527,8 +643,8 @@ public static class StorageService
 
     public static string RenamePage(string path, string newName)
     {
-        if (string.Equals(Path.GetFileNameWithoutExtension(path), SafeName(newName), StringComparison.Ordinal)) return path;
-        var target = Unique(Path.GetDirectoryName(path)!, SafeName(newName), ".md");
+        var target = RenameTarget(path, newName, ".md");
+        if (target == path) return path;
         File.Move(path, target);
         NotifyLibrary();
         return target;
@@ -552,63 +668,115 @@ public static class StorageService
         foreach (var b in BoardFiles())
         {
             if (string.Equals(b, board, StringComparison.OrdinalIgnoreCase)) continue;
-            if (LoadBoard(b).Itens.Any(it => it is { Tipo: "pagina", Arquivo: { } rel } && string.Equals(Path.GetFullPath(Full(rel)), full, StringComparison.OrdinalIgnoreCase))) return true;
+            // Quadro ilegível pode usar a nota: na dúvida, ela fica.
+            if (NotesOf(b) is not { } notes || notes.Contains(full)) return true;
         }
         return false;
     }
 
+    /// <summary>
+    /// Notas usadas por um quadro (caminhos completos). Null quando o quadro não pôde ser lido ou está
+    /// estragado: aí não dá para saber quais notas ele usa, e nenhuma pode ser tratada como sem dono.
+    /// </summary>
+    static HashSet<string>? NotesOf(string boardPath)
+    {
+        if (ReadBoard(boardPath) is not { } b) return null;
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var it in b.Itens)
+            if (it is { Tipo: "pagina", Arquivo: { } rel })
+                try { set.Add(Path.GetFullPath(Full(rel))); } catch (ArgumentException) { } catch (NotSupportedException) { }
+        return set;
+    }
+
+    /// <summary>
+    /// Outros quadros que usam uma nota (o aberto fica de fora: a tela cuida dele). Só quadros legíveis
+    /// são regravados; "change" devolve true quando mudou alguma coisa.
+    /// </summary>
+    public static void UpdateBoardsUsing(string notePath, string? except, Func<Board, List<BoardItem>, bool> change)
+    {
+        var full = Path.GetFullPath(notePath);
+        foreach (var path in BoardFiles().ToList())
+        {
+            if (except is not null && string.Equals(path, except, StringComparison.OrdinalIgnoreCase)) continue;
+            if (ReadBoard(path) is not { } b) continue;
+            var hits = b.Itens.Where(it => it is { Tipo: "pagina", Arquivo: { } rel } && SamePath(Full(rel), full)).ToList();
+            if (hits.Count > 0 && change(b, hits)) SaveBoard(path, b);
+        }
+    }
+
+    static bool SamePath(string a, string b)
+    {
+        try { return string.Equals(Path.GetFullPath(a), b, StringComparison.OrdinalIgnoreCase); }
+        catch (ArgumentException) { return false; }
+    }
+
     public static void TrashPage(string path)
     {
-        Directory.CreateDirectory(Path.Combine(TrashDir, "Notas"));
-        File.Move(path, Path.Combine(TrashDir, "Notas", $"{DateTime.Now:yyyyMMddHHmmss}__{Path.GetFileName(path)}"), true);
+        var dir = Path.Combine(TrashDir, "Notas");
+        Directory.CreateDirectory(dir);
+        File.Move(path, TrashTarget(dir, Path.GetFileName(path)));
         NotifyLibrary();
     }
 
     // ---------- anexos ----------
 
+    /// <summary>Grava bytes (SaveAttachment) ou copia um arquivo (ImportAttachment) para Anexos; devolve o caminho relativo.</summary>
     public static string SaveAttachment(byte[] data, string name)
     {
-        Directory.CreateDirectory(AttachDir);
-        var path = Unique(AttachDir, SafeName(Path.GetFileNameWithoutExtension(name)), Path.GetExtension(name));
+        var path = NewAttachment(name);
         File.WriteAllBytes(path, data);
         return Rel(path);
     }
 
     public static string ImportAttachment(string file)
     {
-        Directory.CreateDirectory(AttachDir);
-        var path = Unique(AttachDir, SafeName(Path.GetFileNameWithoutExtension(file)), Path.GetExtension(file));
+        var path = NewAttachment(file);
         File.Copy(file, path);
         return Rel(path);
     }
 
-    public static string ThumbPath(string boardPath)
+    // Caminho livre em Anexos com o nome (seguro) do arquivo.
+    static string NewAttachment(string name)
     {
-        var name = Rel(boardPath).Replace('\\', '¦');
-        return Path.Combine(MetaDir, "miniaturas", name + ".png");
+        Directory.CreateDirectory(AttachDir);
+        return Unique(AttachDir, SafeName(Path.GetFileNameWithoutExtension(name)), Path.GetExtension(name));
     }
+
+    /// <summary>Miniatura do quadro (galeria), em .quadtab/miniaturas.</summary>
+    public static string ThumbPath(string boardPath) => Path.Combine(MetaDir, "miniaturas", Rel(boardPath).Replace('\\', '¦') + ".png");
 
     // ---------- leitura e escrita segura ----------
 
+    // Lê um JSON; arquivo ausente ou estragado devolve null.
     static T? ReadJson<T>(string path, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info) where T : class
     {
         try { return File.Exists(path) ? JsonSerializer.Deserialize(File.ReadAllText(path), info) : null; }
         catch { return null; }
     }
 
-    /// <summary>Grava num temporário e troca no fim (nunca deixa o arquivo pela metade).</summary>
-    public static void WriteText(string path, string text)
+    /// <summary>
+    /// Grava num temporário e troca no fim (nunca deixa o arquivo pela metade). Devolve false se não deu
+    /// (disco cheio, arquivo somente leitura ou aberto em outro programa) e avisa pelo WriteFailed.
+    /// </summary>
+    public static bool WriteText(string path, string text)
     {
+        Exception? error = null;
         WriteLock.Wait();
+        var tmp = path + ".tmp";
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var tmp = path + ".tmp";
             File.WriteAllText(tmp, text);
             File.Move(tmp, path, overwrite: true);
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = ex;
+            try { File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { } // não deixa o .tmp para trás
+        }
         finally { WriteLock.Release(); }
+        if (error is null) return true;
+        WriteFailed?.Invoke(path, error);
+        return false;
     }
 }

@@ -5,7 +5,7 @@ using Quadtab.Rendering;
 
 namespace Quadtab.Controls;
 
-/// <summary>Ícone de cada quadro: o mini quadro do ícone do app, na cor do modelo do quadro.</summary>
+/// <summary>Aqui usamos a classe BoardIcon para desenhar o ícone de cada quadro: o mini quadro do ícone do app, na cor do modelo do quadro.</summary>
 public sealed class BoardIcon : FrameworkElement
 {
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(
@@ -19,6 +19,7 @@ public sealed class BoardIcon : FrameworkElement
 
     public BoardModel Model { get => (BoardModel)GetValue(ModelProperty); set => SetValue(ModelProperty, value); }
 
+    // Moldura e superfície de cada modelo, e os três mini post-its por cima.
     static readonly Dictionary<BoardModel, (Brush Frame, Brush Surface)> Looks = new()
     {
         [BoardModel.Cortica] = (Grad(0xD9B48A, 0xB88752), ColorMath.Brush(Palette.C(0xC4925A))),
@@ -37,6 +38,7 @@ public sealed class BoardIcon : FrameworkElement
         (ColorMath.Brush(Palette.C(0xA6D3FF)), 7.5, 11.5, -3),
     ];
 
+    // Degradê diagonal congelado.
     static Brush Grad(uint a, uint b)
     {
         var g = new LinearGradientBrush(Palette.C(a), Palette.C(b), new Point(0.3, 0), new Point(0.7, 1));

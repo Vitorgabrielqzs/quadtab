@@ -3,7 +3,7 @@ using System.Windows;
 namespace Quadtab.Rendering;
 
 /// <summary>
-/// Índice espacial: responde rápido "quais itens estão nesta área?".
+/// Aqui usamos a classe QuadTree como índice espacial (virtualização do quadro): responde rápido "quais itens estão nesta área?".
 /// Cada item fica no menor quadrante que o contém por inteiro.
 /// O quadro é infinito na prática: a raiz cobre ±1 milhão de unidades (o que passar disso fica na raiz).
 /// </summary>
@@ -12,6 +12,7 @@ public sealed class QuadTree<T> where T : class
     const int MaxItems = 8, MaxDepth = 14;
     const double Half = 1 << 20;
 
+    // Um quadrante: sua área, profundidade, os itens que ficam nele e os 4 filhos (quando dividido).
     sealed class Node(Rect bounds, int depth)
     {
         public readonly Rect Bounds = bounds;
@@ -32,6 +33,7 @@ public sealed class QuadTree<T> where T : class
         _root.Kids = null;
     }
 
+    /// <summary>Põe ou atualiza a caixa de um item.</summary>
     public void Set(T item, Rect box)
     {
         if (_where.TryGetValue(item, out var cur))
@@ -57,6 +59,7 @@ public sealed class QuadTree<T> where T : class
         if (i >= 0) cur.Node.Items.RemoveAt(i);
     }
 
+    /// <summary>Itens que tocam a área (Query) ou se existe algum (Any).</summary>
     public void Query(Rect area, List<T> results) => Query(_root, area, results);
 
     public bool Any(Rect area) => Any(_root, area);
@@ -71,26 +74,14 @@ public sealed class QuadTree<T> where T : class
 
     void Insert(Node node, T item, Rect box)
     {
-        while (true)
-        {
-            if (node.Kids is null)
-            {
-                node.Items.Add((item, box));
-                _where[item] = (node, box);
-                if (node.Items.Count > MaxItems && node.Depth < MaxDepth) Split(node);
-                return;
-            }
-            var kid = KidFor(node, box);
-            if (kid is null)
-            {
-                node.Items.Add((item, box));
-                _where[item] = (node, box);
-                return;
-            }
-            node = kid;
-        }
+        // Desce até o menor quadrante que contém a caixa inteira.
+        while (node.Kids is not null && KidFor(node, box) is { } kid) node = kid;
+        node.Items.Add((item, box));
+        _where[item] = (node, box);
+        if (node.Kids is null && node.Items.Count > MaxItems && node.Depth < MaxDepth) Split(node);
     }
 
+    // Divide um quadrante cheio em 4 e redistribui os itens que cabem num filho.
     void Split(Node node)
     {
         var b = node.Bounds;
@@ -106,13 +97,13 @@ public sealed class QuadTree<T> where T : class
         node.Items.Clear();
         foreach (var (item, box) in items)
         {
-            var kid = KidFor(node, box);
-            var target = kid ?? node;
+            var target = KidFor(node, box) ?? node;
             target.Items.Add((item, box));
             _where[item] = (target, box);
         }
     }
 
+    // Filho que contém a caixa inteira (null = fica no próprio nó).
     static Node? KidFor(Node node, Rect box)
     {
         foreach (var k in node.Kids!)

@@ -6,9 +6,10 @@ using System.Windows.Media.Imaging;
 
 namespace Quadtab.Services;
 
-/// <summary>Exporta uma imagem do quadro como PNG ou como PDF (uma página do tamanho da imagem).</summary>
+/// <summary>Aqui usamos a classe ExportService para exportar uma imagem do quadro como PNG ou como PDF (uma página do tamanho da imagem).</summary>
 public static class ExportService
 {
+    /// <summary>Grava o PNG (sem canal alfa nas imagens grandes de exportação).</summary>
     public static void SavePng(BitmapSource image, string path)
     {
         var enc = new PngBitmapEncoder();
@@ -46,6 +47,7 @@ public static class ExportService
         void Bytes(byte[] b) { outp.Write(b); pos += b.Length; }
         void Ascii(string s) => Bytes(Encoding.Latin1.GetBytes(s));
 
+        // ---------- escreve o PDF à mão (formato mínimo) ----------
         // Objetos: 1 catálogo, 2 páginas, 3 página, 4 imagem, 5 desenho.
         Ascii("%PDF-1.4\n%âãÏÓ\n");
         offsets.Add(pos); Ascii("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");

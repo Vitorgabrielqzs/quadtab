@@ -3,7 +3,7 @@ using System.Windows;
 namespace Quadtab.Rendering;
 
 /// <summary>
-/// Câmera do quadro infinito: ponto do mundo no centro da tela (Cx, Cy) + zoom.
+/// Aqui usamos a classe BoardCamera como a câmera do quadro infinito: ponto do mundo no centro da tela (Cx, Cy) + zoom.
 /// Tela = (mundo − centro) × zoom + metade da tela.
 /// Os movimentos (zoom suave, rodinha, inércia, viagens animadas) avançam em Step(), uma vez por quadro.
 /// </summary>
@@ -32,6 +32,7 @@ public sealed class BoardCamera
 
     public bool IsMoving => _zooming || _traveling || _panLeft.LengthSquared > 0.25 || _velocity.LengthSquared > 100;
 
+    // ---------- conversões tela ↔ mundo ----------
     public static double Clamp(double z) => Math.Clamp(z, MinZoom, MaxZoom);
 
     public Point ToWorld(Point screen) =>
@@ -43,6 +44,8 @@ public sealed class BoardCamera
     /// <summary>Área do mundo visível na tela.</summary>
     public Rect VisibleWorld =>
         new(Cx - Viewport.Width / 2 / Zoom, Cy - Viewport.Height / 2 / Zoom, Viewport.Width / Zoom, Viewport.Height / Zoom);
+
+    // ---------- comandos de movimento ----------
 
     /// <summary>Zoom suave multiplicando o atual, mantendo parado o ponto sob "anchor".</summary>
     public void ZoomBy(double factor, Point anchor)
@@ -62,12 +65,9 @@ public sealed class BoardCamera
     }
 
     /// <summary>Move o conteúdo na hora (arrastar).</summary>
-    public void PanNow(Vector screenDelta)
-    {
-        Cx -= screenDelta.X / Zoom;
-        Cy -= screenDelta.Y / Zoom;
-    }
+    public void PanNow(Vector screenDelta) { Cx -= screenDelta.X / Zoom; Cy -= screenDelta.Y / Zoom; }
 
+    /// <summary>Inércia ao soltar o arraste; Stop para tudo.</summary>
     public void Fling(Vector screenVelocity) => _velocity = screenVelocity;
 
     public void Stop()
@@ -87,6 +87,8 @@ public sealed class BoardCamera
         _traveling = seconds > 0;
         if (!_traveling) { Cx = cx; Cy = cy; Zoom = _toZ; }
     }
+
+    // ---------- avanço por quadro ----------
 
     /// <summary>Avança os movimentos. Retorna true se a câmera mudou.</summary>
     public bool Step(double dt)

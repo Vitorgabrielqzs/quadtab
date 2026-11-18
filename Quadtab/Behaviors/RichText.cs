@@ -4,9 +4,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using Quadtab.Rendering;
 
 namespace Quadtab.Behaviors;
+
+// Aqui fica a formatação do texto dos itens (Markdown/HTML simples): leitura das marcas e desenho num TextBlock.
 
 /// <summary>Formatação de um trecho: negrito, itálico, sublinhado, riscado, código, cor do texto e cor do fundo.</summary>
 public readonly record struct Fmt(bool Bold, bool Italic, bool Underline, bool Strike, bool Code, string? Color, string? Back)
@@ -14,6 +15,7 @@ public readonly record struct Fmt(bool Bold, bool Italic, bool Underline, bool S
     public bool IsPlain => this == default;
 }
 
+/// <summary>Um trecho do texto limpo com a mesma formatação.</summary>
 public sealed record Seg(int Start, int Length, Fmt Fmt);
 
 /// <summary>Texto sem as marcas e os trechos formatados dele (posições no texto sem marcas).</summary>
@@ -23,7 +25,7 @@ public sealed record Parsed(string Text, IReadOnlyList<Seg> Segs)
 }
 
 /// <summary>
-/// Formatação dentro do texto dos itens, em Markdown/HTML simples (o mesmo que o Obsidian lê):
+/// Aqui usamos a classe RichText para ler a formatação dentro do texto dos itens, em Markdown/HTML simples (o mesmo que o Obsidian lê):
 /// **negrito**, *itálico*, ~~riscado~~, `código`, &lt;u&gt;sublinhado&lt;/u&gt;,
 /// &lt;span style="color:#RRGGBB"&gt;cor&lt;/span&gt; e &lt;mark style="background:#RRGGBB"&gt;fundo&lt;/mark&gt;.
 /// Marca sem par na linha fica como texto comum. Na edição o texto aparece com as marcas; fora dela, formatado.
@@ -33,6 +35,9 @@ public static partial class RichText
     [GeneratedRegex(@"\*\*|\*|~~|`|<u>|</u>|<span style=""color:(#[0-9A-Fa-f]{6})"">|</span>|<mark style=""background:(#[0-9A-Fa-f]{6})"">|</mark>")]
     private static partial Regex Token();
 
+    // ---------- leitura das marcas ----------
+
+    /// <summary>Separa o texto limpo dos trechos formatados.</summary>
     public static Parsed Parse(string md)
     {
         var sb = new StringBuilder(md.Length);
@@ -85,17 +90,14 @@ public static partial class RichText
     static bool Toggle(ref bool on, string md, int pos, string mark)
     {
         if (on) { on = false; return true; }
-        if (!HasCloser(md, pos, mark)) return false;
-        on = true;
-        return true;
+        return on = HasCloser(md, pos, mark);
     }
 
+    // Existe outra marca igual adiante, na mesma linha?
     static bool HasCloser(string md, int pos, string mark)
     {
-        int eol = md.IndexOf('\n', pos);
-        int end = eol < 0 ? md.Length : eol;
-        int i = md.IndexOf(mark, pos, end - pos, StringComparison.Ordinal);
-        return i > pos;
+        int end = md.IndexOf('\n', pos) is var eol and >= 0 ? eol : md.Length;
+        return md.IndexOf(mark, pos, end - pos, StringComparison.Ordinal) > pos;
     }
 
     // ---------- TextBlock ----------
@@ -122,6 +124,7 @@ public static partial class RichText
         Fill(tb, GetSource(tb) ?? "");
     }
 
+    /// <summary>Preenche o TextBlock com os trechos formatados (bolinhas de lista já trocadas).</summary>
     public static void Fill(TextBlock tb, string md)
     {
         var p = Parse(ListText.ToDisplay(md));
@@ -137,28 +140,36 @@ public static partial class RichText
         }
     }
 
+    // Um pedaço de texto com a formatação aplicada.
     static Run MakeRun(TextBlock tb, string text, Fmt f)
     {
         var r = new Run(text);
-        if (f.Bold) r.FontWeight = BoldOf(tb.FontWeight);
-        if (f.Italic) r.FontStyle = FontStyles.Italic;
-        if (f.Underline || f.Strike)
-        {
-            var d = new TextDecorationCollection();
-            if (f.Underline) d.Add(TextDecorations.Underline[0]);
-            if (f.Strike) d.Add(TextDecorations.Strikethrough[0]);
-            r.TextDecorations = d;
-        }
-        if (f.Code)
-        {
-            r.FontFamily = CodeFont;
-            r.Background = CodeBack;
-        }
-        if (BrushOf(f.Color) is { } ink) r.Foreground = ink;
-        if (BrushOf(f.Back) is { } back) r.Background = back;
+        Style(r, f, tb.FontWeight);
         return r;
     }
 
+    /// <summary>Aplica a formatação num trecho (TextBlock e campo de edição usam o mesmo).</summary>
+    public static void Style(Inline r, Fmt f, FontWeight baseWeight)
+    {
+        if (f.Bold) r.FontWeight = BoldOf(baseWeight);
+        if (f.Italic) r.FontStyle = FontStyles.Italic;
+        if (Decorations(f) is { } d) r.TextDecorations = d;
+        if (f.Code) { r.FontFamily = CodeFont; r.Background = CodeBack; }
+        if (BrushOf(f.Color) is { } ink) r.Foreground = ink;
+        if (BrushOf(f.Back) is { } back) r.Background = back;
+    }
+
+    /// <summary>Sublinhado e/ou riscado do trecho (null quando não tem nenhum).</summary>
+    public static TextDecorationCollection? Decorations(Fmt f)
+    {
+        if (!f.Underline && !f.Strike) return null;
+        var d = new TextDecorationCollection();
+        if (f.Underline) d.Add(TextDecorations.Underline[0]);
+        if (f.Strike) d.Add(TextDecorations.Strikethrough[0]);
+        return d;
+    }
+
+    // Letra e fundo do `código`.
     public static readonly FontFamily CodeFont = new("Consolas");
     public static readonly Brush CodeBack = Rendering.ShadowCache.BrushOf(Color.FromArgb(34, 120, 120, 130));
 
@@ -172,6 +183,7 @@ public static partial class RichText
         return w >= 900 ? FontWeight.FromOpenTypeWeight(950) : w >= 600 ? FontWeights.Black : FontWeights.Bold;
     }
 
+    /// <summary>"#RRGGBB" → pincel (null se vazio ou inválido).</summary>
     public static Brush? BrushOf(string? hex)
     {
         if (hex is null) return null;

@@ -2,7 +2,7 @@ using System.Windows.Media;
 
 namespace Quadtab.Rendering;
 
-/// <summary>Contas de cor equivalentes às do CSS (color-mix, saturate).</summary>
+/// <summary>Aqui usamos a classe ColorMath para fazer contas de cor equivalentes às do CSS (color-mix, saturate).</summary>
 public static class ColorMath
 {
     /// <summary>color-mix(in srgb, a p%, b) — mistura com alfa pré-multiplicado, como o navegador.</summary>
@@ -25,14 +25,11 @@ public static class ColorMath
         return Color.FromArgb(c.A, B(nr), B(ng), B(nb));
     }
 
+    /// <summary>A mesma cor com outra opacidade (0..1).</summary>
     public static Color WithAlpha(Color c, double a) => Color.FromArgb((byte)Math.Round(Math.Clamp(a, 0, 1) * 255), c.R, c.G, c.B);
 
-    public static SolidColorBrush Brush(Color c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
-    }
+    /// <summary>Pincel congelado (mais leve para o WPF desenhar).</summary>
+    public static SolidColorBrush Brush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
     static byte B(double v) => (byte)Math.Round(Math.Clamp(v, 0, 255));
 }

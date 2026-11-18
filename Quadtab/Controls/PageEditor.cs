@@ -12,11 +12,12 @@ using Quadtab.Services;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Editor de páginas (.md do cofre) ao lado do quadro: modo Editar (texto com autocompletar de [[ ]])
+/// Aqui usamos a classe PageEditor para o editor de notas (.md do cofre) ao lado do quadro: modo Editar (texto com autocompletar de [[ ]])
 /// e modo Ler (Markdown desenhado, links clicáveis, caixas de seleção, tags e "Mencionado em").
 /// </summary>
 public sealed partial class PageEditor : Grid
 {
+    // Marcas lidas no modo Ler: **negrito**, *itálico*, `código`, [[link]], [texto](url), #tag e endereços soltos.
     [GeneratedRegex(@"\*\*(.+?)\*\*|(?<![\*\w])\*(?!\s)(.+?)\*(?!\*)|`([^`]+)`|\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]|\[([^\]]+)\]\((https?://[^)\s]+)\)|(?<![\w#&])#([\p{L}\p{N}_\-/]+)|(https?://[^\s)]+)")]
     private static partial Regex Inline();
 
@@ -60,6 +61,7 @@ public sealed partial class PageEditor : Grid
 
     bool Editing => _editor.Visibility == Visibility.Visible;
 
+    // Monta o cabeçalho (título, Ler/Editar, expandir, fechar), o editor, o leitor e a lista de sugestões.
     FrameworkElement BuildContent(out Button modeButton, out Button expandButton)
     {
         var dock = new DockPanel();
@@ -120,13 +122,14 @@ public sealed partial class PageEditor : Grid
 
     // ---------- abrir, salvar, renomear ----------
 
+    /// <summary>Abre a nota (vazia ou com o texto de exemplo abre já no modo Editar).</summary>
     public void Open(string path)
     {
         Flush();
         Path = path;
         _loading = true;
         _title.Text = StorageService.PageTitle(path);
-        _editor.Text = Markdown.StripTitle(StorageService.ReadPage(path), _title.Text);
+        _editor.Text = Markdown.StripTitle(StorageService.ReadPage(path));
         _loading = false;
         Visibility = Visibility.Visible;
         SetMode(_editor.Text.Trim().Length == 0 || _editor.Text.Contains("Escreva aqui"));
@@ -153,6 +156,7 @@ public sealed partial class PageEditor : Grid
         App.Library.Refresh();
     }
 
+    // Título mudou: renomeia a nota (vazio volta ao nome salvo).
     void CommitTitle()
     {
         if (Path is null) return;
@@ -172,12 +176,14 @@ public sealed partial class PageEditor : Grid
         if (!Editing) Render();
     }
 
+    // Ícone e dica do botão expandir/dividir.
     void UpdateExpand()
     {
         _expandButton.Content = new Icon { Data = UiKit.G(Expanded ? "IcCollapse" : "IcExpand"), Size = 16 };
         _expandButton.ToolTip = Expanded ? "Divide a área com o quadro de novo" : "Abre a nota na área toda";
     }
 
+    // Alterna entre Editar (texto puro) e Ler (desenhado).
     void SetMode(bool edit)
     {
         _editor.Visibility = edit ? Visibility.Visible : Visibility.Collapsed;
@@ -406,6 +412,7 @@ public sealed partial class PageEditor : Grid
         _reader.Document = doc;
     }
 
+    // Recuo das listas aninhadas e o visual das #tags.
     static double Indent(string line) => (line.Length - line.TrimStart().Length) * 6;
 
     Inline TagRun(string tag)
@@ -413,12 +420,13 @@ public sealed partial class PageEditor : Grid
         var r = new Run(" #" + tag + " ") { FontSize = 13, FontWeight = FontWeights.SemiBold };
         r.SetResourceReference(TextElement.ForegroundProperty, "AccentBrush");
         r.SetResourceReference(TextElement.BackgroundProperty, "Accent14Brush");
-        return new Span(r) { };
+        return new Span(r);
     }
 
     void AddInlines(Span target, string text) => AddTo(target.Inlines, text);
     void AddInlines(Paragraph target, string text) => AddTo(target.Inlines, text);
 
+    // Converte as marcas de uma linha em trechos (negrito, itálico, código, links, tags).
     void AddTo(InlineCollection inlines, string text)
     {
         int pos = 0;
@@ -459,6 +467,7 @@ public sealed partial class PageEditor : Grid
         if (pos < text.Length) inlines.Add(new Run(text[pos..]));
     }
 
+    // Link para fora do app (abre no navegador).
     static Hyperlink External(string label, string url)
     {
         var link = new Hyperlink(new Run(label)) { Cursor = Cursors.Hand };
@@ -467,6 +476,7 @@ public sealed partial class PageEditor : Grid
         return link;
     }
 
+    // Caixa de seleção clicada no modo Ler: troca [ ] ↔ [x] naquela linha e grava.
     void ToggleTask(int lineIndex)
     {
         var lines = _editor.Text.Replace("\r", "").Split('\n');

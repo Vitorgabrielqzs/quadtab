@@ -14,7 +14,7 @@ namespace Quadtab.Controls;
 public sealed record TrayPayload(ItemKind Kind, string? Color, NoteStyle? Style = null);
 
 /// <summary>
-/// Dock + bandeja. Clicar adiciona no centro do quadro; arrastar mostra uma "cópia" seguindo o mouse
+/// Aqui usamos a classe Tray para o dock + bandeja. Clicar adiciona no centro do quadro; arrastar mostra uma "cópia" seguindo o mouse
 /// e cria o item onde for solto.
 /// </summary>
 public partial class Tray : UserControl
@@ -45,9 +45,6 @@ public partial class Tray : UserControl
     /// <summary>Referência de coordenadas (conteúdo da janela).</summary>
     public UIElement? Root { get; set; }
 
-    /// <summary>Algo está sendo arrastado da bandeja agora.</summary>
-    public bool IsDragging => _source is not null;
-
     public GlassPanel SheetGlass => Sheet;
     public GlassPanel DockGlass => Dock;
 
@@ -76,6 +73,7 @@ public partial class Tray : UserControl
         };
     }
 
+    // A bandeja abre e fecha conforme o TrayOpen do quadro.
     void OnVm(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.TrayOpen)) SetOpen(_vm!.TrayOpen, animate: true);
@@ -90,23 +88,17 @@ public partial class Tray : UserControl
         {
             BuildModels();
             Sheet.Visibility = Visibility.Visible;
-            Sheet.IsHitTestVisible = true;
-            Anim.To(Sheet, OpacityProperty, 1, 0.25 * dur, Anim.Ease);
-            Anim.To(SheetScale, ScaleTransform.ScaleXProperty, 1, 0.55 * dur, Anim.Panel);
-            Anim.To(SheetScale, ScaleTransform.ScaleYProperty, 1, 0.55 * dur, Anim.Panel);
-            Anim.To(SheetMove, TranslateTransform.YProperty, 0, 0.55 * dur, Anim.Panel);
         }
-        else
+        Sheet.IsHitTestVisible = open;
+        // Fechada: some de vez no fim (não desenha à toa).
+        Anim.To(Sheet, OpacityProperty, open ? 1 : 0, 0.25 * dur, Anim.Ease, open ? null : () =>
         {
-            Sheet.IsHitTestVisible = false;
-            Anim.To(Sheet, OpacityProperty, 0, 0.25 * dur, Anim.Ease, () =>
-            {
-                if (_vm is { TrayOpen: false }) Sheet.Visibility = Visibility.Collapsed; // não desenha quando fechada
-            });
-            Anim.To(SheetScale, ScaleTransform.ScaleXProperty, 0.95, 0.55 * dur, Anim.Panel);
-            Anim.To(SheetScale, ScaleTransform.ScaleYProperty, 0.95, 0.55 * dur, Anim.Panel);
-            Anim.To(SheetMove, TranslateTransform.YProperty, 18, 0.55 * dur, Anim.Panel);
-        }
+            if (_vm is { TrayOpen: false }) Sheet.Visibility = Visibility.Collapsed;
+        });
+        double scale = open ? 1 : 0.95;
+        Anim.To(SheetScale, ScaleTransform.ScaleXProperty, scale, 0.55 * dur, Anim.Panel);
+        Anim.To(SheetScale, ScaleTransform.ScaleYProperty, scale, 0.55 * dur, Anim.Panel);
+        Anim.To(SheetMove, TranslateTransform.YProperty, open ? 0 : 18, 0.55 * dur, Anim.Panel);
         TrackBackdrop(0.6 * dur);
     }
 
@@ -140,6 +132,7 @@ public partial class Tray : UserControl
 
     // ---------- clicar ou arrastar ----------
 
+    // Liga clicar (cria no centro) e arrastar (cópia segue o mouse; cria onde soltar) num cartão.
     void Draggable(FrameworkElement el, TrayPayload payload)
     {
         el.PreviewMouseLeftButtonDown += (_, e) =>
@@ -171,17 +164,11 @@ public partial class Tray : UserControl
         el.LostMouseCapture += (_, _) => { if (_source == el) Reset(); };
     }
 
+    // A "cópia" arrastada: um retângulo pintado com a imagem do cartão.
     void StartGhost(FrameworkElement el)
     {
         if (Overlay is null) return;
-        _ghost = new Rectangle
-        {
-            Width = el.ActualWidth,
-            Height = el.ActualHeight,
-            Fill = new VisualBrush(el) { Stretch = Stretch.None },
-            Opacity = 0.9,
-            IsHitTestVisible = false,
-        };
+        _ghost = new Rectangle { Width = el.ActualWidth, Height = el.ActualHeight, Fill = new VisualBrush(el) { Stretch = Stretch.None }, Opacity = 0.9, IsHitTestVisible = false };
         Overlay.Children.Add(_ghost);
         el.Cursor = BoardCursors.Grabbing;
     }
@@ -192,6 +179,7 @@ public partial class Tray : UserControl
         Canvas.SetTop(_ghost, p.Y - _ghost.Height / 2);
     }
 
+    // Fim do arraste: tira a cópia e solta o mouse.
     void Reset()
     {
         var src = _source;

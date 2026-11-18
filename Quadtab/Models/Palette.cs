@@ -2,8 +2,12 @@ using System.Windows.Media;
 
 namespace Quadtab.Models;
 
+// Aqui ficam os tipos (enums) usados no quadro e a paleta de cores dos itens, alfinetes e modelos de fundo.
+
+/// <summary>Tipo de cada item do quadro.</summary>
 public enum ItemKind { PostIt, Page, Block, Text, TextBox, Shape, Line, Drawing, Image, Video, File, Link, Table }
 
+/// <summary>Como o item está preso no quadro.</summary>
 public enum Fastening { Pin, Tape, None }
 
 /// <summary>Fundo do quadro. Liso = estilo Canvas do Obsidian (fundo do tema com pontinhos).</summary>
@@ -12,7 +16,7 @@ public enum BoardModel { Cortica, Branco, Lousa, Pontilhado, Liso, Escuro }
 /// <summary>Estilo escolhido no menu para os próximos post-its.</summary>
 public enum NoteStyle { Pin, Tape, None, Lined }
 
-/// <summary>Uma cor de post-it: papel (fundo) e tinta (detalhes).</summary>
+/// <summary>Aqui usamos a classe NoteColor para guardar uma cor de item: papel (fundo), tinta (detalhes) e pincéis prontos.</summary>
 public sealed class NoteColor
 {
     public NoteColor(string key, string name, Color paper, Color ink, bool strong = false)
@@ -29,6 +33,7 @@ public sealed class NoteColor
         BlockFill = Freeze(new SolidColorBrush(strong ? paper : Rendering.ColorMath.Mix(paper, 0.75, Color.FromArgb(200, 255, 255, 255))));
     }
 
+    /// <summary>Luminância relativa (WCAG): decide se a cor é escura.</summary>
     static double Luminance(Color c)
     {
         static double L(byte v) { double s = v / 255.0; return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4); }
@@ -50,6 +55,7 @@ public sealed class NoteColor
     static SolidColorBrush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 }
 
+/// <summary>Aqui usamos a classe Palette para listar todas as cores e modelos de quadro e procurá-los pela chave do JSON.</summary>
 public static class Palette
 {
     public static readonly NoteColor[] Colors =
@@ -95,15 +101,12 @@ public static class Palette
     /// <summary>Cores dos alfinetes e fitas, escolhidas por id % 5.</summary>
     public static readonly Color[] PinColors = [C(0xFF453A), C(0x0A84FF), C(0x30D158), C(0xFF9F0A), C(0xBF5AF2)];
 
-    public static NoteColor Get(string? key)
-    {
-        foreach (var c in Colors)
-            if (c.Key == key) return c;
-        return Colors[0];
-    }
+    /// <summary>Cor pela chave do JSON (desconhecida = amarelo).</summary>
+    public static NoteColor Get(string? key) => Array.Find(Colors, c => c.Key == key) ?? Colors[0];
 
     public static Color PinFor(int id) => PinColors[((id % 5) + 5) % 5];
 
+    // ---------- modelos de fundo do quadro ----------
     public static readonly (BoardModel Model, string Key, string Name)[] Models =
     [
         (BoardModel.Cortica, "cortica", "Cortiça"),
@@ -120,12 +123,8 @@ public static class Palette
     public static string ModelName(BoardModel m) => Models[(int)m].Name;
     public static string ModelKey(BoardModel m) => Models[(int)m].Key;
 
-    public static BoardModel ParseModel(string? key)
-    {
-        foreach (var m in Models)
-            if (m.Key == key) return m.Model;
-        return BoardModel.Liso;
-    }
+    /// <summary>Modelo pela chave do JSON (desconhecido = Liso).</summary>
+    public static BoardModel ParseModel(string? key) => Array.Find(Models, m => m.Key == key) is { Key: not null } m ? m.Model : BoardModel.Liso;
 
     public static Color C(uint rgb, byte a = 255) =>
         Color.FromArgb(a, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);

@@ -14,7 +14,9 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Base das telas de item feitas em código: acompanha o DataContext (o item pode ser reaproveitado).</summary>
+// Aqui ficam as telas dos itens montadas em código: caixa de texto, forma, linha, desenho, imagem, vídeo, arquivo, link e tabela.
+
+/// <summary>Aqui usamos a classe ItemViewBase como base das telas de item feitas em código: acompanha o DataContext (o item pode ser reaproveitado).</summary>
 public abstract class ItemViewBase : Grid
 {
     protected BoardItemViewModel? Item { get; private set; }
@@ -30,6 +32,7 @@ public abstract class ItemViewBase : Grid
         };
     }
 
+    // Rebuild monta tudo de novo (item novo); OnItem reage a uma propriedade que mudou.
     void OnItemChanged(object? s, PropertyChangedEventArgs e) => OnItem(e.PropertyName ?? "");
 
     protected abstract void Rebuild();
@@ -42,7 +45,7 @@ public abstract class ItemViewBase : Grid
     }
 }
 
-/// <summary>Caixa de texto livre: fonte, tamanho, cor, alinhamento, negrito, itálico e lista.</summary>
+/// <summary>Aqui usamos a classe TextBoxView para a caixa de texto livre: fonte, tamanho, cor, alinhamento, negrito, itálico e lista.</summary>
 public sealed class TextBoxView : ItemViewBase
 {
     public TextBoxView()
@@ -77,6 +80,7 @@ public sealed class TextBoxView : ItemViewBase
         Background = Brushes.Transparent;
     }
 
+    // Atalhos de binding: uma propriedade e a fonte do item (família, tamanho, peso, estilo, cor, alinhamento).
     static void Bind(FrameworkElement el, DependencyProperty dp, string path) => el.SetBinding(dp, path);
 
     internal static void BindFont(FrameworkElement el)
@@ -90,14 +94,13 @@ public sealed class TextBoxView : ItemViewBase
     protected override void Rebuild() { }
 }
 
-/// <summary>Converte um número em espessura de borda.</summary>
-public sealed class ThicknessOf : System.Windows.Data.IValueConverter
+/// <summary>Aqui usamos a classe ThicknessOf para converter um número em espessura de borda.</summary>
+public sealed class ThicknessOf : OneWay
 {
-    public object Convert(object value, Type t, object p, System.Globalization.CultureInfo c) => new Thickness(value is double d ? d : 0);
-    public object ConvertBack(object value, Type t, object p, System.Globalization.CultureInfo c) => throw new NotSupportedException();
+    public override object? Convert(object value, Type t, object p, System.Globalization.CultureInfo c) => new Thickness(value is double d ? d : 0);
 }
 
-/// <summary>Forma da biblioteca, com preenchimento, borda, opacidade e texto dentro.</summary>
+/// <summary>Aqui usamos a classe ShapeView para a forma da biblioteca, com preenchimento, borda, opacidade e texto dentro.</summary>
 public sealed class ShapeView : ItemViewBase
 {
     public ShapeView()
@@ -136,7 +139,7 @@ public sealed class ShapeView : ItemViewBase
 }
 
 /// <summary>
-/// Linha, seta ou conector (reta, curva ou em ângulo), com pontas configuráveis e, como no Canvas do
+/// Aqui usamos a classe LineView para a linha, seta ou conector (reta, curva ou em ângulo), com pontas configuráveis e, como no Canvas do
 /// Obsidian, um rótulo opcional no meio (2 cliques na linha escrevem nele).
 /// </summary>
 public sealed class LineView : ItemViewBase
@@ -153,6 +156,7 @@ public sealed class LineView : ItemViewBase
     double _pluckAmp;
     bool _plucking;
 
+    // Clique no barbante: o meio "belisca" e balança na perpendicular até parar (mola amortecida).
     void Pluck()
     {
         if (Item?.Line is not { Traco: "barbante" } l) return;
@@ -394,6 +398,7 @@ public sealed class LineView : ItemViewBase
         }
     }
 
+    // Direção em que a linha sai de cada lado do item (cima, baixo, esquerda, direita).
     static Vector Normal(string? side, Vector fallback) => side switch
     {
         "cima" => new Vector(0, -1),
@@ -451,7 +456,8 @@ public sealed class LineView : ItemViewBase
             dc.Pop();
         }
 
-        static Pen RoundPen(Brush b, double w, DashStyle? dash = null)
+        // Caneta de pontas redondas (com tracejado opcional).
+    static Pen RoundPen(Brush b, double w, DashStyle? dash = null)
         {
             var p = new Pen(b, w) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round, DashCap = PenLineCap.Flat };
             if (dash is not null) p.DashStyle = dash;
@@ -481,7 +487,8 @@ public sealed class LineView : ItemViewBase
             dc.DrawGeometry(null, RoundPen(FiberLight, Math.Max(0.8, w * 0.3), FiberDash), geo);
         }
 
-        static void Head(DrawingContext dc, string kind, Point tip, Point prev, Brush brush, double w)
+        // Ponta da linha: seta (triângulo) ou bolinha.
+    static void Head(DrawingContext dc, string kind, Point tip, Point prev, Brush brush, double w)
         {
             var dir = tip - prev;
             if (dir.Length < 0.01) return;
@@ -506,7 +513,7 @@ public sealed class LineView : ItemViewBase
     }
 }
 
-/// <summary>Desenho à mão: traços suavizados de caneta, lápis e marcador.</summary>
+/// <summary>Aqui usamos a classe DrawingView para o desenho à mão: traços suavizados de caneta, lápis e marcador.</summary>
 public sealed class DrawingView : ItemViewBase
 {
     readonly InkVisual _ink = new();
@@ -547,6 +554,7 @@ public sealed class DrawingView : ItemViewBase
         return g;
     }
 
+    /// <summary>Caneta de cada ferramenta de desenho (caneta, lápis, marcador transparente).</summary>
     public static Pen PenFor(InkStroke s)
     {
         Color color;
@@ -599,7 +607,7 @@ public sealed class DrawingView : ItemViewBase
     }
 }
 
-/// <summary>Imagem colada: recorte e cantos arredondados.</summary>
+/// <summary>Aqui usamos a classe ImageView para a imagem colada: recorte e cantos arredondados.</summary>
 public sealed class ImageView : ItemViewBase
 {
     readonly Border _img = new();
@@ -658,6 +666,7 @@ public sealed class ImageView : ItemViewBase
         if (p == nameof(BoardItemViewModel.ItemWidth) && Item is not null && DecodeWidth(Item.ItemWidth) > _decoded) Rebuild();
     }
 
+    // Carrega a imagem no tamanho da tela e aplica recorte e cantos.
     void Apply()
     {
         if (Item is null) return;
@@ -667,6 +676,7 @@ public sealed class ImageView : ItemViewBase
         ((Shadow)Children[0]).CornerRadius = Item.Radius;
     }
 
+    /// <summary>Carrega a imagem do disco sem travar o arquivo, decodificada só até a largura pedida.</summary>
     public static BitmapSource? Load(string? path, int decodeWidth)
     {
         if (path is null || !File.Exists(path)) return null;
@@ -686,6 +696,7 @@ public sealed class ImageView : ItemViewBase
         catch { return null; }
     }
 
+    // Largura original da imagem (lida do cabeçalho, sem decodificar).
     static int NaturalWidth(string path)
     {
         try
@@ -697,7 +708,7 @@ public sealed class ImageView : ItemViewBase
     }
 }
 
-/// <summary>Vídeo: clicar no botão toca e pausa.</summary>
+/// <summary>Aqui usamos a classe VideoView para o vídeo: clicar no botão toca e pausa.</summary>
 public sealed class VideoView : ItemViewBase
 {
     readonly MediaElement _media = new() { LoadedBehavior = MediaState.Manual, UnloadedBehavior = MediaState.Stop, Stretch = Stretch.UniformToFill, ScrubbingEnabled = true };
@@ -723,6 +734,7 @@ public sealed class VideoView : ItemViewBase
         SetBinding(HeightProperty, "ItemHeight");
     }
 
+    // Toca ou pausa o vídeo.
     void Toggle()
     {
         if (_playing) _media.Pause(); else _media.Play();
@@ -745,7 +757,7 @@ public sealed class VideoView : ItemViewBase
     }
 }
 
-/// <summary>Cartão de arquivo (PDF e outros): ícone, nome e prévia da 1ª página do PDF.</summary>
+/// <summary>Aqui usamos a classe FileView para o cartão de arquivo (PDF e outros): ícone, nome e prévia da 1ª página do PDF.</summary>
 public sealed class FileView : ItemViewBase
 {
     readonly Border _preview = new() { CornerRadius = new CornerRadius(10), Margin = new Thickness(0, 0, 0, 10) };
@@ -790,7 +802,7 @@ public sealed class FileView : ItemViewBase
     }
 }
 
-/// <summary>Cartão de link: imagem de prévia, título e site.</summary>
+/// <summary>Aqui usamos a classe LinkView para o cartão de link: imagem de prévia, título e site.</summary>
 public sealed class LinkView : ItemViewBase
 {
     readonly Border _image = new() { Height = 168, CornerRadius = new CornerRadius(14, 14, 0, 0) };
@@ -830,7 +842,7 @@ public sealed class LinkView : ItemViewBase
     }
 }
 
-/// <summary>Tabela com linhas e colunas editáveis (dois cliques numa célula).</summary>
+/// <summary>Aqui usamos a classe TableView para a tabela com linhas e colunas editáveis (dois cliques numa célula).</summary>
 public sealed class TableView : ItemViewBase
 {
     readonly Grid _grid = new();
@@ -858,6 +870,7 @@ public sealed class TableView : ItemViewBase
         SetBinding(OpacityProperty, "ItemOpacity");
     }
 
+    // Faixa da borda direita/de baixo onde aparece o + para pôr coluna ou linha.
     Border AddZone(string tip, Thickness margin, Thickness inner, Cursor cursor)
     {
         var plus = new Border
@@ -976,6 +989,7 @@ public sealed class TableView : ItemViewBase
         }
     }
 
+    // Grava o texto da célula e vai para a próxima (Tab) ou termina.
     void Commit(int r, int c, string text, (int, int)? next)
     {
         if (Item?.Table is not { } t) return;

@@ -3,9 +3,10 @@ using System.Windows.Media;
 
 namespace Quadtab.Controls;
 
-/// <summary>Atalhos para subir na árvore visual.</summary>
+/// <summary>Aqui usamos a classe Tree como atalho para subir na árvore visual (achar o pai de um tipo ou o campo clicado).</summary>
 public static class Tree
 {
+    /// <summary>Primeiro elemento do tipo T subindo a partir de d (inclui o próprio d).</summary>
     public static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
     {
         while (d is not null)

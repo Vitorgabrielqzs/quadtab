@@ -9,7 +9,7 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Menu próprio do botão direito num item (estilo menu de toque longo do iPhone).</summary>
+/// <summary>Aqui usamos a classe BoardMenu para o menu próprio do botão direito num item (estilo menu de toque longo do iPhone).</summary>
 public partial class BoardMenu : UserControl
 {
     BoardItemViewModel? _item;
@@ -44,6 +44,9 @@ public partial class BoardMenu : UserControl
         }
     }
 
+    // ---------- bolinhas de cor ----------
+
+    // Bolinha de cor de item: aplica a cor e guarda nas últimas usadas.
     Button ItemDot(NoteColor c)
     {
         var key = c.Key;
@@ -59,6 +62,7 @@ public partial class BoardMenu : UserControl
         return d;
     }
 
+    // Bolinha de cor de linha (muda a cor da borda da linha).
     Button LineDot(string name, string hex)
     {
         var d = Dot(ShadowCache.BrushOf((Color)ColorConverter.ConvertFromString(hex)), $"Linha {name.ToLowerInvariant()}", () =>
@@ -77,6 +81,7 @@ public partial class BoardMenu : UserControl
         return d;
     }
 
+    // Põe a cor no topo das últimas usadas (até 8) e grava.
     static void Remember(List<string> recent, string key)
     {
         recent.RemoveAll(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
@@ -111,6 +116,7 @@ public partial class BoardMenu : UserControl
         }
     }
 
+    // "Paleta de cores": mostra ou esconde todas as cores.
     void OnPalette(object sender, RoutedEventArgs e)
     {
         var panel = _item?.Line is null ? ItemDots : LineDots;
@@ -130,6 +136,7 @@ public partial class BoardMenu : UserControl
         if (ItemPart.DesiredSize.Height + 12 > available) SetColumns(true);
     }
 
+    // Uma coluna (266) ou duas (528), com a parte da direita indo para o lado.
     void SetColumns(bool two)
     {
         Width = two ? 528 : 266;
@@ -142,6 +149,7 @@ public partial class BoardMenu : UserControl
 
     bool _fillingAlpha;
 
+    // Barra "Transparência do fundo" das formas.
     void OnFillChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         FillText.Text = $"{Math.Round(FillSlider.Value)}%";
@@ -149,16 +157,11 @@ public partial class BoardMenu : UserControl
         Vm.SetFillTransparency(item, Math.Round(FillSlider.Value));
     }
 
+    // Bolinha que cresce 18% com o mouse em cima.
     static Button Dot(Brush fill, string tip, Action click)
     {
         var scale = new ScaleTransform();
-        var b = new Button
-        {
-            Style = (Style)Application.Current.FindResource("ColorDot"),
-            Background = fill,
-            ToolTip = tip,
-            RenderTransform = scale,
-        };
+        var b = new Button { Style = (Style)Application.Current.FindResource("ColorDot"), Background = fill, ToolTip = tip, RenderTransform = scale };
         b.Click += (_, _) => click();
         b.MouseEnter += (_, _) => Hover(1.18);
         b.MouseLeave += (_, _) => Hover(1);
@@ -170,6 +173,7 @@ public partial class BoardMenu : UserControl
         return b;
     }
 
+    /// <summary>Prepara o menu para o item: mostra só as partes que valem para o tipo dele.</summary>
     public void ShowForItem(BoardItemViewModel item)
     {
         _item = item;
@@ -223,6 +227,7 @@ public partial class BoardMenu : UserControl
 
     // ---------- linha ----------
 
+    // Muda a linha com desfazer e lembra o estilo para as próximas.
     void ChangeLine(Action<LineData> change)
     {
         if (_item?.Line is not { } l) return;
@@ -253,6 +258,7 @@ public partial class BoardMenu : UserControl
         });
     }
 
+    // Traço (sólido ou barbante), inverter a seta e traçado (reta, curva, ângulo).
     void OnStroke(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: string t }) ChangeLine(l => l.Traco = t);
@@ -313,59 +319,29 @@ public partial class BoardMenu : UserControl
     /// <summary>Pede a lista de caligrafias no ponto da janela.</summary>
     public event Action<BoardItemViewModel, Point>? FontsRequested;
 
-    void OnFonts(object sender, RoutedEventArgs e)
+    // Caligrafias e "Mais opções": fecham este menu e pedem o outro ao lado dele.
+    void OnFonts(object sender, RoutedEventArgs e) => OpenSide(FontsRequested);
+    void OnMore(object sender, RoutedEventArgs e) => OpenSide(MoreRequested);
+
+    void OpenSide(Action<BoardItemViewModel, Point>? request)
     {
         var item = _item;
         var p = TranslatePoint(new Point(ActualWidth, 0), (UIElement)Parent);
         CloseRequested?.Invoke();
-        if (item is not null) FontsRequested?.Invoke(item, p);
+        if (item is not null) request?.Invoke(item, p);
     }
 
-    void OnMore(object sender, RoutedEventArgs e)
-    {
-        var item = _item;
-        var p = TranslatePoint(new Point(ActualWidth, 0), (UIElement)Parent);
-        CloseRequested?.Invoke();
-        if (item is not null) MoreRequested?.Invoke(item, p);
-    }
+    // Ações simples do item: fazem e fecham o menu.
+    void OnSpiral(object sender, RoutedEventArgs e) => Act(i => { Vm.Checkpoint(); i.Spiral = !i.Spiral; });
+    void OnDuplicate(object sender, RoutedEventArgs e) => Act(i => Vm.Duplicate(i));
+    void OnLock(object sender, RoutedEventArgs e) => Act(Vm.ToggleLock);
+    void OnFront(object sender, RoutedEventArgs e) => Act(Vm.BringToFront);
+    void OnBack(object sender, RoutedEventArgs e) => Act(Vm.SendToBack);
+    void OnDelete(object sender, RoutedEventArgs e) => Act(Vm.Remove);
 
-    void OnSpiral(object sender, RoutedEventArgs e)
+    void Act(Action<BoardItemViewModel> action)
     {
-        if (_item is not null)
-        {
-            Vm.Checkpoint();
-            _item.Spiral = !_item.Spiral;
-        }
-        CloseRequested?.Invoke();
-    }
-
-    void OnDuplicate(object sender, RoutedEventArgs e)
-    {
-        if (_item is not null) Vm.Duplicate(_item);
-        CloseRequested?.Invoke();
-    }
-
-    void OnLock(object sender, RoutedEventArgs e)
-    {
-        if (_item is not null) Vm.ToggleLock(_item);
-        CloseRequested?.Invoke();
-    }
-
-    void OnFront(object sender, RoutedEventArgs e)
-    {
-        if (_item is not null) Vm.BringToFront(_item);
-        CloseRequested?.Invoke();
-    }
-
-    void OnBack(object sender, RoutedEventArgs e)
-    {
-        if (_item is not null) Vm.SendToBack(_item);
-        CloseRequested?.Invoke();
-    }
-
-    void OnDelete(object sender, RoutedEventArgs e)
-    {
-        if (_item is not null) Vm.Remove(_item);
+        if (_item is not null) action(_item);
         CloseRequested?.Invoke();
     }
 }

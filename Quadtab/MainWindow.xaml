@@ -1,4 +1,5 @@
-﻿<Window x:Class="Quadtab.MainWindow"
+﻿<!-- Aqui usamos o MainWindow.xaml para o layout da janela: fundo, lateral, barra de cima, título, quadro e camadas flutuantes. -->
+<Window x:Class="Quadtab.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:c="clr-namespace:Quadtab.Controls"

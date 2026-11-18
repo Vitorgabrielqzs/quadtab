@@ -2,15 +2,16 @@ using System.Text.RegularExpressions;
 
 namespace Quadtab.Rendering;
 
-/// <summary>Leituras simples de Markdown: títulos, links [[ ]], tags e prévia em texto puro.</summary>
+/// <summary>Aqui usamos a classe Markdown para fazer leituras simples de Markdown: títulos, links [[ ]], tags e prévia em texto puro.</summary>
 public static partial class Markdown
 {
+    // Expressões regulares geradas na compilação (mais rápidas): [[link]], #tag e # título.
     [GeneratedRegex(@"\[\[([^\[\]|#]+)(?:[|#][^\[\]]*)?\]\]")] public static partial Regex WikiLink();
     [GeneratedRegex(@"(?<![\w#])#([\p{L}\p{N}_\-/]+)")] public static partial Regex Tag();
     [GeneratedRegex(@"^(#{1,6})\s+(.*)$")] public static partial Regex Heading();
 
     /// <summary>Tira o "# Título" do começo, se for igual ao nome da página.</summary>
-    public static string StripTitle(string md, string title)
+    public static string StripTitle(string md)
     {
         var lines = md.Replace("\r", "").Split('\n').ToList();
         if (lines.Count > 0 && Heading().Match(lines[0]) is { Success: true } m && m.Groups[1].Length == 1)
@@ -29,7 +30,7 @@ public static partial class Markdown
     }
 
     /// <summary>O texto da nota com este título na primeira linha.</summary>
-    public static string WithTitle(string md, string title) => $"# {title}\n\n{StripTitle(md, title)}\n";
+    public static string WithTitle(string md, string title) => $"# {title}\n\n{StripTitle(md)}\n";
 
     /// <summary>Texto curto para a folha de caderno no quadro (sem marcações).</summary>
     public static string ToPlainPreview(string md, int maxLines, bool keepInline = false)
@@ -59,6 +60,7 @@ public static partial class Markdown
         return string.Join("\n", outLines).TrimEnd();
     }
 
+    /// <summary>Títulos # a ### fora de blocos de código (filhos da nota na lateral e na busca).</summary>
     public static IEnumerable<(int Level, string Text)> Headings(string md)
     {
         bool code = false;
@@ -71,6 +73,7 @@ public static partial class Markdown
         }
     }
 
+    /// <summary>Páginas citadas com [[link]] e as #tags do texto.</summary>
     public static IEnumerable<string> Links(string md) =>
         WikiLink().Matches(md).Select(m => m.Groups[1].Value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase);
 

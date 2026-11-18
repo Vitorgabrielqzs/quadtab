@@ -7,7 +7,7 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Texto solto: só letras grandes, direto no quadro. A cor acompanha o tema para continuar legível.</summary>
+/// <summary>Aqui usamos a classe TextLabel para o texto solto: só letras grandes, direto no quadro. A cor acompanha o tema para continuar legível.</summary>
 public partial class TextLabel : UserControl
 {
     BoardItemViewModel? _vm;
@@ -27,6 +27,7 @@ public partial class TextLabel : UserControl
         Unloaded += (_, _) => { ThemeService.Changed -= Apply; BoardSurfaces.Changed -= Apply; };
     }
 
+    // Mudou a cor do item: recalcula a cor do texto.
     void OnVm(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(BoardItemViewModel.ColorKey)) Apply();

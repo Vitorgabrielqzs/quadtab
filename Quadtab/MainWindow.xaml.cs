@@ -17,6 +17,10 @@ using Quadtab.ViewModels;
 
 namespace Quadtab;
 
+/// <summary>
+/// Aqui usamos a classe MainWindow para a janela do app: monta a lateral, a barra de cima, o quadro e as camadas
+/// flutuantes (menus, bandejas, busca, designs), cuida da tela cheia, dos atalhos de teclado e da exportação.
+/// </summary>
 public partial class MainWindow : Window
 {
     const double SidebarWidth = 292;
@@ -30,6 +34,7 @@ public partial class MainWindow : Window
     // Botão que abriu o menu de ações: clicar nele de novo fecha (em vez de reabrir).
     FrameworkElement? _actionsOwner, _ownerJustClosed;
 
+    // Monta a janela: liga quadro, lateral, bandejas, menus, balões e atalhos.
     public MainWindow(MainViewModel vm)
     {
         _vm = vm;
@@ -57,7 +62,7 @@ public partial class MainWindow : Window
         Menu.RenderTransform = MenuScale;
         Actions.RenderTransform = ActionsScale;
         CtxTray.RenderTransform = TrayScale;
-        Board.MenuRequested += (item, p) => ShowMenu(item, default, p);
+        Board.MenuRequested += (item, p) => ShowMenu(item, p);
         Board.TrayRequested += ShowContextTray;
         Board.SelectionMenuRequested += ShowSelectionMenu;
         Menu.CloseRequested += CloseMenu;
@@ -156,6 +161,7 @@ public partial class MainWindow : Window
 
     // ---------- trocar de quadro ----------
 
+    // Liga a janela a um quadro (ao abrir e ao trocar de quadro).
     void Attach(MainViewModel vm)
     {
         _vm.PropertyChanged -= OnVmChanged;
@@ -181,6 +187,7 @@ public partial class MainWindow : Window
         if (preview) PreviewBar.RefreshBackdrop();
     }
 
+    // Prévia de design: "Adicionar quadro" cria o quadro; o ✕ volta ao quadro de antes.
     void OnAddPreview(object sender, RoutedEventArgs e) => App.AddPreviewAsBoard();
     void OnExitPreview(object sender, RoutedEventArgs e) => App.ExitPreview();
 
@@ -212,6 +219,7 @@ public partial class MainWindow : Window
         if (_vm.ReadOnly) { _vm.TrayOpen = false; CloseMenu(); CloseContextTray(); }
     }
 
+    // Tela "Nenhum quadro": botão "Criar novo quadro".
     void OnCreateFirstBoard(object sender, RoutedEventArgs e) => App.Library.NewBoard();
 
     /// <summary>Mostra outro quadro (App.OpenBoard).</summary>
@@ -247,6 +255,7 @@ public partial class MainWindow : Window
         _glassBackdrop.Blob3 = (Color)FindResource("Blob3Color");
     }
 
+    // Fundo das manchas visto através do vidro (desenhado do tamanho da janela).
     void LayoutGlassBackdrop(Size size)
     {
         _glassBackdrop.Measure(size);
@@ -261,6 +270,7 @@ public partial class MainWindow : Window
         Board.RefreshGlass();
     }
 
+    // O quadro mudou algo que a janela mostra (título, lateral, somente visualização, busca, zoom, bandeja...).
     void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -281,6 +291,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // "Ir para o conteúdo": enquadra todos os itens.
     void OnGoToContent(object sender, RoutedEventArgs e) => Board.Fit();
 
     // ---------- contador de FPS (Ctrl+Shift+F) ----------
@@ -290,6 +301,7 @@ public partial class MainWindow : Window
     double _fpsWorst;
     TimeSpan _fpsLast;
 
+    // Liga/desliga o contador de FPS e conta os quadros a cada frame.
     void ToggleFps()
     {
         bool on = FpsPanel.Visibility != Visibility.Visible;
@@ -355,6 +367,7 @@ public partial class MainWindow : Window
 
     // ---------- título grande (recolhe em 0.5 s) e renomear ----------
 
+    // Mostra ou recolhe o título grande (altura, opacidade e deslocamento).
     void ApplyTitle(bool animate)
     {
         bool hidden = _vm.TitleHidden;
@@ -392,6 +405,7 @@ public partial class MainWindow : Window
         Anim.To(drop, TranslateTransform.YProperty, 0, 0.45, Anim.Panel);
     }
 
+    // Posição do quadro na grade da janela: na tela cheia sem título, ocupa tudo.
     void LayoutStage()
     {
         bool full = _fullscreen && _vm.TitleHidden;
@@ -401,6 +415,7 @@ public partial class MainWindow : Window
         BigTitle.Margin = new Thickness(_fullscreen ? 24 : 10, 14, 10, 0);
     }
 
+    // Renomear pelo título grande: 2 cliques começam; Enter/clicar fora grava; Esc cancela.
     void OnTitleDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2) { StartRename(); e.Handled = true; }
@@ -436,14 +451,9 @@ public partial class MainWindow : Window
 
     void OnTitleLost(object sender, KeyboardFocusChangedEventArgs e) => EndRename(true);
 
-    // ---------- zoom ----------
-
-    void OnZoomIn(object sender, RoutedEventArgs e) => Board.ZoomStep(+1);
-    void OnZoomOut(object sender, RoutedEventArgs e) => Board.ZoomStep(-1);
-    void OnFit(object sender, RoutedEventArgs e) => Board.Fit();
-
     // ---------- menus flutuantes (abrem onde clicou e nunca saem da tela) ----------
 
+    // Posiciona um menu flutuante no ponto, sem sair da janela, com o "pop" a partir do canto.
     void Place(FrameworkElement el, ScaleTransform scale, Point windowPoint, bool pop = true)
     {
         el.Visibility = Visibility.Visible;
@@ -472,7 +482,8 @@ public partial class MainWindow : Window
         GlassGlow.Kick();
     }
 
-    void ShowMenu(BoardItemViewModel? item, Point boardPoint, Point windowPoint)
+    // Menu do botão direito num item.
+    void ShowMenu(BoardItemViewModel? item, Point windowPoint)
     {
         CloseActions();
         CloseContextTray();
@@ -488,12 +499,14 @@ public partial class MainWindow : Window
 
     Point _menuPoint;
 
+    // O menu mudou de altura: cabe de novo na janela (uma ou duas colunas).
     void RefitMenu()
     {
         Menu.FitTo(WindowRoot.ActualHeight - 16);
         Place(Menu, MenuScale, _menuPoint, pop: false);
     }
 
+    // Fecha o menu do item.
     void CloseMenu()
     {
         if (!_menuOpen) return;
@@ -546,6 +559,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(CtxTray.Glass.RefreshBackdrop, DispatcherPriority.Loaded);
     }
 
+    // Post-it nasce com o último estilo; os outros itens, sem estilo.
     NoteStyle? NoteStyleFor(ItemKind kind) => kind == ItemKind.PostIt ? _vm.NewStyle : null;
 
     /// <summary>Biblioteca de formas acima do dock: a forma escolhida nasce no centro da tela.</summary>
@@ -572,6 +586,7 @@ public partial class MainWindow : Window
     Point _lastRightPos;
     bool _eatRightUp;
 
+    // Dois cliques com o botão direito (repetir o último item criado).
     bool IsRightDouble(MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Right) return false;
@@ -585,6 +600,7 @@ public partial class MainWindow : Window
         return dbl && BoardArea.IsVisible && !Quick.IsOpen && !DesignsView.IsOpen && !App.Library.GalleryOpen && !_presenting && Board.IsInside(WindowRoot, p);
     }
 
+    // O soltar do 2º clique direito é engolido (não reabre a bandeja).
     void OnPreviewMouseRightUp(object sender, MouseButtonEventArgs e)
     {
         if (!_eatRightUp) return;
@@ -592,6 +608,7 @@ public partial class MainWindow : Window
         e.Handled = true; // o soltar do 2º clique não abre a bandeja de novo
     }
 
+    // Qualquer clique: 2 cliques com o botão direito repetem o último item; clique fora fecha menus.
     void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (IsRightDouble(e) && !_vm.ReadOnly)
@@ -707,6 +724,7 @@ public partial class MainWindow : Window
 
     // ---------- menu "…" da barra ----------
 
+    // Menu "…" da barra de cima.
     void OnMore(object sender, RoutedEventArgs e)
     {
         var p = MoreButton.TranslatePoint(new Point(MoreButton.ActualWidth, MoreButton.ActualHeight + 8), WindowRoot);
@@ -736,6 +754,7 @@ public partial class MainWindow : Window
 
     // ---------- cenas e apresentação ----------
 
+    // Cenas: salvar vistas, ir até elas e apresentar em tela cheia.
     void ShowScenes(Point at)
     {
         var list = new List<ActionItem> { ActionItem.Header("Cenas deste quadro") };
@@ -806,6 +825,7 @@ public partial class MainWindow : Window
 
     int _hit = -1;
 
+    // Busca no quadro (Ctrl+F): abre, fecha, conta e pula entre os resultados.
     void OpenSearch()
     {
         SearchBar.Visibility = Visibility.Visible;
@@ -854,6 +874,7 @@ public partial class MainWindow : Window
 
     // ----- mini janela "Exportar" (no centro): Imagem (PNG) ou PDF; com seleção, escolhe entre o quadro e a seleção -----
 
+    // Mini janela de exportar: mostra/esconde e escolhe o alcance (quadro inteiro ou seleção).
     void ShowExportPicker(bool hasSelection)
     {
         if (_exporting) return;
@@ -900,6 +921,7 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape) { HideExportPicker(); e.Handled = true; }
     }
 
+    // Escolheu PNG ou PDF: fecha a mini janela e exporta.
     void PickExport(bool png)
     {
         bool selectionOnly = ExportScopeRow.Visibility == Visibility.Visible && ExportScopeSel.IsChecked == true;
@@ -907,6 +929,7 @@ public partial class MainWindow : Window
         Export(selectionOnly, png);
     }
 
+    // Exporta: pergunta onde salvar, monta a imagem (esperando os itens) e grava PNG ou PDF.
     async void Export(bool selectionOnly, bool png)
     {
         var items = selectionOnly ? _vm.SelectedItems.ToList() : _vm.Items.ToList();
@@ -961,6 +984,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // Aviso "Exportando…" enquanto a imagem é montada.
     void ShowExportBusy(bool selectionOnly, bool png)
     {
         ExportDetail.Text = (selectionOnly ? "Salvando a seleção em " : "Salvando o quadro em ") + (png ? "PNG" : "PDF");
@@ -1008,6 +1032,7 @@ public partial class MainWindow : Window
 
     // ---------- páginas (editor ao lado) ----------
 
+    // Editor de notas ao lado do quadro: abrir, fechar, dividir/expandir e acompanhar renomear/apagar.
     public void OpenPage(string path)
     {
         if (!File.Exists(path)) return;
@@ -1053,6 +1078,7 @@ public partial class MainWindow : Window
     Rect _restoreBounds;
     WindowState _restoreState;
 
+    // Tela cheia de verdade (cobre a barra de tarefas) ou volta ao normal.
     void SetFullscreen(bool on)
     {
         if (on == _fullscreen) return;
@@ -1088,6 +1114,7 @@ public partial class MainWindow : Window
         RefreshBoardGlass();
     }
 
+    // Área do monitor onde a janela está (em pixels da tela).
     Rect MonitorBounds()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
@@ -1105,6 +1132,7 @@ public partial class MainWindow : Window
     DateTime _quietZoomUntil;
     bool _zoomShown;
 
+    // Balão da % do zoom: aparece ao mudar o zoom e some 1,2 s depois.
     void ShowZoom()
     {
         if (DateTime.Now < _quietZoomUntil) return;
@@ -1134,6 +1162,7 @@ public partial class MainWindow : Window
     DateTime _trackUntil;
     bool _tracking;
 
+    // Durante animações o vidro reposiciona o fundo desfocado a cada quadro.
     void TrackGlass(double seconds)
     {
         _trackUntil = DateTime.Now.AddSeconds(seconds);
@@ -1155,6 +1184,7 @@ public partial class MainWindow : Window
 
     readonly DispatcherTimer _itemsTimer;
 
+    // Itens do quadro mudaram: atualiza a lateral um instante depois (junta várias mudanças).
     void OnItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         _itemsTimer.Stop();
@@ -1165,6 +1195,7 @@ public partial class MainWindow : Window
 
     Color[]? _blobColors;
 
+    // Troca de tema: as manchas do fundo mudam de cor suavemente.
     void AnimateBlobs()
     {
         var to = new[] { "BgColor", "Blob1Color", "Blob2Color", "Blob3Color" }.Select(k => (Color)FindResource(k)).ToArray();
@@ -1186,7 +1217,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Aba "Designs": modelos prontos de mapas mentais. Clicar de novo no botão fecha.</summary>
-    public void ShowDesigns(FrameworkElement? owner = null)
+    public void ShowDesigns()
     {
         CloseMenu();
         CloseActions();
@@ -1197,6 +1228,7 @@ public partial class MainWindow : Window
         DesignsView.Show();
     }
 
+    // Menu de Ajustes (rodapé da lateral).
     public void ShowSettings(Point at, FrameworkElement? owner = null)
     {
         var s = StorageService.State;
@@ -1217,6 +1249,7 @@ public partial class MainWindow : Window
 
     // ---------- teclado ----------
 
+    // Atalhos de teclado da janela (Ctrl+N, Ctrl+K, F11, Esc, zoom, desfazer...).
     void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var mods = Keyboard.Modifiers;
@@ -1323,6 +1356,7 @@ public partial class MainWindow : Window
 
     // ---------- janela ----------
 
+    // Arrastar a janela pela barra; minimizar, maximizar e fechar.
     void OnDragArea(object sender, MouseButtonEventArgs e) => DragArea(e);
 
     /// <summary>Arrasta a janela (dois cliques maximizam).</summary>
@@ -1356,6 +1390,7 @@ public partial class MainWindow : Window
         try { Editor.Flush(); } catch (Exception ex) { App.Log(ex); }
     }
 
+    // Maximiza ou restaura a janela.
     void ToggleMaximize()
     {
         if (_fullscreen) SetFullscreen(false);

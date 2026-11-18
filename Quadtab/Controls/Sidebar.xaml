@@ -1,3 +1,4 @@
+<!-- Aqui usamos o Sidebar.xaml para a barra lateral (ações, quadros e pastas, fixados, importantes, Cofre e rodapé). -->
 <UserControl x:Class="Quadtab.Controls.Sidebar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

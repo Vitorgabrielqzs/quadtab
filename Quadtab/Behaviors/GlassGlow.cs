@@ -1,12 +1,11 @@
 using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media;
 using Quadtab.Controls;
 
 namespace Quadtab.Behaviors;
 
 /// <summary>
-/// Faz a borda e o brilho do vidro seguirem o mouse.
+/// Aqui usamos a classe GlassGlow para fazer a borda e o brilho do vidro seguirem o mouse.
 /// prox = max(0, 1 − distância/170), com distância medida até a borda do painel (0 dentro dele).
 /// Atualiza no máximo uma vez por quadro e só enquanto há algo mudando.
 /// </summary>
@@ -34,6 +33,7 @@ public static class GlassGlow
     }
     static bool _paused;
 
+    /// <summary>Escuta o mouse da janela (posição, saída e perda de foco).</summary>
     public static void Attach(Window window)
     {
         _root = window.Content as FrameworkElement;
@@ -48,6 +48,7 @@ public static class GlassGlow
         window.Deactivated += (_, _) => { _inside = false; Kick(); };
     }
 
+    // Painéis de vidro se registram ao aparecer e saem ao sumir.
     internal static void Register(GlassPanel p)
     {
         if (!Panels.Contains(p)) Panels.Add(p);
@@ -66,16 +67,12 @@ public static class GlassGlow
         CompositionTarget.Rendering += OnRendering;
     }
 
+    // A cada quadro: recalcula a proximidade de cada painel (se o mouse mexeu) e suaviza o brilho.
     static void OnRendering(object? sender, EventArgs e)
     {
         var now = ((RenderingEventArgs)e).RenderingTime;
         if (now == _lastFrame) return; // o WPF pode chamar duas vezes no mesmo quadro
-        if (_paused)
-        {
-            CompositionTarget.Rendering -= OnRendering;
-            _ticking = false;
-            return;
-        }
+        if (_paused) { StopTicking(); return; }
         double dt = _lastFrame == TimeSpan.Zero ? 1 / 60.0 : Math.Min(0.1, (now - _lastFrame).TotalSeconds);
         _lastFrame = now;
 
@@ -117,10 +114,13 @@ public static class GlassGlow
         }
 
         _dirty = false;
-        if (!moving)
-        {
-            CompositionTarget.Rendering -= OnRendering;
-            _ticking = false;
-        }
+        if (!moving) StopTicking();
+    }
+
+    // Para de ouvir os quadros até o próximo Kick.
+    static void StopTicking()
+    {
+        CompositionTarget.Rendering -= OnRendering;
+        _ticking = false;
     }
 }

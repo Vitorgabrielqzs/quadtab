@@ -8,14 +8,18 @@ using Quadtab.Services;
 
 namespace Quadtab.ViewModels;
 
+// Aqui fica tudo o que a lateral, a galeria e a busca mostram do cofre (quadros, pastas, notas e itens).
+
+/// <summary>Tipo de cada linha da barra lateral.</summary>
 public enum SideKind { Board, Page, Item, Heading, Folder, File, More }
 
 /// <summary>
-/// Uma linha da barra lateral: quadro, página, item de um quadro, título de página, pasta ou arquivo do
+/// Aqui usamos a classe SideNode para uma linha da barra lateral: quadro, página, item de um quadro, título de página, pasta ou arquivo do
 /// cofre, ou "Ver todos". Os filhos são lidos só quando a linha abre.
 /// </summary>
 public partial class SideNode : ObservableObject
 {
+    // Cria a linha; os filhos são carregados só quando ela abre.
     public SideNode(SideKind kind, string path, string name, int depth, string section)
     {
         Kind = kind;
@@ -86,6 +90,7 @@ public partial class SideNode : ObservableObject
     partial void OnIsPinnedChanged(bool value) => OnPropertyChanged(nameof(PinTip));
     partial void OnIsImportantChanged(bool value) => OnPropertyChanged(nameof(StarTip));
 
+    // Abriu: carrega os filhos e guarda o estado.
     partial void OnIsOpenChanged(bool value)
     {
         if (!CanExpand || _building) return;
@@ -94,7 +99,7 @@ public partial class SideNode : ObservableObject
     }
 }
 
-/// <summary>Um cartão da galeria "Todos os quadros".</summary>
+/// <summary>Aqui usamos a classe GalleryCard para um cartão da galeria "Todos os quadros".</summary>
 public sealed class GalleryCard
 {
     public required string Path { get; init; }
@@ -113,20 +118,19 @@ public sealed class GalleryCard
 /// <summary>Um resultado do "Procurar" em outros quadros e páginas.</summary>
 public sealed record SearchResult(string Path, string Name, string Snippet, bool IsPage);
 
-/// <summary>Tudo o que existe no cofre: lateral, galeria, busca e o histórico voltar/avançar.</summary>
+/// <summary>Aqui usamos a classe LibraryViewModel para tudo o que existe no cofre: lateral, galeria, busca e o histórico voltar/avançar.</summary>
 public partial class LibraryViewModel : ObservableObject
 {
-    const int MaxBoards = 8, MaxPinned = 6, MaxPages = 10, MaxChildren = 14;
+    const int MaxBoards = 8, MaxPinned = 6, MaxChildren = 14;
 
     readonly Dictionary<string, (DateTime Stamp, Board Board, string Text)> _meta = new();
 
+    // Lê as seções abertas e monta a lateral.
     public LibraryViewModel()
     {
         var open = StorageService.State.Abertos;
         PinnedOpen = open.Contains("fixados");
         ImportantOpen = open.Contains("importantes");
-        PagesOpen = open.Contains("paginas");
-        VaultOpen = open.Contains("cofre");
         GallerySort = "data";
         GalleryGroup = "todos";
         StorageService.LibraryChanged += Refresh;
@@ -136,7 +140,6 @@ public partial class LibraryViewModel : ObservableObject
     public ObservableCollection<SideNode> Boards { get; } = [];
     public ObservableCollection<SideNode> Pinned { get; } = [];
     public ObservableCollection<SideNode> Important { get; } = [];
-    public ObservableCollection<SideNode> Pages { get; } = [];
     public ObservableCollection<SideNode> Vault { get; } = [];
     public ObservableCollection<GalleryCard> Gallery { get; } = [];
     public ObservableCollection<SearchResult> SearchResults { get; } = [];
@@ -145,24 +148,17 @@ public partial class LibraryViewModel : ObservableObject
 
     [ObservableProperty][NotifyPropertyChangedFor(nameof(PinnedArrow))] public partial bool PinnedOpen { get; set; }
     [ObservableProperty][NotifyPropertyChangedFor(nameof(ImportantArrow))] public partial bool ImportantOpen { get; set; }
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(PagesArrow))] public partial bool PagesOpen { get; set; }
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(VaultArrow))] public partial bool VaultOpen { get; set; }
     partial void OnPinnedOpenChanged(bool value) => MainViewModel.SaveOpen("fixados", value);
     partial void OnImportantOpenChanged(bool value) => MainViewModel.SaveOpen("importantes", value);
-    partial void OnPagesOpenChanged(bool value) => MainViewModel.SaveOpen("paginas", value);
-    partial void OnVaultOpenChanged(bool value) => MainViewModel.SaveOpen("cofre", value);
     public double PinnedArrow => PinnedOpen ? 0 : -90;
     public double ImportantArrow => ImportantOpen ? 0 : -90;
-    public double PagesArrow => PagesOpen ? 0 : -90;
-    public double VaultArrow => VaultOpen ? 0 : -90;
 
     public bool HasPinned => Pinned.Count > 0;
     public bool HasImportant => Important.Count > 0;
 
+    // Setinhas das seções Fixados e Importantes.
     [RelayCommand] void TogglePinnedSection() => PinnedOpen = !PinnedOpen;
     [RelayCommand] void ToggleImportantSection() => ImportantOpen = !ImportantOpen;
-    [RelayCommand] void TogglePagesSection() => PagesOpen = !PagesOpen;
-    [RelayCommand] void ToggleVaultSection() => VaultOpen = !VaultOpen;
 
     // ---------- galeria ----------
 
@@ -224,6 +220,7 @@ public partial class LibraryViewModel : ObservableObject
     [RelayCommand] void GoBack() => Travel(-1);
     [RelayCommand] void GoForward() => Travel(+1);
 
+    // Voltar/avançar no histórico de quadros e notas abertos.
     void Travel(int dir)
     {
         int i = _index + dir;
@@ -249,6 +246,7 @@ public partial class LibraryViewModel : ObservableObject
 
     // ---------- leitura do cofre ----------
 
+    // Conteúdo de um quadro (com cache pela data do arquivo), para a galeria e a busca.
     (Board Board, string Text) Meta(string path)
     {
         var stamp = File.GetLastWriteTime(path);
@@ -260,9 +258,11 @@ public partial class LibraryViewModel : ObservableObject
         return (b, text);
     }
 
+    // Nome sem extensão e se o caminho é de nota.
     static string NameOf(string path) => System.IO.Path.GetFileNameWithoutExtension(path);
     static bool IsPagePath(string path) => path.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
 
+    // Linha da lateral para um quadro ou nota.
     SideNode Node(string path, int depth, string section)
     {
         bool page = IsPagePath(path);
@@ -287,6 +287,7 @@ public partial class LibraryViewModel : ObservableObject
         return recent.Concat(all.Where(p => !recent.Contains(p, StringComparer.OrdinalIgnoreCase)).OrderByDescending(File.GetLastWriteTime));
     }
 
+    // Remonta a lateral: quadros (pastas primeiro), fixados, importantes e o Cofre.
     public void Refresh()
     {
         // Pastas primeiro (com os quadros dentro, na ordem da pasta); depois os quadros soltos, pelo último aberto.
@@ -312,6 +313,7 @@ public partial class LibraryViewModel : ObservableObject
         if (GalleryOpen) BuildGallery();
     }
 
+    // Atualiza uma lista mexendo só no que mudou (com "Ver todos" no fim).
     static void Fill(ObservableCollection<SideNode> into, IEnumerable<SideNode> nodes, string? moreGroup, string section)
     {
         into.Clear();
@@ -366,6 +368,7 @@ public partial class LibraryViewModel : ObservableObject
             });
     }
 
+    // Ícone de cada tipo de item na lateral.
     static string IconFor(ItemKind k) => k switch
     {
         ItemKind.Page => "IcPage",
@@ -428,14 +431,7 @@ public partial class LibraryViewModel : ObservableObject
             LoadChildren(n);
     }
 
-    /// <summary>Marca o quadro aberto (pílula de destaque).</summary>
-    public void MarkCurrent()
-    {
-        var cur = App.ViewModel?.FilePath;
-        foreach (var n in AllNodes().Where(n => n.Kind == SideKind.Board))
-            n.IsCurrent = string.Equals(n.Path, cur, StringComparison.OrdinalIgnoreCase);
-    }
-
+    // Todas as linhas abertas da lateral (com os filhos).
     IEnumerable<SideNode> AllNodes()
     {
         static IEnumerable<SideNode> Walk(IEnumerable<SideNode> nodes)
@@ -446,9 +442,10 @@ public partial class LibraryViewModel : ObservableObject
                 foreach (var c in Walk(n.Children)) yield return c;
             }
         }
-        return Walk(Boards.Concat(Pinned).Concat(Important).Concat(Pages));
+        return Walk(Boards.Concat(Pinned).Concat(Important));
     }
 
+    // Monta a galeria (todos, fixados, importantes ou apagados), por data ou nome.
     public void BuildGallery()
     {
         Gallery.Clear();
@@ -509,6 +506,7 @@ public partial class LibraryViewModel : ObservableObject
         return SearchResults.ToList();
     }
 
+    // Trecho do texto em volta do que foi buscado.
     static string Snippet(string text, string q)
     {
         var hit = text.Split('\n').FirstOrDefault(l => BoardItemViewModel.Normalize(l).Contains(q)) ?? "";
@@ -518,6 +516,7 @@ public partial class LibraryViewModel : ObservableObject
 
     // ---------- ações ----------
 
+    // Novo quadro (numa pasta, se dada), já abrindo e renomeando.
     public void NewBoard(string? folder = null)
     {
         var rel = folder is null ? "" : System.IO.Path.GetRelativePath(StorageService.BoardsDir, folder);
@@ -534,14 +533,6 @@ public partial class LibraryViewModel : ObservableObject
         StorageService.CreateFolder(rel, "Nova pasta");
     }
 
-    public void NewPage()
-    {
-        var path = StorageService.CreatePage("Nova nota", "# Nova nota\n\n");
-        PagesOpen = true;
-        Refresh();
-        App.OpenPage(path);
-    }
-
     /// <summary>Liga o modo de renomear na linha (dois cliques ou F2).</summary>
     public void StartRename(string path)
     {
@@ -554,6 +545,7 @@ public partial class LibraryViewModel : ObservableObject
         }
     }
 
+    // Grava o nome novo (quadro, nota ou pasta).
     public void CommitRename(SideNode node, string newName)
     {
         node.IsRenaming = false;
@@ -598,6 +590,7 @@ public partial class LibraryViewModel : ObservableObject
         StorageService.SaveState();
     }
 
+    // Ações simples dos quadros.
     public void Duplicate(string path) => StorageService.DuplicateBoard(path);
     public void ToggleFavorite(string path) => StorageService.ToggleFavorite(path);
     public void TogglePinned(string path) => StorageService.TogglePinned(path);
@@ -692,6 +685,7 @@ public partial class LibraryViewModel : ObservableObject
         StartRename(path);
     }
 
+    // Renomeia uma pasta de quadros (o quadro aberto é salvo e reaberto).
     public void RenameFolder(string path, string newName)
     {
         var cur = App.ViewModel?.FilePath;
@@ -709,9 +703,10 @@ public partial class LibraryViewModel : ObservableObject
     /// <summary>Apaga a pasta: os quadros dela (e das subpastas) vão para Apagados recentemente, com as notas.</summary>
     public void DeleteFolder(string path)
     {
+        if (!Directory.Exists(path)) return;
         foreach (var b in Directory.EnumerateFiles(path, "*" + StorageService.BoardExt, SearchOption.AllDirectories).ToList())
             Trash(b);
-        try { Directory.Delete(path, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        StorageService.RemoveFolder(path); // outros arquivos da pasta vão para a lixeira, nunca são apagados direto
         StorageService.State.OrdemPastas.Remove(StorageService.FolderKey(path));
         StorageService.SaveState();
         StorageService.NotifyLibrary();
@@ -724,6 +719,7 @@ public partial class LibraryViewModel : ObservableObject
     /// <summary>Quadros marcados, na ordem em que foram marcados.</summary>
     public IReadOnlyList<string> Checked => _checked.Where(File.Exists).ToList();
 
+    // Marcação de vários quadros (Ctrl+clique).
     public void ToggleChecked(SideNode n)
     {
         if (n.Kind != SideKind.Board) return;
@@ -740,6 +736,7 @@ public partial class LibraryViewModel : ObservableObject
         foreach (var x in AllNodes()) x.IsChecked = false;
     }
 
+    // Manda o quadro para a lixeira (abre outro, se era o aberto).
     public void Trash(string path)
     {
         bool isCurrent = App.ViewModel is { } cur && string.Equals(cur.FilePath, path, StringComparison.OrdinalIgnoreCase);
@@ -760,6 +757,7 @@ public partial class LibraryViewModel : ObservableObject
         }
     }
 
+    // Lixeira: restaurar ou apagar de vez.
     public void Restore(TrashEntry e)
     {
         var path = StorageService.RestoreBoard(e);

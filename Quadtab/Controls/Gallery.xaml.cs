@@ -6,7 +6,7 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Galeria "Todos os quadros" (e Recentes, Favoritos, Apagados recentemente).</summary>
+/// <summary>Aqui usamos a classe Gallery para a galeria "Todos os quadros" (e Recentes, Favoritos, Apagados recentemente).</summary>
 public partial class Gallery : UserControl
 {
     public Gallery() => InitializeComponent();
@@ -20,6 +20,7 @@ public partial class Gallery : UserControl
         if ((sender as FrameworkElement)?.Tag is GalleryCard { IsTrash: false } c) App.OpenBoard(c.Path);
     }
 
+    // Botão direito num cartão: o mesmo menu dos quadros da lateral.
     void OnCardRightClick(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not GalleryCard { IsTrash: false } c || Window.GetWindow(this) is not MainWindow shell) return;
@@ -35,6 +36,7 @@ public partial class Gallery : UserControl
         e.Handled = true;
     }
 
+    // Cartões da lixeira: restaurar ou apagar de vez.
     void OnRestore(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is GalleryCard { Trash: { } t }) Lib.Restore(t);

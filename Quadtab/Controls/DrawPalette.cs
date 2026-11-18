@@ -5,7 +5,7 @@ using Quadtab.Rendering;
 
 namespace Quadtab.Controls;
 
-/// <summary>Paleta flutuante de desenho (caneta, lápis, marcador, borracha, laço) e de linhas.</summary>
+/// <summary>Aqui usamos a classe DrawPalette para a paleta flutuante de desenho (caneta, lápis, marcador, borracha, laço) e de linhas.</summary>
 public sealed class DrawPalette : ContentControl
 {
     static readonly Color[] Inks =
@@ -37,11 +37,9 @@ public sealed class DrawPalette : ContentControl
         }
     }
 
-    void Set(BoardTool t)
-    {
-        _board!.Tool = t;
-    }
+    void Set(BoardTool t) => _board!.Tool = t;
 
+    // Remonta a fileira de botões conforme a ferramenta (linha ou desenho).
     void Rebuild()
     {
         if (_board is null) return;
@@ -66,13 +64,7 @@ public sealed class DrawPalette : ContentControl
                 (BoardTool.Eraser, "IcEraser", "Apaga os traços em que passar"), (BoardTool.Lasso, "IcLasso", "Seleciona itens desenhando um laço em volta"),
             })
             {
-                var b = UiKit.Chip("", tool == t, () => Set(t), icon, tip);
-                b.Height = 40;
-                b.Width = 40;
-                b.Padding = new Thickness(0);
-                b.Margin = new Thickness(0, 0, 4, 0);
-                Behaviors.UI.SetRadius(b, new CornerRadius(20));
-                _row.Children.Add(b);
+                _row.Children.Add(Round(UiKit.Chip("", tool == t, () => Set(t), icon, tip)));
             }
             _row.Children.Add(Sep());
             foreach (var c in Inks)
@@ -88,12 +80,7 @@ public sealed class DrawPalette : ContentControl
                 double width = w;
                 var b = UiKit.Chip("", DrawSettings.Thickness == w, () => { DrawSettings.Thickness = width; Rebuild(); }, null, w switch { 2 => "Traço fino", 4 => "Traço médio", _ => "Traço grosso" });
                 b.Content = new Border { Width = 18, Height = w + 1, CornerRadius = new CornerRadius(4), Background = ShadowCache.BrushOf(DrawSettings.Color == Colors.White ? Colors.Gray : DrawSettings.Color) };
-                b.Width = 40;
-                b.Height = 40;
-                b.Padding = new Thickness(0);
-                b.Margin = new Thickness(0, 0, 4, 0);
-                Behaviors.UI.SetRadius(b, new CornerRadius(20));
-                _row.Children.Add(b);
+                _row.Children.Add(Round(b));
             }
         }
         _row.Children.Add(Sep());
@@ -104,6 +91,17 @@ public sealed class DrawPalette : ContentControl
         _row.Children.Add(done);
     }
 
+    // Chip redondo de 40 px (ferramentas e espessuras).
+    static Control Round(Control b)
+    {
+        b.Width = b.Height = 40;
+        b.Padding = new Thickness(0);
+        b.Margin = new Thickness(0, 0, 4, 0);
+        Behaviors.UI.SetRadius(b, new CornerRadius(20));
+        return b;
+    }
+
+    // Chip de texto, rótulo e separador vertical da paleta.
     static System.Windows.Controls.Primitives.ToggleButton Chip(string text, bool on, Action click)
     {
         var c = UiKit.Chip(text, on, click);

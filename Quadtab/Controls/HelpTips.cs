@@ -11,7 +11,7 @@ using Quadtab.Rendering;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Balão de ajuda: com o mouse parado 3 s em cima de um botão, aparece uma frase dizendo para que ele
+/// Aqui usamos a classe HelpTips para o balão de ajuda: com o mouse parado 3 s em cima de um botão, aparece uma frase dizendo para que ele
 /// serve (o texto vem do ToolTip do botão; o atalho, depois de " · ", fica apagado). Vidro, Inter 13,
 /// ao lado do botão e sempre dentro da janela. Some ao sair do botão ou ao clicar.
 /// As descrições dos itens do quadro usam o mesmo balão, mais rápido (0,8 s).
@@ -48,12 +48,16 @@ public static partial class HelpTips
 
         Timer.Tick += (_, _) => { Timer.Stop(); Show(); };
         window.PreviewMouseMove += (_, e) => OnMove(e);
-        window.PreviewMouseDown += (_, _) => { Hide(); _target = null; Timer.Stop(); };
+        window.PreviewMouseDown += (_, _) => Reset();
         window.PreviewMouseWheel += (_, _) => Hide();
-        window.MouseLeave += (_, _) => { Hide(); _target = null; Timer.Stop(); };
+        window.MouseLeave += (_, _) => Reset();
         window.Deactivated += (_, _) => { Hide(); Timer.Stop(); };
     }
 
+    // Esconde e esquece o botão atual (clique ou mouse fora da janela).
+    static void Reset() { Hide(); _target = null; Timer.Stop(); }
+
+    // Mouse mexeu: trocou de botão (recomeça a contagem) ou andou mais de 4 px no mesmo.
     static void OnMove(MouseEventArgs e)
     {
         var target = Find(e.OriginalSource as DependencyObject);
@@ -90,9 +94,10 @@ public static partial class HelpTips
         return null;
     }
 
-    static void Show(bool force = false)
+    // Monta o texto (atalho apagado), posiciona dentro da janela e anima a entrada.
+    static void Show()
     {
-        if (_target is not { ToolTip: string tip } || (!force && !_target.IsMouseOver) || _layer is null || _balloon is null || _text is null) return;
+        if (_target is not { ToolTip: string tip } || !_target.IsMouseOver || _layer is null || _balloon is null || _text is null) return;
         _text.Inlines.Clear();
         int cut = tip.LastIndexOf(" · ", StringComparison.Ordinal);
         if (cut > 0 && Shortcut().IsMatch(tip[(cut + 3)..]))

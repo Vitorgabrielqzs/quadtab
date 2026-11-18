@@ -1,6 +1,9 @@
 namespace Quadtab.Models;
 
-/// <summary>Um item salvo no arquivo do quadro (.quadtab).</summary>
+// Aqui ficam os modelos de dados de um item do quadro, exatamente como são gravados no JSON (.quadtab).
+// Os nomes das propriedades são em português porque viram as chaves do arquivo.
+
+/// <summary>Aqui usamos a classe BoardItem para guardar um item salvo no arquivo do quadro (.quadtab).</summary>
 public sealed class BoardItem
 {
     public int Id { get; set; }
@@ -71,40 +74,20 @@ public sealed class BoardItem
     /// <summary>Tabela: células por linha.</summary>
     public List<List<string>>? Tabela { get; set; }
 
-    public static string KindToJson(ItemKind k) => k switch
-    {
-        ItemKind.Page => "pagina",
-        ItemKind.Block => "bloco",
-        ItemKind.Text => "texto",
-        ItemKind.TextBox => "caixa",
-        ItemKind.Shape => "forma",
-        ItemKind.Line => "linha",
-        ItemKind.Drawing => "desenho",
-        ItemKind.Image => "imagem",
-        ItemKind.Video => "video",
-        ItemKind.File => "arquivo",
-        ItemKind.Link => "link",
-        ItemKind.Table => "tabela",
-        _ => "postit",
-    };
+    // ---------- conversão entre o enum e o texto do JSON ----------
+    // Aqui usamos uma tabela única (tipo ↔ nome no arquivo) para converter nos dois sentidos sem repetir a lista.
+    static readonly (ItemKind Kind, string Json)[] KindNames =
+    [
+        (ItemKind.Page, "pagina"), (ItemKind.Block, "bloco"), (ItemKind.Text, "texto"), (ItemKind.TextBox, "caixa"),
+        (ItemKind.Shape, "forma"), (ItemKind.Line, "linha"), (ItemKind.Drawing, "desenho"), (ItemKind.Image, "imagem"),
+        (ItemKind.Video, "video"), (ItemKind.File, "arquivo"), (ItemKind.Link, "link"), (ItemKind.Table, "tabela"),
+    ];
 
-    public static ItemKind KindFromJson(string? s) => s switch
-    {
-        "pagina" => ItemKind.Page,
-        "bloco" => ItemKind.Block,
-        "texto" => ItemKind.Text,
-        "caixa" => ItemKind.TextBox,
-        "forma" => ItemKind.Shape,
-        "linha" => ItemKind.Line,
-        "desenho" => ItemKind.Drawing,
-        "imagem" => ItemKind.Image,
-        "video" => ItemKind.Video,
-        "arquivo" => ItemKind.File,
-        "link" => ItemKind.Link,
-        "tabela" => ItemKind.Table,
-        _ => ItemKind.PostIt,
-    };
+    public static string KindToJson(ItemKind k) => Array.Find(KindNames, n => n.Kind == k).Json ?? "postit";
 
+    public static ItemKind KindFromJson(string? s) => Array.Find(KindNames, n => n.Json == s) is { Json: not null } n ? n.Kind : ItemKind.PostIt;
+
+    // Fixação (alfinete, fita ou nenhuma) ↔ texto do JSON.
     public static string FasteningToJson(Fastening f) => f switch
     {
         Fastening.Tape => "fita",
@@ -120,7 +103,7 @@ public sealed class BoardItem
     };
 }
 
-/// <summary>Estilo livre de um item (inspetor).</summary>
+/// <summary>Aqui usamos a classe ItemStyle para guardar o estilo livre de um item (cores, borda, fonte, alinhamento).</summary>
 public sealed class ItemStyle
 {
     public string? Preenchimento { get; set; }   // #AARRGGBB
@@ -138,7 +121,7 @@ public sealed class ItemStyle
     public ItemStyle Clone() => (ItemStyle)MemberwiseClone();
 }
 
-/// <summary>Ponta de uma linha: solta (X, Y no mundo) ou presa a um item (Id + lado).</summary>
+/// <summary>Aqui usamos a classe LineEnd para descrever a ponta de uma linha: solta (X, Y no mundo) ou presa a um item (Id + lado).</summary>
 public sealed class LineEnd
 {
     public double X { get; set; }
@@ -148,6 +131,7 @@ public sealed class LineEnd
     public string Ponta { get; set; } = "nenhuma"; // nenhuma | seta | bolinha
 }
 
+/// <summary>Aqui usamos a classe LineData para guardar uma linha/seta: as duas pontas, o traçado e a dobra.</summary>
 public sealed class LineData
 {
     public LineEnd De { get; set; } = new();
@@ -160,6 +144,7 @@ public sealed class LineData
     public double? DobraY { get; set; }
 }
 
+/// <summary>Aqui usamos a classe InkStroke para guardar um traço do desenho à mão (ferramenta, cor, espessura e pontos).</summary>
 public sealed class InkStroke
 {
     public string Ferramenta { get; set; } = "caneta"; // caneta | lapis | marcador

@@ -5,12 +5,13 @@ using Quadtab.Controls;
 namespace Quadtab.Behaviors;
 
 /// <summary>
-/// Liga o campo de texto formatado à barra flutuante (<see cref="FormatBar"/>): ela aparece em cima da palavra ou
+/// Aqui usamos a classe RichEdit para ligar o campo de texto formatado à barra flutuante (<see cref="FormatBar"/>): ela aparece em cima da palavra ou
 /// frase que o usuário seleciona (soltando o mouse, ou com Shift+setas e Ctrl+A) e some ao desmarcar ou sair da edição.
 /// Entrar na edição seleciona tudo sozinho e não abre a barra.
 /// </summary>
 public static class RichEdit
 {
+    /// <summary>Liga os eventos de seleção, mouse, teclado e foco do campo à barra.</summary>
     public static void Attach(RichEditBox box)
     {
         box.SelectionChanged += (_, _) =>

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using Quadtab.Models;
 using Quadtab.Rendering;
@@ -9,7 +8,9 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Escolhe a tela de cada tipo de item.</summary>
+// Aqui ficam a escolha do visual de cada tipo de item e a "casca" que posiciona cada item no quadro.
+
+/// <summary>Aqui usamos a classe ItemTemplateSelector para escolher a tela (DataTemplate) de cada tipo de item.</summary>
 public sealed class ItemTemplateSelector : DataTemplateSelector
 {
     public DataTemplate? PostIt { get; set; }
@@ -46,30 +47,26 @@ public sealed class ItemTemplateSelector : DataTemplateSelector
 }
 
 /// <summary>
-/// "Casca" de cada item no quadro: posição, camada, rotação e os estados
-/// (mouse em cima, arrastando, selecionado, fora da busca).
+/// Aqui usamos a classe BoardItemContainer como "casca" de cada item no quadro: posição, camada e os estados
+/// (mouse em cima, arrastando, fora da busca) e a animação de surgir.
 /// </summary>
 public sealed class BoardItemContainer : ContentControl
 {
-    /// <summary>Zoom bem afastado: o item mostra sÃ³ o tÃ­tulo.</summary>
+    /// <summary>Zoom bem afastado: o item mostra só o título.</summary>
     public static readonly DependencyProperty IsOverviewProperty = DependencyProperty.Register(nameof(IsOverview), typeof(bool), typeof(BoardItemContainer), new PropertyMetadata(false));
-    /// <summary>Quanto o tÃ­tulo cresce para continuar legÃ­vel na tela (1 / zoom).</summary>
+    /// <summary>Quanto o título cresce para continuar legível na tela (1 / zoom).</summary>
     public static readonly DependencyProperty OverviewScaleProperty = DependencyProperty.Register(nameof(OverviewScale), typeof(double), typeof(BoardItemContainer), new PropertyMetadata(1.0));
 
     public bool IsOverview { get => (bool)GetValue(IsOverviewProperty); set => SetValue(IsOverviewProperty, value); }
     public double OverviewScale { get => (double)GetValue(OverviewScaleProperty); set => SetValue(OverviewScaleProperty, value); }
 
+    // Escala da animação de surgir (os itens nunca giram nem sobem: ficam retos).
     readonly ScaleTransform _scale = new();
-    readonly TranslateTransform _lift = new();
-    readonly RotateTransform _rotate = new();
 
     /// <summary>Deslocamento durante o arraste (em unidades do mundo). A posição só é gravada ao soltar.</summary>
     public TranslateTransform DragOffset { get; } = new();
     BoardItemViewModel? _vm;
-    bool _hover, _dragging;
-
-    /// <summary>Avisa o item para "descolar" a sombra (mouse em cima).</summary>
-    public event Action<bool>? LiftChanged;
+    bool _dragging;
 
     public BoardItemContainer()
     {
@@ -77,8 +74,6 @@ public sealed class BoardItemContainer : ContentControl
         RenderTransformOrigin = new Point(0.5, 0.5);
         var g = new TransformGroup();
         g.Children.Add(_scale);
-        g.Children.Add(_lift);
-        g.Children.Add(_rotate);
         g.Children.Add(DragOffset);
         RenderTransform = g;
         Cursor = BoardCursors.Grab;
@@ -86,17 +81,14 @@ public sealed class BoardItemContainer : ContentControl
 
     public BoardItemViewModel? Item => _vm;
 
-    public bool IsLifted => _hover || _dragging;
-
+    /// <summary>Liga a casca a um item (ela pode estar sendo reaproveitada pela virtualização).</summary>
     internal void Attach(BoardItemViewModel vm)
     {
         _vm = vm;
         // O container pode estar sendo reaproveitado: volta ao estado de repouso.
-        _hover = _dragging = false;
+        _dragging = false;
         Anim.Set(_scale, ScaleTransform.ScaleXProperty, 1.0);
         Anim.Set(_scale, ScaleTransform.ScaleYProperty, 1.0);
-        Anim.Set(_lift, TranslateTransform.YProperty, 0.0);
-        Anim.Set(_rotate, RotateTransform.AngleProperty, 0.0);
         DragOffset.X = DragOffset.Y = 0;
         Anim.Set(this, OpacityProperty, vm.IsDimmed ? 0.16 : 1.0);
         Cursor = BoardCursors.Grab;
@@ -120,35 +112,20 @@ public sealed class BoardItemContainer : ContentControl
         _vm = null;
     }
 
+    // Fora da busca: o item fica apagado (16%).
     void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(BoardItemViewModel.IsDimmed) && _vm is not null)
             Anim.To(this, OpacityProperty, _vm.IsDimmed ? 0.16 : 1, 0.3, Anim.Ease);
     }
 
-    protected override void OnMouseEnter(MouseEventArgs e)
-    {
-        base.OnMouseEnter(e);
-        _hover = true;
-        UpdatePose();
-    }
-
-    protected override void OnMouseLeave(MouseEventArgs e)
-    {
-        base.OnMouseLeave(e);
-        _hover = false;
-        UpdatePose();
-    }
-
+    // ---------- arraste ----------
+    // Visual do Canvas do Obsidian: o item não se inclina, não cresce nem "descola" ao passar o mouse
+    // ou arrastar; fica reto e firme (o contorno de seleção mostra o estado). Só o ponteiro muda.
     public void SetDragging(bool dragging)
     {
         if (_dragging == dragging) return;
         _dragging = dragging;
         Cursor = dragging ? BoardCursors.Grabbing : BoardCursors.Grab;
-        UpdatePose();
     }
-
-    // Visual do Canvas do Obsidian: o item não se inclina, não cresce nem "descola" ao passar o mouse
-    // ou arrastar; fica reto e firme (o contorno de seleção mostra o estado).
-    void UpdatePose() => LiftChanged?.Invoke(IsLifted);
 }

@@ -11,7 +11,7 @@ using Quadtab.Behaviors;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Campo de edição do texto dos itens, já formatado (negrito, itálico, sublinhado, riscado, código, cor e fundo),
+/// Aqui usamos a classe RichEditBox como campo de edição do texto dos itens, já formatado (negrito, itálico, sublinhado, riscado, código, cor e fundo),
 /// sem mostrar nenhuma marca de código. O texto do item continua sendo Markdown: este campo lê o Markdown
 /// (<see cref="Markdown"/>), mostra formatado e devolve Markdown a cada mudança. Os índices (SelectionStart,
 /// CaretIndex…) contam letras do texto limpo, com "\n" nas quebras de linha, como num TextBox.
@@ -64,6 +64,7 @@ public sealed class RichEditBox : RichTextBox
         RichEdit.Attach(this);
     }
 
+    // Fonte mudou: recarrega (o negrito depende do peso) ou recalcula a largura.
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
@@ -107,6 +108,7 @@ public sealed class RichEditBox : RichTextBox
         }
     }
 
+    // Markdown → parágrafo formatado.
     void Load(string md)
     {
         _busy = true;
@@ -123,7 +125,7 @@ public sealed class RichEditBox : RichTextBox
                     if (i > 0) _p.Inlines.Add(new LineBreak());
                     if (lines[i].Length == 0) continue;
                     var run = new Run(lines[i]);
-                    Apply(run, seg.Fmt);
+                    RichText.Style(run, seg.Fmt, FontWeight);
                     _p.Inlines.Add(run);
                 }
             }
@@ -133,26 +135,7 @@ public sealed class RichEditBox : RichTextBox
         Fit();
     }
 
-    void Apply(Run r, Fmt f)
-    {
-        if (f.Bold) r.FontWeight = RichText.BoldOf(FontWeight);
-        if (f.Italic) r.FontStyle = FontStyles.Italic;
-        if (f.Underline || f.Strike)
-        {
-            var d = new TextDecorationCollection();
-            if (f.Underline) d.Add(TextDecorations.Underline[0]);
-            if (f.Strike) d.Add(TextDecorations.Strikethrough[0]);
-            r.TextDecorations = d;
-        }
-        if (f.Code)
-        {
-            r.FontFamily = RichText.CodeFont;
-            r.Background = RichText.CodeBack;
-        }
-        if (RichText.BrushOf(f.Color) is { } ink) r.Foreground = ink;
-        if (RichText.BrushOf(f.Back) is { } back) r.Background = back;
-    }
-
+    // Todos os trechos (Run e quebras de linha), abrindo os Span aninhados.
     static IEnumerable<Inline> Leaves(InlineCollection inlines)
     {
         foreach (var i in inlines)
@@ -164,13 +147,9 @@ public sealed class RichEditBox : RichTextBox
 
     static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
-    static bool HasDecoration(TextDecorationCollection? d, TextDecorationLocation loc)
-    {
-        if (d is null) return false;
-        foreach (var x in d) if (x.Location == loc) return true;
-        return false;
-    }
+    static bool HasDecoration(TextDecorationCollection? d, TextDecorationLocation loc) => d?.Any(x => x.Location == loc) == true;
 
+    // Lê de volta a formatação de um trecho (comparando com a letra padrão do campo).
     Fmt FormatOf(Run r)
     {
         bool bold = r.FontWeight.ToOpenTypeWeight() > FontWeight.ToOpenTypeWeight();
@@ -198,6 +177,7 @@ public sealed class RichEditBox : RichTextBox
     /// <summary>Texto sem formatação, com as bolinhas "•" (os índices do campo contam sobre ele).</summary>
     public string PlainText => string.Concat(Tokens().Select(t => t.Text));
 
+    // Documento → Markdown (junta trechos vizinhos com a mesma formatação).
     string ToMarkdown()
     {
         var sb = new StringBuilder();
@@ -246,6 +226,7 @@ public sealed class RichEditBox : RichTextBox
         SetCurrentValue(MarkdownProperty, md);
     }
 
+    // Texto mudou: junta parágrafos, troca "- " por bolinha e devolve o Markdown.
     void OnTextChanged(object sender, TextChangedEventArgs e)
     {
         if (_busy) return;
@@ -255,9 +236,7 @@ public sealed class RichEditBox : RichTextBox
         {
             int caret = CaretIndex;
             if (ListText.TypedBullet(PlainText, caret) is { } dash)
-            {
                 Guarded(() => { ReplaceRange(dash, 1, ListText.Bullet.ToString()); Select(caret, 0); });
-            }
         }
         Sync();
         Fit();
@@ -283,6 +262,7 @@ public sealed class RichEditBox : RichTextBox
         });
     }
 
+    // Roda sem reagir às próprias mudanças.
     void Guarded(Action a)
     {
         bool was = _busy;
@@ -293,6 +273,7 @@ public sealed class RichEditBox : RichTextBox
 
     // ---------- larguras (texto solto, uma linha) ----------
 
+    // Texto solto: a página cresce até a linha mais larga; com quebra, largura livre.
     void Fit()
     {
         if (Wrap) { if (!double.IsNaN(Document.PageWidth)) Document.PageWidth = double.NaN; return; }
@@ -309,6 +290,7 @@ public sealed class RichEditBox : RichTextBox
 
     // ---------- índices (letras do texto limpo) ----------
 
+    // Índice no texto limpo ↔ posição no documento.
     TextPointer PointerAt(int index)
     {
         int pos = 0;
@@ -401,6 +383,7 @@ public sealed class RichEditBox : RichTextBox
 
     // ---------- teclado e colar ----------
 
+    // Ctrl+B/I/U; Shift+Enter (listas e quebra); Backspace logo depois da marca de lista.
     void OnKeys(object sender, KeyEventArgs e)
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
@@ -432,6 +415,7 @@ public sealed class RichEditBox : RichTextBox
         }
     }
 
+    // Colar: só texto, entendendo listas e marcas do Markdown.
     void OnPaste(object sender, DataObjectPastingEventArgs e)
     {
         e.CancelCommand();
@@ -458,7 +442,7 @@ public sealed class RichEditBox : RichTextBox
                     if (i > 0) { var lb = new LineBreak(pos); pos = lb.ElementEnd; }
                     if (lines[i].Length == 0) continue;
                     var run = new Run(lines[i], pos);
-                    Apply(run, seg.Fmt);
+                    RichText.Style(run, seg.Fmt, FontWeight);
                     pos = run.ElementEnd;
                 }
             }
@@ -471,6 +455,7 @@ public sealed class RichEditBox : RichTextBox
 
     // ---------- formatação da seleção ----------
 
+    // Pedaços da seleção, um por trecho (para ligar/desligar decorações em cada um).
     List<TextRange> Pieces()
     {
         var list = new List<TextRange>();
@@ -485,6 +470,7 @@ public sealed class RichEditBox : RichTextBox
         return list;
     }
 
+    /// <summary>Liga/desliga negrito, itálico, sublinhado, riscado e código na seleção.</summary>
     public void ToggleBold()
     {
         if (Selection.IsEmpty) return;
@@ -539,6 +525,7 @@ public sealed class RichEditBox : RichTextBox
         Selection.ApplyPropertyValue(TextElement.BackgroundProperty, RichText.BrushOf(hex) ?? Brushes.Transparent);
     }
 
+    /// <summary>Tira toda a formatação da seleção.</summary>
     public void ClearFormat()
     {
         if (Selection.IsEmpty) return;

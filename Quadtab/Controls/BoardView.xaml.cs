@@ -20,7 +20,7 @@ namespace Quadtab.Controls;
 public enum BoardTool { Select, Pen, Pencil, Marker, Eraser, Lasso, Line }
 
 /// <summary>
-/// O quadro infinito: câmera (posição + zoom de 10% a 400%), virtualização com quadtree e todas as
+/// Aqui usamos a classe BoardView para o quadro infinito: câmera (posição + zoom de 10% a 400%), virtualização com quadtree e todas as
 /// interações (arrastar, alças, guias, conectores, desenho, soltar arquivos). Tudo o que se move é
 /// aplicado uma única vez por quadro, em OnFrame.
 /// </summary>
@@ -165,6 +165,7 @@ public partial class BoardView : UserControl
         _ => Cursors.Pen,
     };
 
+    // Monta o quadro: câmera, camadas, eventos do mouse/teclado e o laço por quadro (OnFrame).
     public BoardView()
     {
         InitializeComponent();
@@ -221,6 +222,7 @@ public partial class BoardView : UserControl
 
     // ---------- ligação com o ViewModel ----------
 
+    // Liga o quadro a outro MainViewModel (trocar de quadro): limpa tudo e indexa os itens de novo.
     void Attach(MainViewModel? vm)
     {
         if (_vm is not null)
@@ -254,12 +256,14 @@ public partial class BoardView : UserControl
         Anim.To(ItemsLayer, OpacityProperty, 1, 0.35, Anim.Ease);
     }
 
+    // Guarda a caixa do item no índice espacial (quadtree).
     void Track(BoardItemViewModel it)
     {
         it.PropertyChanged += OnItemChanged;
         _index.Set(it, it.Bounds);
     }
 
+    // Itens entraram ou saíram da lista: indexa, cria ou descarta a tela deles.
     void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset) { Attach(_vm); return; }
@@ -282,6 +286,7 @@ public partial class BoardView : UserControl
         Settle();
     }
 
+    // Um item mudou de lugar/tamanho/camada: atualiza índice, posição e linhas ligadas.
     void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not BoardItemViewModel it) return;
@@ -309,6 +314,7 @@ public partial class BoardView : UserControl
         }
     }
 
+    // O quadro trocou modelo, grade, ferramenta ou somente visualização.
     void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -327,6 +333,7 @@ public partial class BoardView : UserControl
 
     // ---------- câmera ----------
 
+    // Posição inicial da câmera: a salva, o "Ajustar" (1ª vez) ou o centro (0, 0).
     void StartCamera()
     {
         _cameraReady = true;
@@ -356,14 +363,15 @@ public partial class BoardView : UserControl
         Settle();
     }
 
-    // ---------- zoom bem afastado: sÃ³ os tÃ­tulos ----------
+    // ---------- zoom bem afastado: só os títulos ----------
 
     bool _overview;
     double _overviewZoom = 1;
 
+    // Zoom bem afastado: itens com título mostram só o título grande.
     static bool HasOverview(BoardItemViewModel v) => v.Kind is ItemKind.PostIt or ItemKind.Page or ItemKind.Block or ItemKind.TextBox;
 
-    /// <summary>Liga abaixo de 34% e sÃ³ desliga acima de 42%, para nÃ£o piscar no limite.</summary>
+    /// <summary>Liga abaixo de 34% e só desliga acima de 42%, para não piscar no limite.</summary>
     void UpdateOverview(double zoom)
     {
         bool on = _overview ? zoom < 0.42 : zoom < 0.34;
@@ -378,12 +386,13 @@ public partial class BoardView : UserControl
         bool show = _overview && HasOverview(vm) && vm.Editing == EditField.None;
         if (c.IsOverview != show) c.IsOverview = show;
         if (!show) return;
-        // Letra de 9 a 15 px na tela: item pequeno ganha tÃ­tulo menor, para caber mais palavras.
+        // Letra de 9 a 15 px na tela: item pequeno ganha título menor, para caber mais palavras.
         double target = Math.Clamp(0.2 * vm.MeasuredSize.Width * _overviewZoom, 9, 15);
         double scale = Math.Clamp(target / (16 * _overviewZoom), 1, 8);
         if (Math.Abs(c.OverviewScale - scale) > 0.001) c.OverviewScale = scale;
     }
 
+    // Pede um quadro de animação (o laço para sozinho quando nada se move).
     void Kick()
     {
         if (_ticking) return;
@@ -392,6 +401,7 @@ public partial class BoardView : UserControl
         CompositionTarget.Rendering += OnFrame;
     }
 
+    // Algo na tela precisa ser refeito no próximo quadro.
     void Invalidate()
     {
         _realizedArea = Rect.Empty;
@@ -434,6 +444,7 @@ public partial class BoardView : UserControl
         }
     }
 
+    // Arraste por quadro: segue o mouse, encaixa nas guias e anda a câmera perto da borda.
     bool StepDrag(DragState d, double dt)
     {
         bool changed = false;
@@ -473,6 +484,7 @@ public partial class BoardView : UserControl
         return changed;
     }
 
+    // Velocidade da câmera perto da borda (mais rápido quanto mais perto).
     static double Edge(double v, double size)
     {
         if (v < EdgeZone) return Math.Min(1, (EdgeZone - v) / EdgeZone);
@@ -480,6 +492,7 @@ public partial class BoardView : UserControl
         return 0;
     }
 
+    // Aplica a câmera: uma matriz só no Canvas dos itens e a posição das texturas.
     void ApplyCamera()
     {
         if (_camera.Viewport.Width <= 0) return;
@@ -500,6 +513,7 @@ public partial class BoardView : UserControl
         Settle();
     }
 
+    // Câmera parou: espera um instante e então (OnIdle) atualiza texturas, caches e o brilho do vidro.
     void Settle()
     {
         _idle.Stop();
@@ -521,6 +535,7 @@ public partial class BoardView : UserControl
 
     // ---------- virtualização ----------
 
+    // Virtualização: cria as telas dos itens perto da área visível e descarta as longe.
     void RealizeArea(Rect visible)
     {
         var area = visible;
@@ -543,9 +558,11 @@ public partial class BoardView : UserControl
 
     static double Dist(BoardItemViewModel v, Point c) => (v.X - c.X) * (v.X - c.X) + (v.Y - c.Y) * (v.Y - c.Y);
 
+    // Itens que nunca são descartados (selecionado, editando, arrastando).
     bool IsPinned(BoardItemViewModel vm) =>
         _exportHold || vm.IsSelected || vm.Editing != EditField.None || (_drag?.Parts.Exists(p => p.Item == vm) ?? false);
 
+    // Cria telas pendentes com limite de 3 ms por quadro (os mais perto do centro primeiro).
     void CreateSome()
     {
         var sw = Stopwatch.StartNew();
@@ -554,6 +571,7 @@ public partial class BoardView : UserControl
         _pending.RemoveRange(0, i);
     }
 
+    // Cria (ou reaproveita) a casca do item e põe no Canvas.
     void Realize(BoardItemViewModel vm)
     {
         if (_containers.ContainsKey(vm)) return;
@@ -590,6 +608,7 @@ public partial class BoardView : UserControl
         ApplyLineVisibility(vm);
     }
 
+    // Tira a casca do Canvas e guarda para reaproveitar.
     void Unrealize(BoardItemViewModel vm)
     {
         if (!_containers.Remove(vm, out var c)) return;
@@ -615,6 +634,7 @@ public partial class BoardView : UserControl
 
     Point ScreenCenter => new(_camera.Viewport.Width / 2, _camera.Viewport.Height / 2);
 
+    // Zoom pelos atalhos a partir do centro: Ctrl + / Ctrl − (ZoomStep) e Ctrl 0 (ZoomReset).
     public void ZoomStep(int direction)
     {
         _autoFit = false;
@@ -654,6 +674,7 @@ public partial class BoardView : UserControl
 
     public bool HasContentInView => _index.Count == 0 || _index.Any(_camera.VisibleWorld);
 
+    // Leva a câmera até um item, com animação.
     public void FocusItem(BoardItemViewModel item)
     {
         _autoFit = false;
@@ -662,6 +683,7 @@ public partial class BoardView : UserControl
         Kick();
     }
 
+    // Move a câmera suavemente por um deslocamento.
     public void PanBy(Vector contentDelta)
     {
         _autoFit = false;
@@ -683,6 +705,7 @@ public partial class BoardView : UserControl
         }
     }
 
+    // Conversões de pontos de outras telas para o mundo do quadro.
     public Point ToWorld(UIElement from, Point p) => _camera.ToWorld(from.TranslatePoint(p, Surface));
 
     public bool IsInside(UIElement from, Point p)
@@ -691,6 +714,7 @@ public partial class BoardView : UserControl
         return s.X >= 0 && s.Y >= 0 && s.X <= Surface.ActualWidth && s.Y <= Surface.ActualHeight;
     }
 
+    // Cria item no centro da área visível ou onde a bandeja soltou.
     public void AddAtCenter(ItemKind kind, string color, NoteStyle? style = null) =>
         Vm.Add(kind, color, _camera.Cx + (Rng.NextDouble() * 120 - 60) / _camera.Zoom,
                _camera.Cy + (Rng.NextDouble() * 80 - 40) / _camera.Zoom, style);
@@ -741,9 +765,9 @@ public partial class BoardView : UserControl
     void ApplyFrame()
     {
         var model = _vm?.Model ?? BoardModel.Liso;
-        FrameBg.FullBleed = SurfaceBg.FullBleed = _fullBleed;
-        Surface.Margin = new Thickness(FrameBackground.Inset(model, _fullBleed));
-        double r = SurfaceBackground.CornerRadius(model, _fullBleed);
+        FrameBg.FullBleed = _fullBleed;
+        Surface.Margin = new Thickness(FrameBackground.Inset(model));
+        double r = SurfaceBackground.Radius;
         var size = Surface.RenderSize;
         var g = new RectangleGeometry(new Rect(size), r, r);
         g.Freeze();
@@ -754,10 +778,10 @@ public partial class BoardView : UserControl
 
     public void RefreshGlass() => UpdateGlass();
 
-    static double Mod(double a, double m) => a - Math.Floor(a / m) * m;
 
     // ---------- mouse ----------
 
+    // Rodinha: zoom no cursor; com Shift, anda na horizontal.
     void OnWheel(object sender, MouseWheelEventArgs e)
     {
         _autoFit = false;
@@ -770,6 +794,7 @@ public partial class BoardView : UserControl
         e.Handled = true;
     }
 
+    // Botão do mouse: decide o que o clique faz (item, alça, linha, +, câmera, seleção, ferramenta).
     void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
         _autoFit = false;
@@ -933,6 +958,7 @@ public partial class BoardView : UserControl
         return null;
     }
 
+    // Começa a arrastar um item (ou os selecionados; com Alt, uma cópia).
     void StartDrag(BoardItemContainer grabbed, Point p, bool duplicate)
     {
         var items = Vm.SelectedItems.Where(i => !i.Locked).OrderBy(i => i.Z).ToList();
@@ -965,6 +991,7 @@ public partial class BoardView : UserControl
         Kick();
     }
 
+    // Mouse andando: arraste, alças, câmera, laço, caixa de seleção, ligações e o + das tabelas.
     void OnMouseMove(object sender, MouseEventArgs e)
     {
         var p = e.GetPosition(Surface);
@@ -1057,6 +1084,7 @@ public partial class BoardView : UserControl
         }
     }
 
+    // Soltou o botão: termina o que estava em andamento.
     void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         var p = e.GetPosition(Surface);
@@ -1083,6 +1111,7 @@ public partial class BoardView : UserControl
         if (Surface.IsMouseCaptured) Surface.ReleaseMouseCapture();
     }
 
+    // Mover a câmera arrastando (com inércia ao soltar).
     void StartPan(Point p)
     {
         _camera.Stop();
@@ -1113,6 +1142,7 @@ public partial class BoardView : UserControl
         Kick();
     }
 
+    // Fim do arraste: grava a posição, anexa/solta anexos e ajusta as linhas.
     void EndDrag()
     {
         if (_drag is not { } d) return;
@@ -1155,6 +1185,7 @@ public partial class BoardView : UserControl
 
     // ---------- anexar ----------
 
+    // Anexar: quais itens aceitam ser presos dentro de outro.
     static bool CanAttach(BoardItemViewModel i) => i.Kind is not (ItemKind.Line or ItemKind.Drawing or ItemKind.Text);
 
     /// <summary>Só o que tem papel ou fundo recebe anexos dentro. Um anexo não recebe outro: vai para o principal dele.</summary>
@@ -1235,6 +1266,7 @@ public partial class BoardView : UserControl
 
     // ---------- guias inteligentes ----------
 
+    // Guias de alinhamento: bordas, centros e espaços iguais dos vizinhos.
     void PrepareGuides(DragState d)
     {
         d.Others.Clear();
@@ -1360,6 +1392,7 @@ public partial class BoardView : UserControl
 
     TableDragState? _tableDrag;
 
+    // Arrastar o + da tabela: põe ou tira linhas/colunas conforme o arraste.
     void StartTableDrag(TableView.AddTag add, Point world)
     {
         if (add.Table.Table is not { Count: > 0 } t) return;
@@ -1436,6 +1469,7 @@ public partial class BoardView : UserControl
                 DrawGap(Hi(A, h), Lo(B, h), A, B, h, equal: true);
     }
 
+    // Desenho das guias: linha, distância em px e espaços iguais pintados.
     void DrawGap(double from, double to, Rect a, Rect b, bool h, bool equal)
     {
         if (to - from < 1) return;
@@ -1520,6 +1554,7 @@ public partial class BoardView : UserControl
         for (int i = 0; i < 8; i++) Place(Adorner.Children[i], pts[i]);
     }
 
+    // Contorno em volta de vários selecionados.
     void DrawGroupBox(List<BoardItemViewModel> sel)
     {
         var r = Rect.Empty;
@@ -1538,6 +1573,7 @@ public partial class BoardView : UserControl
         Adorner.Children.Add(rect);
     }
 
+    // Alças de redimensionar do item selecionado (e a alça da dobra das linhas).
     void BuildAdorner(BoardItemViewModel it)
     {
         Adorner.Children.Clear();
@@ -1574,6 +1610,7 @@ public partial class BoardView : UserControl
         Canvas.SetTop(fe, center.Y - fe.Height / 2);
     }
 
+    // Arrastando uma alça: muda o tamanho (Shift mantém a proporção).
     void StepHandle(HandleState h)
     {
         var it = h.Item;
@@ -1644,6 +1681,7 @@ public partial class BoardView : UserControl
         it.Y = Math.Round(nc.Y - nb.Height / 2);
     }
 
+    // Soltou a alça: grava o tamanho novo.
     void EndHandle()
     {
         if (_handle is { Handle: 9 or 10 } h && h.Item.Line is { } l)
@@ -1676,6 +1714,7 @@ public partial class BoardView : UserControl
 
     // ---------- conectores ----------
 
+    // Ponto no meio de um lado do item e o lado mais perto de um ponto.
     static Point SidePoint(Rect b, string? side) => side switch
     {
         "cima" => new Point(b.X + b.Width / 2, b.Y),
@@ -1713,6 +1752,7 @@ public partial class BoardView : UserControl
         return sides.OrderBy(s => (SidePoint(b, s) - p).LengthSquared).First();
     }
 
+    // Linha nascendo (botão direito arrastado de um item até outro).
     void UpdateConnector(Point p)
     {
         if (_connecting is not { } c) return;
@@ -1783,6 +1823,7 @@ public partial class BoardView : UserControl
     List<BoardItemViewModel>? _lines;
     List<BoardItemViewModel> Lines => _lines ??= _vm is null ? [] : _vm.Items.Where(i => i.Kind == ItemKind.Line).ToList();
 
+    // Linhas ligadas acompanham os itens que se moveram (em cascata).
     static Dictionary<int, BoardItemViewModel> MovedById(IEnumerable<BoardItemViewModel> moved)
     {
         var ids = new Dictionary<int, BoardItemViewModel>();
@@ -1821,6 +1862,7 @@ public partial class BoardView : UserControl
         return true;
     }
 
+    // Item debaixo de um ponto da tela (ignorando um).
     BoardItemViewModel? ItemAt(Point screen, BoardItemViewModel? except)
     {
         BoardItemViewModel? found = null;
@@ -1835,6 +1877,7 @@ public partial class BoardView : UserControl
 
     // ---------- desenho à mão, borracha, laço e linha ----------
 
+    // Desenho à mão: termina o traço, borracha e laço.
     void EndStroke()
     {
         var pts = _stroke!;
@@ -1891,6 +1934,7 @@ public partial class BoardView : UserControl
         Vm.SelectMany(hit, add: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
     }
 
+    // Ferramenta Linha: prévia enquanto arrasta e criação ao soltar.
     void UpdateLinePreview(Point p)
     {
         if (_lineStart is not { } s) return;
@@ -1928,6 +1972,7 @@ public partial class BoardView : UserControl
 
     // ---------- seleção em caixa ----------
 
+    // Seleção em caixa (Shift ou botão direito arrastando no vazio).
     void StartMarquee(Point p)
     {
         _marquee = true;
@@ -1971,6 +2016,7 @@ public partial class BoardView : UserControl
     Point? _rightEmpty;
     bool _rightMarquee;
 
+    // Botão direito apertado: lembra se foi num item (linha nova) ou no vazio (seleção em caixa); menu e bandeja abrem ao soltar.
     void OnRightDown(object sender, MouseButtonEventArgs e)
     {
         _rightStart = null;
@@ -2120,7 +2166,7 @@ public partial class BoardView : UserControl
     }
 }
 
-/// <summary>Configuração da paleta de desenho e das linhas (compartilhada).</summary>
+/// <summary>Aqui usamos a classe DrawSettings para guardar a configuração da paleta de desenho e das linhas (compartilhada).</summary>
 public static class DrawSettings
 {
     public static Color Color = Color.FromRgb(0x1D, 0x21, 0x30);

@@ -7,7 +7,7 @@ using System.Windows.Media.Imaging;
 namespace Quadtab.Rendering;
 
 /// <summary>
-/// Cursores próprios do app, todos no mesmo estilo: preenchimento branco, contorno preto arredondado e
+/// Aqui usamos a classe BoardCursors para criar os cursores próprios do app, todos no mesmo estilo: preenchimento branco, contorno preto arredondado e
 /// uma sombra suave. São desenhados no tamanho exato da escala da tela (100%, 125%, 150%, 200%...),
 /// por isso ficam nítidos; ao trocar de monitor com outra escala, são refeitos.
 /// </summary>
@@ -16,6 +16,7 @@ public static class BoardCursors
     static readonly Dictionary<string, Cursor> Cache = new();
     static double _scale = 1;
 
+    // ---------- cursores públicos ----------
     public static Cursor Arrow => Get("seta");
     // Sem mãozinhas: no quadro e em todo o app fica só a seta personalizada.
     public static Cursor Grab => Arrow;
@@ -44,14 +45,14 @@ public static class BoardCursors
         return c;
     }
 
+    // Cursor já desenhado (cache) ou desenha agora.
     static Cursor Get(string name)
     {
-        if (Cache.TryGetValue(name, out var c)) return c;
-        c = Create(name);
-        Cache[name] = c;
+        if (!Cache.TryGetValue(name, out var c)) Cache[name] = c = Create(name);
         return c;
     }
 
+    // Desenha e converte para um .cur na memória.
     static Cursor Create(string name)
     {
         try
@@ -62,52 +63,50 @@ public static class BoardCursors
         }
         catch
         {
-            return name switch { "mao" => Cursors.Hand, "mao-fechada" => Cursors.SizeAll, "texto" => Cursors.IBeam, _ => Cursors.Arrow };
+            return name == "texto" ? Cursors.IBeam : Cursors.Arrow; // se falhar, usa o do Windows
         }
     }
 
+    // Desenha a forma do cursor (com sombra em 3 camadas) num bitmap do tamanho certo.
     static BitmapSource Draw(string name, int size, out Point hotSpot)
     {
+        var (shape, hot, stroke) = name switch
         {
-            var (shape, hot, stroke) = name switch
-            {
-                "seta" => (ArrowShape(), new Point(4, 3), 1.6),
-                "mao" => (OpenHand(), new Point(16, 16), 1.25),
-                "mao-fechada" => (ClosedHand(), new Point(16, 16), 1.25),
-                "texto" => (Beam(), new Point(16, 16), 1.2),
-                "ns" => (DoubleArrow(90), new Point(16, 16), 1.2),
-                "we" => (DoubleArrow(0), new Point(16, 16), 1.2),
-                "nwse" => (DoubleArrow(45), new Point(16, 16), 1.2),
-                "nesw" => (DoubleArrow(-45), new Point(16, 16), 1.2),
-                _ => (Cross(), new Point(16, 16), 1.2),
-            };
+            "seta" => (ArrowShape(), new Point(4, 3), 1.6),
+            "texto" => (Beam(), new Point(16, 16), 1.2),
+            "ns" => (DoubleArrow(90), new Point(16, 16), 1.2),
+            "we" => (DoubleArrow(0), new Point(16, 16), 1.2),
+            "nwse" => (DoubleArrow(45), new Point(16, 16), 1.2),
+            "nesw" => (DoubleArrow(-45), new Point(16, 16), 1.2),
+            _ => (Cross(), new Point(16, 16), 1.2),
+        };
 
-            var dv = new DrawingVisual();
-            using (var dc = dv.RenderOpen())
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
+        {
+            dc.PushTransform(new ScaleTransform(size / 32.0, size / 32.0));
+            // sombra suave (três camadas deslocadas, sem efeito de desfoque)
+            foreach (var (dx, dy, a) in new[] { (0.6, 1.4, 22), (0.9, 1.9, 16), (1.2, 2.5, 10) })
             {
-                dc.PushTransform(new ScaleTransform(size / 32.0, size / 32.0));
-                // sombra suave (três camadas deslocadas, sem efeito de desfoque)
-                foreach (var (dx, dy, a) in new[] { (0.6, 1.4, 22), (0.9, 1.9, 16), (1.2, 2.5, 10) })
-                {
-                    dc.PushTransform(new TranslateTransform(dx, dy));
-                    dc.DrawGeometry(new SolidColorBrush(Color.FromArgb((byte)a, 0, 0, 0)),
-                        new Pen(new SolidColorBrush(Color.FromArgb((byte)a, 0, 0, 0)), stroke + 1.2) { LineJoin = PenLineJoin.Round }, shape);
-                    dc.Pop();
-                }
-                var pen = new Pen(Brushes.Black, stroke) { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-                dc.DrawGeometry(Brushes.White, pen, shape);
+                var shade = new SolidColorBrush(Color.FromArgb((byte)a, 0, 0, 0));
+                dc.PushTransform(new TranslateTransform(dx, dy));
+                dc.DrawGeometry(shade, new Pen(shade, stroke + 1.2) { LineJoin = PenLineJoin.Round }, shape);
                 dc.Pop();
             }
-            var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
-            bmp.Render(dv);
-            hotSpot = hot;
-            return bmp;
+            var pen = new Pen(Brushes.Black, stroke) { LineJoin = PenLineJoin.Round, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            dc.DrawGeometry(Brushes.White, pen, shape);
+            dc.Pop();
         }
+        var bmp = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bmp.Render(dv);
+        hotSpot = hot;
+        return bmp;
     }
 
     // Seta da imagem de referência: ponta no alto à esquerda, aba à direita, entalhe e ponta de baixo.
     static Geometry ArrowShape() => Geometry.Parse("M4,3 L24,9.4 L14.6,13.6 L10,23.4 Z");
 
+    // Retângulo arredondado (opcionalmente girado) e união de várias formas.
     static Geometry R(double x0, double y0, double x1, double y1, double r, double angle = 0, double cx = 0, double cy = 0)
     {
         var g = new RectangleGeometry(new Rect(x0, y0, x1 - x0, y1 - y0), r, r);
@@ -121,22 +120,6 @@ public static class BoardCursors
         for (int i = 1; i < parts.Length; i++) acc = Geometry.Combine(acc, parts[i], GeometryCombineMode.Union, null);
         return acc;
     }
-
-    static Geometry OpenHand() => Union(
-        R(9, 14, 23, 26, 5),               // palma
-        R(9.4, 6.5, 12.4, 17, 1.5),        // indicador
-        R(12.7, 4.8, 15.7, 16, 1.5),       // médio
-        R(16.0, 5.8, 19.0, 16, 1.5),       // anelar
-        R(19.3, 8.5, 22.1, 17, 1.4),       // mindinho
-        R(7.6, 12, 10.8, 23.5, 1.6, -35, 9.2, 23));    // polegar
-
-    static Geometry ClosedHand() => Union(
-        R(9, 12.5, 23, 25.5, 5),
-        R(9.3, 10.2, 12.3, 15.5, 1.5),
-        R(12.6, 9.6, 15.6, 15, 1.5),
-        R(15.9, 10.0, 18.9, 15, 1.5),
-        R(19.2, 11.2, 22.0, 16, 1.4),
-        R(6.6, 14.2, 10.4, 19.4, 1.8, -20, 10, 18));
 
     // Barra de texto: haste com serifas.
     static Geometry Beam() => Union(R(14.8, 7, 17.2, 25, 0.6), R(11.5, 6, 20.5, 8.4, 1.2), R(11.5, 23.6, 20.5, 26, 1.2));

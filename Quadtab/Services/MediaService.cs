@@ -9,7 +9,7 @@ using Quadtab.ViewModels;
 namespace Quadtab.Services;
 
 /// <summary>
-/// Imagens, vídeos, arquivos e links no quadro: soltar arquivos do Windows, colar (Ctrl+V),
+/// Aqui usamos a classe MediaService para pôr imagens, vídeos, arquivos e links no quadro: soltar arquivos do Windows, colar (Ctrl+V),
 /// prévia da 1ª página dos PDFs e cartão de prévia dos links. Tudo é copiado para Anexos\ no cofre.
 /// </summary>
 public static partial class MediaService
@@ -18,6 +18,7 @@ public static partial class MediaService
     static readonly string[] VideoExt = [".mp4", ".mov", ".wmv", ".avi", ".mkv", ".webm", ".m4v"];
     static readonly HttpClient Http = CreateHttp();
 
+    // Cliente HTTP único (prévias de link), com tempo limite de 8 s.
     static HttpClient CreateHttp()
     {
         var h = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
@@ -25,6 +26,7 @@ public static partial class MediaService
         return h;
     }
 
+    // ---------- arquivos ----------
     public static bool IsImage(string path) => ImageExt.Contains(Path.GetExtension(path).ToLowerInvariant());
     public static bool IsVideo(string path) => VideoExt.Contains(Path.GetExtension(path).ToLowerInvariant());
 
@@ -35,14 +37,13 @@ public static partial class MediaService
         var added = new List<BoardItemViewModel>();
         foreach (var f in files.Where(File.Exists))
         {
-            var p = at + offset;
-            var it = AddFile(vm, f, p);
-            if (it is not null) added.Add(it);
-            offset += new Vector(36, 36);
+            if (AddFile(vm, f, at + offset) is { } it) added.Add(it);
+            offset += new Vector(36, 36); // cada arquivo um pouco abaixo e à direita do anterior
         }
         if (added.Count > 1) vm.SelectMany(added, add: false);
     }
 
+    // Um arquivo: .md vira nota; imagem e vídeo viram itens próprios; o resto vira cartão (PDF ganha prévia).
     static BoardItemViewModel? AddFile(MainViewModel vm, string file, Point at)
     {
         var ext = Path.GetExtension(file).ToLowerInvariant();
@@ -66,6 +67,7 @@ public static partial class MediaService
         return item;
     }
 
+    // Item de imagem já copiado para Anexos.
     static BoardItemViewModel AddImageItem(MainViewModel vm, string rel, Point at)
     {
         // Tamanho real da imagem, limitado a 420 no lado maior.
@@ -110,6 +112,7 @@ public static partial class MediaService
         return item;
     }
 
+    /// <summary>O texto é um endereço http(s)? ("www." ganha https://).</summary>
     public static bool IsUrl(string text, out string url)
     {
         url = text.Trim();
@@ -123,22 +126,10 @@ public static partial class MediaService
     {
         try
         {
-            if (Clipboard.ContainsData(MainViewModel.ClipFormat))
-            {
-                vm.PasteItems(at);
-                return;
-            }
-            if (Clipboard.ContainsFileDropList())
-            {
-                AddFiles(vm, Clipboard.GetFileDropList().Cast<string>().ToList(), at);
-                return;
-            }
-            if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } img)
-            {
-                AddBitmap(vm, img, at);
-                return;
-            }
-            if (Clipboard.ContainsText())
+            if (Clipboard.ContainsData(MainViewModel.ClipFormat)) vm.PasteItems(at);
+            else if (Clipboard.ContainsFileDropList()) AddFiles(vm, Clipboard.GetFileDropList().Cast<string>().ToList(), at);
+            else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } img) AddBitmap(vm, img, at);
+            else if (Clipboard.ContainsText())
             {
                 var text = Clipboard.GetText();
                 if (IsUrl(text, out var url)) AddLink(vm, url, at);
@@ -158,6 +149,7 @@ public static partial class MediaService
 
     // ---------- prévia de PDF (Windows.Data.Pdf) ----------
 
+    // Desenha a 1ª página do PDF num PNG em Anexos.
     static async Task MakePdfPreviewAsync(BoardItemViewModel item)
     {
         if (item.FileFullPath is not { } path) return;
@@ -172,8 +164,7 @@ public static partial class MediaService
             using var net = stream.AsStreamForRead();
             using var ms = new MemoryStream();
             await net.CopyToAsync(ms);
-            var saved = StorageService.SaveAttachment(ms.ToArray(), Path.GetFileNameWithoutExtension(path) + " (prévia).png");
-            item.PreviewImage = saved;
+            item.PreviewImage = StorageService.SaveAttachment(ms.ToArray(), Path.GetFileNameWithoutExtension(path) + " (prévia).png");
         }
         catch { } // PDF protegido ou corrompido: fica o ícone
     }
@@ -189,6 +180,7 @@ public static partial class MediaService
     [GeneratedRegex("<title[^>]*>([^<]*)</title>", RegexOptions.IgnoreCase)]
     private static partial Regex TitleTag();
 
+    // Baixa a página, lê título/site/imagem das meta tags e baixa a imagem uma vez para Anexos.
     static async Task FetchPreviewAsync(BoardItemViewModel item, Uri uri)
     {
         try
@@ -219,8 +211,7 @@ public static partial class MediaService
                 var bytes = await ir.Content.ReadAsByteArrayAsync();
                 if (bytes.Length > 8_000_000) return;
                 var ext = type switch { "image/png" => ".png", "image/gif" => ".gif", "image/webp" => ".webp", _ => ".jpg" };
-                var saved = StorageService.SaveAttachment(bytes, $"link {uri.Host}{ext}");
-                item.PreviewImage = saved;
+                item.PreviewImage = StorageService.SaveAttachment(bytes, $"link {uri.Host}{ext}");
             }
         }
         catch { } // sem internet ou site bloqueou: o cartão fica só com o endereço

@@ -1,6 +1,8 @@
 namespace Quadtab.Models;
 
-/// <summary>Onde a câmera estava: centro (x, y) em coordenadas do mundo e zoom.</summary>
+// Aqui ficam os modelos do quadro inteiro (Board), da câmera, das cenas e do estado da interface (estado.json).
+
+/// <summary>Aqui usamos a classe Camera para lembrar onde a câmera estava: centro (x, y) em coordenadas do mundo e zoom.</summary>
 public sealed class Camera
 {
     public double X { get; set; }
@@ -8,7 +10,7 @@ public sealed class Camera
     public double Zoom { get; set; } = 1;
 }
 
-/// <summary>Vista salva da câmera (para navegar e apresentar).</summary>
+/// <summary>Aqui usamos a classe Scene para guardar uma vista salva da câmera (para navegar e apresentar).</summary>
 public sealed class Scene
 {
     public string Nome { get; set; } = "Cena";
@@ -17,7 +19,7 @@ public sealed class Scene
     public double Zoom { get; set; } = 1;
 }
 
-/// <summary>Um quadro inteiro, como fica salvo em Quadros\*.quadtab.</summary>
+/// <summary>Aqui usamos a classe Board para representar um quadro inteiro, como fica salvo em Quadros\*.quadtab.</summary>
 public sealed class Board
 {
     /// <summary>4 = já tem o modelo "liso" (quadros da versão 3 abrem como liso, que era o visual deles).</summary>
@@ -40,6 +42,7 @@ public sealed class Board
     /// <summary>Formato antigo (versão 1) guardava só o zoom; é ignorado ao abrir.</summary>
     public double? Zoom { get; set; }
 
+    // ---------- quadro de exemplo ----------
     /// <summary>Conteúdo da primeira vez que o app abre: uma página, três blocos e duas linhas ligando-os.</summary>
     public static Board CreateDefault()
     {
@@ -78,7 +81,7 @@ public sealed class Board
     }
 }
 
-/// <summary>Estado da interface, salvo em .quadtab\estado.json.</summary>
+/// <summary>Aqui usamos a classe AppState para guardar o estado da interface, salvo em .quadtab\estado.json.</summary>
 public sealed class AppState
 {
     public string? Cofre { get; set; }
@@ -90,7 +93,7 @@ public sealed class AppState
     /// <summary>Quadros e páginas fixados no topo da lateral.</summary>
     public List<string> Fixados { get; set; } = [];
 
-    public List<string> Abertos { get; set; } = ["fixados", "importantes", "paginas"];
+    public List<string> Abertos { get; set; } = ["fixados", "importantes"];
     public bool TelaCheia { get; set; }
     public bool LateralAberta { get; set; } = true;
 
@@ -121,7 +124,7 @@ public sealed class AppState
     public Dictionary<string, List<string>> OrdemPastas { get; set; } = [];
 }
 
-/// <summary>Estilo padrão das linhas novas (cor, traçado, tipo de traço e pontas). Muda quando o usuário edita uma linha.</summary>
+/// <summary>Aqui usamos a classe LineDefault para guardar o estilo padrão das linhas novas (cor, traçado, tipo de traço e pontas). Muda quando o usuário edita uma linha.</summary>
 public sealed class LineDefault
 {
     /// <summary>Cor da linha (#AARRGGBB). Null = o cinza padrão.</summary>

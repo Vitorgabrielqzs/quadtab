@@ -6,8 +6,10 @@ using Quadtab.Services;
 
 namespace Quadtab.Controls;
 
+// Aqui ficam as duas camadas de fundo do quadro: a moldura (FrameBackground) e a superfície infinita (SurfaceBackground).
+
 /// <summary>
-/// Moldura do quadro, uma diferente para cada modelo: Liso = faixa suave azulada (clara ou grafite,
+/// Aqui usamos a classe FrameBackground para desenhar a moldura do quadro, uma diferente para cada modelo: Liso = faixa suave azulada (clara ou grafite,
 /// segue o tema); Escuro = a mesma faixa, sempre grafite; Cortiça = madeira clara; Branco = alumínio; Lousa = madeira escura; Pontilhado = papel.
 /// Na tela cheia (FullBleed) a moldura continua, com os cantos arredondados, até a borda da tela (sem sombra de fora).
 /// </summary>
@@ -35,7 +37,7 @@ public sealed class FrameBackground : FrameworkElement
     public bool FullBleed { get => (bool)GetValue(FullBleedProperty); set => SetValue(FullBleedProperty, value); }
 
     /// <summary>Margem entre a moldura e a superfície (o "batente" da moldura).</summary>
-    public static double Inset(BoardModel m, bool fullBleed) => m is BoardModel.Liso or BoardModel.Escuro ? 10 : 16;
+    public static double Inset(BoardModel m) => m is BoardModel.Liso or BoardModel.Escuro ? 10 : 16;
 
     protected override Size MeasureOverride(Size availableSize) => default;
 
@@ -81,6 +83,7 @@ public sealed class FrameBackground : FrameworkElement
 
     static readonly Dictionary<(Color, Color), Brush> GrainCache = new();
 
+    // Veio da madeira: listras verticais finas que se repetem a cada 19 px.
     static Brush Grain(Color light, Color dark)
     {
         if (GrainCache.TryGetValue((light, dark), out var b)) return b;
@@ -104,7 +107,7 @@ public sealed class FrameBackground : FrameworkElement
 }
 
 /// <summary>
-/// Superfície do quadro infinito: liso com grade quadrada (segue o tema), cortiça, branco, escuro, lousa ou pontilhado.
+/// Aqui usamos a classe SurfaceBackground para desenhar a superfície do quadro infinito: liso com grade quadrada (segue o tema), cortiça, branco, escuro, lousa ou pontilhado.
 /// A textura se repete sem fim e acompanha a câmera: só a posição do pincel muda a cada quadro.
 /// </summary>
 public sealed class SurfaceBackground : FrameworkElement
@@ -118,15 +121,11 @@ public sealed class SurfaceBackground : FrameworkElement
     public static readonly DependencyProperty ShowGridProperty = DependencyProperty.Register(
         nameof(ShowGrid), typeof(bool), typeof(SurfaceBackground), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    public static readonly DependencyProperty FullBleedProperty = DependencyProperty.Register(
-        nameof(FullBleed), typeof(bool), typeof(SurfaceBackground), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
-
     public BoardModel Model { get => (BoardModel)GetValue(ModelProperty); set => SetValue(ModelProperty, value); }
     public bool ShowGrid { get => (bool)GetValue(ShowGridProperty); set => SetValue(ShowGridProperty, value); }
-    public bool FullBleed { get => (bool)GetValue(FullBleedProperty); set => SetValue(FullBleedProperty, value); }
 
-    /// <summary>Raio dos cantos da superfície (0 na tela cheia).</summary>
-    public static double CornerRadius(BoardModel m, bool fullBleed) => 16;
+    /// <summary>Raio dos cantos da superfície (o mesmo em todos os modelos, também na tela cheia).</summary>
+    public const double Radius = 16;
 
     static readonly Brush WhiteBase = ColorMath.Brush(Palette.C(0xF9FAFB));
     static readonly Brush ChalkBase = ColorMath.Brush(Palette.C(0x2C4838));
@@ -157,6 +156,7 @@ public sealed class SurfaceBackground : FrameworkElement
         Unloaded += (_, _) => ThemeService.Changed -= OnTheme;
     }
 
+    // Tema mudou: a grade do Liso ganha a cor nova.
     void OnTheme()
     {
         _grid = GridBrush((Color)FindResource("CanvasDotColor"));
@@ -170,6 +170,7 @@ public sealed class SurfaceBackground : FrameworkElement
         Children = { new LineGeometry(new Point(0, 0.5), new Point(GridTile, 0.5)), new LineGeometry(new Point(0.5, 0), new Point(0.5, GridTile)) },
     }), GridTile);
 
+    // Pincel que repete o desenho num quadrado de "size".
     static DrawingBrush Tile(Drawing d, double size) => new(d)
     {
         TileMode = TileMode.Tile,
@@ -193,6 +194,7 @@ public sealed class SurfaceBackground : FrameworkElement
         Place(_gridLight, GridTile, ox, oy, zoom);
     }
 
+    // Encaixa a peça da textura na posição da câmera (com o tamanho do nível de zoom).
     static void Place(TileBrush b, double baseSize, double ox, double oy, double zoom)
     {
         double s = BoardSurfaces.TileOnScreen(baseSize, zoom, out _);
@@ -208,7 +210,7 @@ public sealed class SurfaceBackground : FrameworkElement
     {
         var box = new Rect(RenderSize);
         if (box.Width <= 0 || box.Height <= 0) return;
-        double r = CornerRadius(Model, FullBleed);
+        double r = Radius;
         var clip = new RectangleGeometry(box, r, r);
         clip.Freeze();
         dc.PushClip(clip);
@@ -295,6 +297,7 @@ public sealed class SurfaceBackground : FrameworkElement
         if (ShowGrid) dc.DrawRectangle(World(Model is BoardModel.Lousa or BoardModel.Escuro ? _gridLight : _gridDark, GridTile), null, area);
     }
 
+    // Mancha de giz da lousa (degradê radial branco bem fraco).
     static void Smudge(DrawingContext dc, Rect area, double cx, double cy, double rx, double ry, byte alpha)
     {
         var c = new Point(area.X + area.Width * cx, area.Y + area.Height * cy);

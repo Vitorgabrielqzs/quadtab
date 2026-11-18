@@ -5,7 +5,7 @@ using Quadtab.Rendering;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Desenha sombras no formato do CSS (box-shadow) do tamanho do próprio elemento, sem usar Effect.
+/// Aqui usamos a classe Shadow para desenhar sombras no formato do CSS (box-shadow) do tamanho do próprio elemento, sem usar Effect.
 /// Fica atrás da caixa que faz sombra, na mesma célula do Grid.
 /// </summary>
 public sealed class Shadow : FrameworkElement

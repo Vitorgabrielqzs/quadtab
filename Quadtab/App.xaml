@@ -1,4 +1,5 @@
-﻿<Application x:Class="Quadtab.App"
+﻿<!-- Aqui usamos o App.xaml para juntar os recursos globais do app (fontes, estilos e o tema claro/escuro). -->
+<Application x:Class="Quadtab.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnMainWindowClose">

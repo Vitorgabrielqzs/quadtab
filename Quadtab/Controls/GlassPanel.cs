@@ -8,7 +8,7 @@ using Quadtab.Rendering;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Painel de vidro (Liquid Glass) em camadas:
+/// Aqui usamos a classe GlassPanel para o painel de vidro (Liquid Glass) em camadas:
 /// fundo desfocado → cor do vidro → brilho interno (segue o mouse) → conteúdo → borda de luz.
 /// A sombra é desenhada pelo próprio painel, sem Effect.
 /// </summary>

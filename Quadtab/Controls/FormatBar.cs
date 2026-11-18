@@ -8,7 +8,7 @@ using Quadtab.Behaviors;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Barra de formatação (estilo Notion) que aparece em cima do texto selecionado num campo de edição:
+/// Aqui usamos a classe FormatBar para a barra de formatação (estilo Notion) que aparece em cima do texto selecionado num campo de edição:
 /// cor do texto e do fundo, negrito, itálico, sublinhado, riscado, código e limpar formatação.
 /// Os botões não recebem foco, então o campo de texto continua sendo editado.
 /// </summary>
@@ -38,6 +38,8 @@ public sealed class FormatBar : ContentControl
     readonly StackPanel _flyout = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 6, 0, 0) };
     readonly Border _colorButtonFrame = new();
     RichEditBox? _owner;
+
+    // ---------- montagem: 2 linhas de botões e o painel de cores (escondido) ----------
 
     public FormatBar()
     {
@@ -74,6 +76,7 @@ public sealed class FormatBar : ContentControl
         Content = _glass;
     }
 
+    // Põe o elemento na célula (linha, coluna) da grade.
     static void Place(Grid grid, UIElement el, int row, int col)
     {
         Grid.SetRow(el, row);
@@ -81,6 +84,7 @@ public sealed class FormatBar : ContentControl
         grid.Children.Add(el);
     }
 
+    // Ícone pelo nome do recurso ("IcBold") ou pelo próprio desenho (caminho SVG).
     static Path Icon(string dataOrKey)
     {
         var geometry = dataOrKey.StartsWith("Ic", StringComparison.Ordinal) && Application.Current.TryFindResource(dataOrKey) is Geometry g
@@ -95,6 +99,7 @@ public sealed class FormatBar : ContentControl
         return p;
     }
 
+    // Título cinza de cada grupo de cores.
     static TextBlock Header(string text)
     {
         var t = new TextBlock { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 4, 0, 4) };
@@ -112,12 +117,12 @@ public sealed class FormatBar : ContentControl
         return b;
     }
 
+    // Botão "A" com moldura: abre e fecha o painel de cores.
     Border ColorButton()
     {
         var letter = new TextBlock { Text = "A", FontSize = 15, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         letter.SetResourceReference(TextBlock.ForegroundProperty, "InkBrush");
-        _colorButtonFrame.Width = 26;
-        _colorButtonFrame.Height = 26;
+        _colorButtonFrame.Width = _colorButtonFrame.Height = 26;
         _colorButtonFrame.CornerRadius = new CornerRadius(8);
         _colorButtonFrame.BorderThickness = new Thickness(1.5);
         _colorButtonFrame.SetResourceReference(Border.BorderBrushProperty, "Ink3Brush");
@@ -125,6 +130,7 @@ public sealed class FormatBar : ContentControl
         return Button("Cor do texto e do fundo", _colorButtonFrame, ToggleFlyout);
     }
 
+    // Grade de 5 colunas com "Padrão" e as cores (letra colorida para o texto; quadradinho para o fundo).
     UIElement Swatches((string Name, string Hex)[] colors, bool back)
     {
         // Cinco por linha em qualquer escala da tela (com largura fixa, a quinta caía para a linha de baixo em 125%).
@@ -165,10 +171,8 @@ public sealed class FormatBar : ContentControl
         Reposition();
     }
 
-    void Apply(Action<RichEditBox> op)
-    {
-        if (_owner is { HasSelection: true } tb) op(tb);
-    }
+    // Aplica a formatação na seleção do campo dono da barra.
+    void Apply(Action<RichEditBox> op) { if (_owner is { HasSelection: true } tb) op(tb); }
 
     // ---------- mostrar e esconder ----------
 
@@ -183,10 +187,7 @@ public sealed class FormatBar : ContentControl
         if (first) BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
     }
 
-    public void HideFor(RichEditBox tb)
-    {
-        if (_owner == tb) Hide();
-    }
+    public void HideFor(RichEditBox tb) { if (_owner == tb) Hide(); }
 
     public bool IsShownFor(RichEditBox tb) => _owner == tb && Visibility == Visibility.Visible;
 

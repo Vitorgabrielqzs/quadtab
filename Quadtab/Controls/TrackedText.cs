@@ -8,7 +8,7 @@ using Quadtab.Rendering;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Texto com espaçamento entre letras (letter-spacing do CSS), que o TextBlock do WPF não tem.
+/// Aqui usamos a classe TrackedText para desenhar texto com espaçamento entre letras (letter-spacing do CSS), que o TextBlock do WPF não tem.
 /// Quebra linhas por palavra, aceita "\n", maiúsculas automáticas e sombras de texto leves.
 /// </summary>
 public sealed class TrackedText : FrameworkElement
@@ -53,9 +53,9 @@ public sealed class TrackedText : FrameworkElement
     readonly List<(int Start, int Length, Brush Brush)> _backs = [];
     double _lineHeight;
 
-    public TrackedText() => IsHitTestVisible = true;
-
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi) => InvalidateMeasure();
+
+    // ---------- medida: quebra as linhas e monta os GlyphRuns ----------
 
     protected override Size MeasureOverride(Size available)
     {
@@ -81,10 +81,7 @@ public sealed class TrackedText : FrameworkElement
         if (rich is not null || !tf.TryGetGlyphTypeface(out var gt) || !HasAllGlyphs(gt, text))
         {
             // Caractere que a fonte não tem (ex.: emoji) ou texto formatado: usa o texto normal do WPF, sem espaçamento.
-            _fallback = new FormattedText(text, PtBr, FlowDirection.LeftToRight, tf, size, Foreground, ppd)
-            {
-                TextAlignment = TextAlignment,
-            };
+            _fallback = new FormattedText(text, PtBr, FlowDirection.LeftToRight, tf, size, Foreground, ppd) { TextAlignment = TextAlignment };
             if (rich is not null) ApplyRich(_fallback, rich);
             if (!double.IsNaN(LineHeight)) _fallback.LineHeight = LineHeight;
             if (!double.IsInfinity(maxW)) _fallback.MaxTextWidth = maxW;
@@ -143,6 +140,7 @@ public sealed class TrackedText : FrameworkElement
             if (cur.Length > 0) lineTexts.Add(cur.ToString());
         }
 
+        // Cada linha vira um GlyphRun com o avanço de cada letra + o espaçamento.
         double maxLine = 0;
         foreach (var lt in lineTexts)
         {
@@ -164,6 +162,7 @@ public sealed class TrackedText : FrameworkElement
         return new Size(maxLine, _lines.Count * _lineHeight);
     }
 
+    // Aplica negrito, itálico, código, decorações e cores no texto formatado (e guarda os fundos).
     void ApplyRich(FormattedText ft, Parsed rich)
     {
         _rich = true;
@@ -173,19 +172,14 @@ public sealed class TrackedText : FrameworkElement
             if (f.Bold) ft.SetFontWeight(RichText.BoldOf(FontWeight), start, length);
             if (f.Italic) ft.SetFontStyle(FontStyles.Italic, start, length);
             if (f.Code) ft.SetFontFamily(RichText.CodeFont, start, length);
-            if (f.Underline || f.Strike)
-            {
-                var d = new TextDecorationCollection();
-                if (f.Underline) d.Add(TextDecorations.Underline[0]);
-                if (f.Strike) d.Add(TextDecorations.Strikethrough[0]);
-                ft.SetTextDecorations(d, start, length);
-            }
+            if (RichText.Decorations(f) is { } d) ft.SetTextDecorations(d, start, length);
             if (RichText.BrushOf(f.Color) is { } ink) ft.SetForegroundBrush(ink, start, length);
             if (f.Code) _backs.Add((start, length, RichText.CodeBack));
             if (RichText.BrushOf(f.Back) is { } back) _backs.Add((start, length, back));
         }
     }
 
+    // A fonte tem todas as letras do texto?
     static bool HasAllGlyphs(GlyphTypeface gt, string text)
     {
         var map = gt.CharacterToGlyphMap;
@@ -194,6 +188,7 @@ public sealed class TrackedText : FrameworkElement
         return true;
     }
 
+    // Sombras do texto como cópias deslocadas (desfoque aproximado por anéis).
     void BuildShadowPasses()
     {
         _shadowPasses.Clear();
@@ -224,6 +219,8 @@ public sealed class TrackedText : FrameworkElement
         }
     }
 
+    // ---------- desenho ----------
+
     protected override void OnRender(DrawingContext dc)
     {
         double width = ActualWidth;
@@ -253,6 +250,7 @@ public sealed class TrackedText : FrameworkElement
         DrawLines(dc, width, 0, 0, Foreground);
     }
 
+    // Desenha as linhas alinhadas (esquerda, centro, direita) com um deslocamento.
     void DrawLines(DrawingContext dc, double width, double dx, double dy, Brush brush)
     {
         for (int i = 0; i < _lines.Count; i++)

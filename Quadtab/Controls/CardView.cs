@@ -11,14 +11,14 @@ using Quadtab.ViewModels;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Cartão no estilo do Canvas do Obsidian: retângulo reto com borda de 2 px na cor escolhida (cinza
+/// Aqui usamos a classe CardView para desenhar a caixa de texto como cartão no estilo do Canvas do Obsidian: retângulo reto com borda de 2 px na cor escolhida (cinza
 /// quando "branco"), fundo do tema levemente tingido, título opcional em negrito e o texto embaixo.
 /// Usado pelas caixas de texto.
 /// </summary>
 public sealed class CardView : ItemViewBase
 {
     const double Radius = 10;
-    Border _back = null!;
+    readonly Border _back = new() { CornerRadius = new CornerRadius(Radius) };
 
     /// <summary>As cores do cartão seguem a cor do quadro (não o tema do app): quadro escuro, cartão escuro.</summary>
     static bool DarkSurface => BoardSurfaces.Model is BoardModel.Lousa or BoardModel.Escuro || (BoardSurfaces.Model == BoardModel.Liso && ThemeService.IsDark);
@@ -26,12 +26,12 @@ public sealed class CardView : ItemViewBase
     static Brush CardLine => ShadowCache.BrushOf(DarkSurface ? Color.FromRgb(0x45, 0x46, 0x4D) : Color.FromRgb(0xD9, 0xDC, 0xE3));
     static Brush CardInk => ShadowCache.BrushOf(DarkSurface ? Color.FromRgb(0xE6, 0xE7, 0xEB) : Color.FromRgb(0x1F, 0x22, 0x29));
 
+    // O tema ou o fundo do quadro mudou: refaz o fundo e as cores.
     void Restyle()
     {
         _back.Background = CardFill;
         ApplyColor();
     }
-
 
     readonly Border _tint = new() { CornerRadius = new CornerRadius(Radius), IsHitTestVisible = false };
     readonly Border _frame = new() { CornerRadius = new CornerRadius(Radius), BorderThickness = new Thickness(2), Padding = new Thickness(16, 12, 16, 14) };
@@ -41,9 +41,7 @@ public sealed class CardView : ItemViewBase
 
     public CardView()
     {
-        var back = new Border { CornerRadius = new CornerRadius(Radius) };
-        _back = back;
-        Children.Add(back);
+        Children.Add(_back);
         Children.Add(_tint);
 
         var stack = new StackPanel();
@@ -66,6 +64,7 @@ public sealed class CardView : ItemViewBase
         Unloaded += (_, _) => { ThemeService.Changed -= Restyle; BoardSurfaces.Changed -= Restyle; };
     }
 
+    // Texto mostrado (título simples; corpo formatado), escondido enquanto edita.
     static TextBlock Text(string path, string field, double size, FontWeight weight, string editing, bool hiddenWhen)
     {
         var t = new TextBlock { FontSize = size, FontWeight = weight, TextWrapping = TextWrapping.Wrap, LineHeight = size * 1.5, LineStackingStrategy = LineStackingStrategy.MaxHeight };
@@ -120,29 +119,13 @@ public sealed class CardView : ItemViewBase
     {
         if (Item is null) return;
         var c = Item.Color;
+        var ink = c.IsDark ? Brushes.White : c.IsStrong ? Brushes.Black : CardInk;
         foreach (var part in new FrameworkElement[] { _titleText, _titleEdit, _bodyText, _bodyEdit })
-        {
-            var dp = part is Control ? Control.ForegroundProperty : TextBlock.ForegroundProperty;
-            if (c.IsDark) part.SetValue(dp, Brushes.White);
-            else if (c.IsStrong) part.SetValue(dp, Brushes.Black);
-            else part.SetValue(dp, CardInk);
-        }
-        if (c.IsStrong)
-        {
-            // Cor forte: o cartão inteiro na cor, sem o tom claro por cima.
-            _frame.BorderBrush = Brushes.Transparent; // sem cor na borda
-            _tint.Background = c.PaperBrush;
-        }
-        else if (c.Key == "branco")
-        {
-            _frame.BorderBrush = CardLine;
-            _tint.Background = null;
-        }
-        else
-        {
-            _frame.BorderBrush = Brushes.Transparent; // sem cor na borda
-            _tint.Background = ShadowCache.BrushOf(ColorMath.WithAlpha(c.Ink, 0.10));
-        }
+            part.SetValue(part is Control ? Control.ForegroundProperty : TextBlock.ForegroundProperty, ink);
+        bool white = !c.IsStrong && c.Key == "branco";
+        // Só o "branco" tem borda (cinza); cor forte pinta o cartão inteiro; as outras ganham um tom claro.
+        _frame.BorderBrush = white ? CardLine : Brushes.Transparent;
+        _tint.Background = c.IsStrong ? c.PaperBrush : white ? null : ShadowCache.BrushOf(ColorMath.WithAlpha(c.Ink, 0.10));
     }
 
     /// <summary>O título só aparece quando existe (ou está sendo escrito).</summary>

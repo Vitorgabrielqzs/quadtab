@@ -2,12 +2,17 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Quadtab.Models;
+using Quadtab.Services;
 
 namespace Quadtab.Rendering;
+
+// Aqui ficam as sombras do app: leitura do formato CSS, o tom conforme o fundo e o desenho rápido (com cache).
 
 /// <summary>Uma camada de sombra no formato do CSS: x y desfoque espalhamento cor [inset].</summary>
 public readonly record struct ShadowLayer(double X, double Y, double Blur, double Spread, Color Color, bool Inset);
 
+/// <summary>Aqui usamos a classe ShadowSpec para ler o texto de uma sombra (como no CSS) em camadas, com cache.</summary>
 public static class ShadowSpec
 {
     static readonly Dictionary<string, ShadowLayer[]> Cache = new();
@@ -34,14 +39,12 @@ public static class ShadowSpec
             }
             list.Add(new ShadowLayer(n[0], n[1], n[2], n[3], color, inset));
         }
-        var arr = list.ToArray();
-        Cache[spec] = arr;
-        return arr;
+        return Cache[spec] = list.ToArray();
     }
 }
 
 /// <summary>
-/// Tom das sombras dos itens conforme o fundo do quadro. As sombras foram pensadas para a cortiça
+/// Aqui usamos a classe ShadowTone para escolher o tom das sombras dos itens conforme o fundo do quadro. As sombras foram pensadas para a cortiça
 /// (marrom quente e fortes); nos fundos claros elas viravam uma faixa escura pesada embaixo dos itens.
 /// Cortiça: como foram feitas. Fundos claros: cinza-azulado e mais suaves. Fundos escuros: preto.
 /// Só as sombras marrons (dos itens) mudam; as dos painéis da interface ficam como estão.
@@ -58,15 +61,16 @@ public static class ShadowTone
 
     static ShadowTone()
     {
-        Quadtab.Rendering.BoardSurfaces.Changed += Refresh;
-        Quadtab.Services.ThemeService.Changed += Refresh;
+        BoardSurfaces.Changed += Refresh;
+        ThemeService.Changed += Refresh;
     }
 
-    static Tone Compute() => Quadtab.Rendering.BoardSurfaces.Model switch
+    // Tom pelo modelo do quadro (e pelo tema, no Liso).
+    static Tone Compute() => BoardSurfaces.Model switch
     {
-        Quadtab.Models.BoardModel.Cortica => Tone.Cork,
-        Quadtab.Models.BoardModel.Escuro or Quadtab.Models.BoardModel.Lousa => Tone.Dark,
-        Quadtab.Models.BoardModel.Liso when Quadtab.Services.ThemeService.IsDark => Tone.Dark,
+        BoardModel.Cortica => Tone.Cork,
+        BoardModel.Escuro or BoardModel.Lousa => Tone.Dark,
+        BoardModel.Liso when ThemeService.IsDark => Tone.Dark,
         _ => Tone.Light,
     };
 
@@ -98,18 +102,18 @@ public static class ShadowTone
                 return l with { Color = tinted };
             }).ToArray();
         }
-        Cache[key] = layers;
-        return layers;
+        return Cache[key] = layers;
     }
 }
 
 /// <summary>
-/// Sombras suaves sem Effect do WPF (que pesa muito): o desfoque é calculado uma única vez,
+/// Aqui usamos a classe ShadowCache para desenhar sombras suaves sem Effect do WPF (que pesa muito): o desfoque é calculado uma única vez,
 /// guardado em pequenos bitmaps e reaproveitado por todos os elementos com a mesma sombra.
 /// Formas grandes usam "9 fatias" (cantos + bordas esticadas), então redimensionar não custa nada.
 /// </summary>
 public static class ShadowCache
 {
+    // As 8 fatias de uma sombra (o centro é cor sólida) e o tamanho do canto.
     sealed class Slices
     {
         public required BitmapSource[] Pieces; // TL, T, TR, L, R, BL, B, BR
@@ -121,6 +125,9 @@ public static class ShadowCache
     static readonly Dictionary<uint, SolidColorBrush> BrushCache = new();
     const int MaxExact = 128;
 
+    // ---------- desenho ----------
+
+    /// <summary>Desenha todas as camadas de sombra em volta (ou dentro) da caixa.</summary>
     public static void Draw(DrawingContext dc, Rect box, double radius, ShadowLayer[] layers, bool hollow = false)
     {
         // Como no CSS: a primeira sombra da lista fica por cima.
@@ -131,18 +138,15 @@ public static class ShadowCache
         }
     }
 
+    /// <summary>Pincel sólido congelado, um por cor (reaproveitado em todo o app).</summary>
     public static SolidColorBrush BrushOf(Color c)
     {
         uint k = Key(c);
-        if (!BrushCache.TryGetValue(k, out var b))
-        {
-            b = new SolidColorBrush(c);
-            b.Freeze();
-            BrushCache[k] = b;
-        }
+        if (!BrushCache.TryGetValue(k, out var b)) BrushCache[k] = b = ColorMath.Brush(c);
         return b;
     }
 
+    // Sombra externa: 9 fatias quando a forma é grande; bitmap exato quando é pequena.
     static void DrawOuter(DrawingContext dc, Rect box, double radius, in ShadowLayer L, bool hollow)
     {
         // Item menor que o espalhamento negativo da sombra (imagem bem pequena): não há sombra para desenhar.
@@ -189,6 +193,7 @@ public static class ShadowCache
         if (hollow) dc.Pop();
     }
 
+    // Sombra interna (inset): recortada na caixa, com o "buraco" desfocado.
     static void DrawInset(DrawingContext dc, Rect box, double radius, in ShadowLayer L)
     {
         var hole = new Rect(box.X + L.X + L.Spread, box.Y + L.Y + L.Spread,
@@ -237,6 +242,7 @@ public static class ShadowCache
         dc.Pop();
     }
 
+    // Grupo de desenho sem antisserrilhado entre as fatias.
     static DrawingGroup AliasedGroup(out DrawingContext gc)
     {
         var g = new DrawingGroup();
@@ -245,6 +251,7 @@ public static class ShadowCache
         return g;
     }
 
+    // Monta as 9 fatias esticando as bordas até o tamanho do destino.
     static void DrawNine(DrawingContext gc, Slices s, Rect d, Color color, bool center)
     {
         double c = Math.Min(s.Corner, Math.Min(d.Width, d.Height) / 2);
@@ -272,6 +279,7 @@ public static class ShadowCache
 
     // ---------- geração dos bitmaps ----------
 
+    // Fatias de um raio/desfoque/cor (cache: arredonda para 0,5 px e 0,25 de sigma).
     static Slices GetSlices(double r, double sigma, Color color, bool inset)
     {
         var key = ((int)Math.Round(r * 2), (int)Math.Round(sigma * 4), Key(color), inset);
@@ -308,6 +316,7 @@ public static class ShadowCache
         return s;
     }
 
+    // Bitmap da sombra inteira para formas pequenas (cache limitado a 128).
     static (BitmapSource, int) GetExact(double w, double h, double r, double sigma, Color color, bool inset)
     {
         var key = ((int)Math.Round(w * 2), (int)Math.Round(h * 2), (int)Math.Round(r * 2), (int)Math.Round(sigma * 4), Key(color), inset);
@@ -356,6 +365,7 @@ public static class ShadowCache
         }
     }
 
+    // Raios dos 3 desfoques de caixa equivalentes a um gaussiano de sigma.
     static int[] Boxes(double sigma)
     {
         const int n = 3;
@@ -370,8 +380,10 @@ public static class ShadowCache
         return res;
     }
 
+    // Índice com repetição (textura sem emenda) ou preso na borda.
     static int Idx(int i, int n, bool wrap) => wrap ? ((i % n) + n) % n : Math.Clamp(i, 0, n - 1);
 
+    // Desfoque de caixa na horizontal e na vertical (soma corrida).
     static void BoxH(float[] src, float[] dst, int w, int h, int r, bool wrap)
     {
         float inv = 1f / (2 * r + 1);
@@ -403,6 +415,7 @@ public static class ShadowCache
         }
     }
 
+    // Converte a cobertura (0..1) num bitmap da cor com alfa pré-multiplicado.
     static BitmapSource ToBitmap(float[] field, int w, int h, Color c)
     {
         var px = new byte[w * h * 4];
@@ -421,5 +434,6 @@ public static class ShadowCache
         return bmp;
     }
 
+    // Cor como número (chave de cache).
     static uint Key(Color c) => ((uint)c.A << 24) | ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
 }

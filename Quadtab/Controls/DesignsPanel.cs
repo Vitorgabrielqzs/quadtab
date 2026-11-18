@@ -12,7 +12,7 @@ using Quadtab.ViewModels;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Aba "Designs" (abaixo de "Novo quadro"): galeria de vidro com os modelos prontos de mapas mentais.
+/// Aqui usamos a classe DesignsPanel para a aba "Designs" (abaixo de "Novo quadro"): galeria de vidro com os modelos prontos de mapas mentais.
 /// Clicar escolhe; "Importar design como novo quadro" (ou 2 cliques no cartão) cria o quadro e abre.
 /// </summary>
 public sealed class DesignsPanel : Grid
@@ -64,37 +64,17 @@ public sealed class DesignsPanel : Grid
 
         // Rodapé: o escolhido e o botão de importar
         var foot = new DockPanel { Margin = new Thickness(8, 14, 0, 2) };
-        var import = new Button
-        {
-            Style = (Style)Application.Current.FindResource("SoftButton"), Height = 42, Padding = new Thickness(20, 0, 20, 0),
-            Foreground = Brushes.White, FontSize = 14.5, FontWeight = FontWeights.SemiBold, Cursor = Cursors.Arrow,
-            ToolTip = "Cria um quadro novo com o design escolhido e abre · Enter",
-            Content = UiKit.Row(new Icon { Data = UiKit.G("IcPlus"), Size = 16, Foreground = Brushes.White, Margin = new Thickness(0, 0, 8, 0) },
-                new TextBlock { Text = "Importar design como novo quadro", VerticalAlignment = VerticalAlignment.Center }),
-        };
+        var import = FootButton("IcPlus", "Importar design como novo quadro", "Cria um quadro novo com o design escolhido e abre · Enter", Import, 20);
+        import.Foreground = Brushes.White;
         import.SetResourceReference(BackgroundProperty, "AccentBrush");
         import.SetResourceReference(UI.HoverBackgroundProperty, "AccentBrush");
-        UI.SetRadius(import, new CornerRadius(21));
-        Press.SetIsEnabled(import, true);
-        import.Click += (_, _) => Import();
-        DockPanel.SetDock(import, Dock.Right);
         foot.Children.Add(import);
         // "Visualizar design": abre só o design no quadro, sem criar arquivo; lá, "Adicionar quadro" importa.
-        var view = new Button
-        {
-            Style = (Style)Application.Current.FindResource("SoftButton"), Height = 42, Padding = new Thickness(18, 0, 18, 0),
-            Margin = new Thickness(0, 0, 8, 0), FontSize = 14.5, FontWeight = FontWeights.SemiBold, Cursor = Cursors.Arrow,
-            ToolTip = "Mostra o design no quadro, só para ver, antes de adicionar · Espaço",
-            Content = UiKit.Row(new Icon { Data = UiKit.G("IcEye"), Size = 16, Margin = new Thickness(0, 0, 8, 0) },
-                new TextBlock { Text = "Visualizar design", VerticalAlignment = VerticalAlignment.Center }),
-        };
+        var view = FootButton("IcEye", "Visualizar design", "Mostra o design no quadro, só para ver, antes de adicionar · Espaço", Preview, 18);
+        view.Margin = new Thickness(0, 0, 8, 0);
         view.SetResourceReference(Control.ForegroundProperty, "InkBrush");
         view.SetResourceReference(Control.BackgroundProperty, "FillBrush");
         view.SetResourceReference(UI.HoverBackgroundProperty, "Fill2Brush");
-        UI.SetRadius(view, new CornerRadius(21));
-        Press.SetIsEnabled(view, true);
-        view.Click += (_, _) => Preview();
-        DockPanel.SetDock(view, Dock.Right);
         foot.Children.Add(view);
         _chosen.VerticalAlignment = VerticalAlignment.Center;
         _chosen.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -109,10 +89,28 @@ public sealed class DesignsPanel : Grid
         Select(0);
     }
 
+    // Botão grande e redondo do rodapé (ícone + texto), encostado à direita.
+    static Button FootButton(string icon, string text, string tip, Action click, double pad)
+    {
+        var b = new Button
+        {
+            Style = (Style)Application.Current.FindResource("SoftButton"), Height = 42, Padding = new Thickness(pad, 0, pad, 0),
+            FontSize = 14.5, FontWeight = FontWeights.SemiBold, Cursor = Cursors.Arrow, ToolTip = tip,
+            Content = UiKit.Row(new Icon { Data = UiKit.G(icon), Size = 16, Margin = new Thickness(0, 0, 8, 0) },
+                new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center }),
+        };
+        UI.SetRadius(b, new CornerRadius(21));
+        Press.SetIsEnabled(b, true);
+        b.Click += (_, _) => click();
+        DockPanel.SetDock(b, Dock.Right);
+        return b;
+    }
+
     public GlassPanel Glass { get; }
 
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>Abre com fade e mola e pega o foco (para as setas, Enter e Espaço).</summary>
     public void Show()
     {
         Visibility = Visibility.Visible;
@@ -128,6 +126,7 @@ public sealed class DesignsPanel : Grid
 
     public void Hide() => Visibility = Visibility.Collapsed;
 
+    // Esc fecha; Enter importa; Espaço visualiza; setas escolhem (5 por linha).
     void OnKey(object sender, KeyEventArgs e)
     {
         switch (e.Key)
@@ -144,19 +143,23 @@ public sealed class DesignsPanel : Grid
         e.Handled = true;
     }
 
+    // Destaca o cartão escolhido e mostra o nome no rodapé.
     void Select(int i)
     {
         _pick = i;
         for (int k = 0; k < _cards.Count; k++)
         {
-            if (k == i) _cards[k].SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
-            else _cards[k].BorderBrush = Brushes.Transparent;
-            if (k == i) _cards[k].SetResourceReference(Border.BackgroundProperty, "FillBrush");
-            else _cards[k].Background = Brushes.Transparent;
+            if (k == i)
+            {
+                _cards[k].SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
+                _cards[k].SetResourceReference(Border.BackgroundProperty, "FillBrush");
+            }
+            else _cards[k].BorderBrush = _cards[k].Background = Brushes.Transparent;
         }
         _chosen.Text = "Escolhido: " + DesignLibrary.All[i].Name;
     }
 
+    // Cria o quadro com o design e abre (Import) ou só mostra no quadro, sem arquivo (Preview).
     void Import()
     {
         var d = DesignLibrary.All[_pick];
@@ -177,16 +180,17 @@ public sealed class DesignsPanel : Grid
         catch (Exception ex) { App.Log(ex); }
     }
 
+    // Cartão: miniatura desenhada, nome e descrição.
     Border Card(Design d, int index)
     {
         var stack = new StackPanel();
+        var board = d.Build();
         var preview = new Border
         {
-            Height = PreviewHeight, CornerRadius = new CornerRadius(14), ClipToBounds = true,
+            Height = PreviewHeight, CornerRadius = new CornerRadius(14), ClipToBounds = true, Background = SurfaceOf(board.Modelo),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0x3C, 0x42, 0x5A)), BorderThickness = new Thickness(1),
-            Child = new Image { Source = Preview(d.Build()), Stretch = Stretch.Uniform },
+            Child = new Image { Source = Preview(board), Stretch = Stretch.Uniform },
         };
-        preview.Background = SurfaceOf(d.Build().Modelo);
         stack.Children.Add(preview);
         var name = new TextBlock { Text = d.Name, FontSize = 14, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 9, 0, 2), TextTrimming = TextTrimming.CharacterEllipsis };
         name.SetResourceReference(TextBlock.ForegroundProperty, "InkBrush");
@@ -223,12 +227,14 @@ public sealed class DesignsPanel : Grid
         _ => Color.FromRgb(0xFF, 0xFF, 0xFF),
     });
 
+    // "#AARRGGBB" → cor (vazia ou inválida = fallback).
     static Color Hex(string? hex, Color fallback)
     {
         if (string.IsNullOrEmpty(hex)) return fallback;
         try { return (Color)ColorConverter.ConvertFromString(hex); } catch { return fallback; }
     }
 
+    // Caixa do item no quadro (texto solto: estimada pelo tamanho da letra).
     static Rect BoxOf(BoardItem it)
     {
         var def = BoardItemViewModel.DefaultSize(BoardItem.KindFromJson(it.Tipo));

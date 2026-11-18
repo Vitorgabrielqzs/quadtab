@@ -6,7 +6,7 @@ namespace Quadtab.Services;
 public sealed record Design(string Name, string Description, Func<Board> Build);
 
 /// <summary>
-/// Modelos prontos de mapas mentais e diagramas (inspirados nos tipos clássicos: mapa radial, espinha de
+/// Aqui usamos a classe DesignLibrary para guardar os modelos prontos de mapas mentais e diagramas (inspirados nos tipos clássicos: mapa radial, espinha de
 /// peixe de Ishikawa, linha do tempo, bolha dupla, árvore, fluxograma, kanban, matriz de Eisenhower,
 /// Ikigai e mural de sonhos). Cada um vira um quadro novo, com textos de exemplo para trocar.
 /// </summary>
@@ -32,7 +32,7 @@ public static class DesignLibrary
 
     // ---------- montagem ----------
 
-    /// <summary>Ajuda a montar um quadro: cada método põe um item e devolve o id.</summary>
+    /// <summary>Aqui usamos a classe Builder para montar um quadro: cada método põe um item e devolve o id.</summary>
     sealed class Builder(string model)
     {
         readonly List<BoardItem> _items = [];
@@ -40,6 +40,7 @@ public static class DesignLibrary
         int _id;
         readonly string _today = DateTime.Today.ToString("yyyy-MM-dd");
 
+        // Dá id, camada e data ao item e guarda a caixa dele (para ligar linhas depois).
         int Put(BoardItem it, double w, double h)
         {
             it.Id = ++_id;
@@ -98,6 +99,7 @@ public static class DesignLibrary
         public int Icon(double cx, double cy, double size, string shape, string fill, string border) =>
             ShapeAt(cx, cy, size, size, shape, fill, border, "", 14, "#FF1D2130", false, 2);
 
+        /// <summary>Ponto do meio de um lado do item (onde a linha encosta).</summary>
         public (double X, double Y) Anchor(int id, string side)
         {
             var (x, y, w, h) = _boxes[id];
@@ -138,6 +140,7 @@ public static class DesignLibrary
             return Line(new LineEnd { X = x1, Y = y1 }, new LineEnd { X = x2, Y = y2, Item = toItem, Lado = toSide, Ponta = arrow ? "seta" : "nenhuma" }, color, "reta", width, "solido");
         }
 
+        // Cria o item de linha com as duas pontas.
         int Line(LineEnd de, LineEnd para, string color, string type, double width, string trace)
         {
             double x = Math.Min(de.X, para.X), y = Math.Min(de.Y, para.Y);
@@ -149,6 +152,7 @@ public static class DesignLibrary
             }, 4, 4);
         }
 
+        /// <summary>Fecha o quadro: linhas atrás, compacta (scale) e posiciona a câmera no centro.</summary>
         public Board Done(bool hideTitle = false, double scale = 1)
         {
             // Linhas atrás de tudo: os itens ficam por cima das pontas.
@@ -168,6 +172,7 @@ public static class DesignLibrary
             };
         }
 
+        // Caixa atual do item (tamanho escolhido ou o estimado ao criar).
         (double X, double Y, double W, double H) Box(BoardItem it)
         {
             var (_, _, w, h) = _boxes[it.Id];
@@ -223,6 +228,7 @@ public static class DesignLibrary
         }
     }
 
+    // Cores da paleta em "#AARRGGBB" (papel e tinta) e a mesma cor com outro alfa.
     static (string Paper, string Ink) C(string key)
     {
         var c = Palette.Get(key);

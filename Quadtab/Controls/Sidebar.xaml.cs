@@ -11,7 +11,7 @@ using Quadtab.ViewModels;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Barra lateral no estilo da lateral do app Claude: ações no topo, quadros pelo último aberto (com os
+/// Aqui usamos a classe Sidebar para a barra lateral no estilo da lateral do app Claude: ações no topo, quadros pelo último aberto (com os
 /// itens de cada um recuados), Fixados, Importantes, Páginas e a árvore da pasta Cofre.
 /// </summary>
 public partial class Sidebar : UserControl
@@ -29,6 +29,7 @@ public partial class Sidebar : UserControl
     MainWindow? Shell => Window.GetWindow(this) as MainWindow;
     LibraryViewModel Lib => App.Library;
 
+    // O espaço livre do topo arrasta a janela.
     void OnDragArea(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource == sender) Shell?.DragArea(e);
@@ -38,7 +39,7 @@ public partial class Sidebar : UserControl
 
     void OnNewBoard(object sender, RoutedEventArgs e) => Lib.NewBoard();
     void OnNewFolder(object sender, RoutedEventArgs e) => Lib.CreateFolder(boards: Lib.Checked);
-    void OnDesigns(object sender, RoutedEventArgs e) => Shell?.ShowDesigns(DesignsButton);
+    void OnDesigns(object sender, RoutedEventArgs e) => Shell?.ShowDesigns();
 
     /// <summary>Clique direito no espaço vazio da lateral: criar um quadro ou uma pasta.</summary>
     void OnEmptyRightClick(object sender, MouseButtonEventArgs e)
@@ -47,8 +48,8 @@ public partial class Sidebar : UserControl
         e.Handled = true;
         shell.ShowActions(e.GetPosition(shell.Root),
         [
-            new("Novo quadro", "IcPlus", () => Lib.NewBoard()) { Tip = "Cria um quadro novo · Ctrl+N" },
-            new("Nova pasta", "IcFolderPlus", () => Lib.CreateFolder(boards: Lib.Checked)) { Tip = "Cria uma pasta para guardar quadros" },
+            new("Novo quadro", "IcPlus", () => OnNewBoard(this, e)) { Tip = "Cria um quadro novo · Ctrl+N" },
+            new("Nova pasta", "IcFolderPlus", () => OnNewFolder(this, e)) { Tip = "Cria uma pasta para guardar quadros" },
             new("Designs…", "IcDesigns", () => shell.ShowDesigns()) { Tip = "Abre os mapas mentais prontos para importar" },
         ]);
     }
@@ -59,6 +60,7 @@ public partial class Sidebar : UserControl
 
     static SideNode? NodeOf(object sender) => (sender as FrameworkElement)?.Tag as SideNode;
 
+    // Clique numa linha: abre o quadro/nota/item, abre ou fecha a pasta (Ctrl+clique marca vários quadros).
     void OnNodeClick(object sender, RoutedEventArgs e)
     {
         if (NodeOf(sender) is not { IsRenaming: false } n) return;
@@ -80,6 +82,7 @@ public partial class Sidebar : UserControl
         }
     }
 
+    // Arquivo do Cofre: quadro e nota abrem no app; o resto no programa padrão do Windows.
     static void OpenFile(string path)
     {
         if (path.EndsWith(StorageService.BoardExt, StringComparison.OrdinalIgnoreCase)) App.OpenBoard(path);
@@ -87,6 +90,7 @@ public partial class Sidebar : UserControl
         else ItemViewBase.OpenExternal(path);
     }
 
+    // "Ver todos" e afins: abrem a galeria (ou o Procurar, nas notas).
     void OnMore(string what)
     {
         if (what == "vazia") return;
@@ -95,6 +99,7 @@ public partial class Sidebar : UserControl
         else Lib.ShowGalleryCommand.Execute(what);
     }
 
+    // Setinha, 2 cliques e F2 (renomear), fixar e importante de cada linha.
     void OnToggleNode(object sender, RoutedEventArgs e)
     {
         if (NodeOf(sender) is { } n) n.IsOpen = !n.IsOpen;
@@ -128,6 +133,7 @@ public partial class Sidebar : UserControl
         e.Handled = true;
     }
 
+    // "…" e botão direito numa linha: o menu daquela linha.
     void OnNodeMore(object sender, RoutedEventArgs e)
     {
         if (NodeOf(sender) is { } n && sender is FrameworkElement b && Shell is { } shell)
@@ -153,6 +159,7 @@ public partial class Sidebar : UserControl
     /// <summary>Nome de uma pasta de quadros para os menus (subpastas com "›").</summary>
     static string FolderLabel(string folder) => StorageService.FolderKey(folder).Replace("\\", " › ");
 
+    // Linhas do menu conforme o tipo (quadro, nota, pasta de quadros, pasta do Cofre, arquivo).
     List<ActionItem> ActionsFor(SideNode n) => n.Kind switch
     {
         SideKind.Board => BoardActions(n),
@@ -238,6 +245,7 @@ public partial class Sidebar : UserControl
 
     const string DragFormat = "QuadtabBoards";
 
+    // Guarda onde o arraste começou; passando de 6 px, arrasta o(s) quadro(s).
     void OnNodeMouseDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(this);
@@ -258,6 +266,7 @@ public partial class Sidebar : UserControl
         finally { ClearDropMark(); }
     }
 
+    // Caminhos dos quadros que estão sendo arrastados.
     static List<string>? DraggedBoards(DragEventArgs e) =>
         e.Data.GetData(DragFormat) is string s ? s.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList() : null;
 
@@ -396,6 +405,7 @@ public partial class Sidebar : UserControl
             Dispatcher.BeginInvoke(() => { tb.Focus(); tb.SelectAll(); }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
+    // Renomear: Enter grava, Esc cancela, clicar fora grava.
     void OnRenameKey(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox { Tag: SideNode n } tb) return;
@@ -417,10 +427,10 @@ public partial class Sidebar : UserControl
     {
         ThemeIcon.Data = (Geometry)FindResource(ThemeService.IsDark ? "IcSun" : "IcMoon");
         if (!animate) return;
-        Anim.Set(ThemeTurn, System.Windows.Media.RotateTransform.AngleProperty, -90.0);
+        Anim.Set(ThemeTurn, RotateTransform.AngleProperty, -90.0);
         Anim.Set(ThemeScale, ScaleTransform.ScaleXProperty, 0.6);
         Anim.Set(ThemeScale, ScaleTransform.ScaleYProperty, 0.6);
-        Anim.To(ThemeTurn, System.Windows.Media.RotateTransform.AngleProperty, 0, 0.55, Anim.Tap);
+        Anim.To(ThemeTurn, RotateTransform.AngleProperty, 0, 0.55, Anim.Tap);
         Anim.To(ThemeScale, ScaleTransform.ScaleXProperty, 1, 0.5, Anim.Tap);
         Anim.To(ThemeScale, ScaleTransform.ScaleYProperty, 1, 0.5, Anim.Tap);
     }
@@ -440,14 +450,18 @@ public partial class Sidebar : UserControl
         Anim.Set(shown, OpacityProperty, 0.0);
         Anim.To(shown, OpacityProperty, 1, 0.25, Anim.Ease);
         Anim.To(slide, TranslateTransform.XProperty, 0, 0.45, Anim.Panel);
-        if (open) Lib.Refresh();
         // Com a página aberta, o botão fica marcado (pílula de destaque).
-        if (open) VaultButton.SetResourceReference(BackgroundProperty, "Fill2Brush");
+        if (open)
+        {
+            Lib.Refresh();
+            VaultButton.SetResourceReference(BackgroundProperty, "Fill2Brush");
+        }
         else VaultButton.Background = Brushes.Transparent;
     }
 
     void OnVaultExplorer(object sender, RoutedEventArgs e) => ItemViewBase.OpenExternal(StorageService.Root);
 
+    // Ajustes abre acima do botão (segundo clique fecha).
     void OnSettings(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement b || Shell is not { } shell) return;

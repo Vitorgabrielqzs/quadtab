@@ -1,3 +1,4 @@
+<!-- Aqui usamos o PageNote.xaml para o visual da nota no quadro (folha, título e texto). -->
 <UserControl x:Class="Quadtab.Controls.PageNote"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

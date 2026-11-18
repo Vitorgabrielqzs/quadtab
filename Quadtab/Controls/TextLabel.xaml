@@ -1,3 +1,4 @@
+<!-- Aqui usamos o TextLabel.xaml para o texto solto (letras grandes direto no quadro) e o campo de edição dele. -->
 <UserControl x:Class="Quadtab.Controls.TextLabel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

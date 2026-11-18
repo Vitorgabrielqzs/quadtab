@@ -1,3 +1,4 @@
+<!-- Aqui usamos o GlassBlock.xaml para o visual do bloco de vidro (título e texto sobre o vidro colorido). -->
 <UserControl x:Class="Quadtab.Controls.GlassBlock"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

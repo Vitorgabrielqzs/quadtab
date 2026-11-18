@@ -6,7 +6,9 @@ using System.Windows.Input;
 
 namespace Quadtab.Behaviors;
 
-/// <summary>Regras das listas nas notas, em texto puro: no arquivo .md a bolinha é sempre "- ".</summary>
+// Aqui ficam as listas com bolinha e numeradas: as regras de texto (ListText), a ligação ao campo (ListTyping) e o conversor.
+
+/// <summary>Aqui usamos a classe ListText para guardar as regras das listas nas notas, em texto puro: no arquivo .md a bolinha é sempre "- ".</summary>
 public static partial class ListText
 {
     public const char Bullet = '•';
@@ -17,16 +19,14 @@ public static partial class ListText
     [GeneratedRegex(@"(?m)^([ \t]*)[-*] (?!\[[ xX]\] )")] private static partial Regex MdBullet();
     [GeneratedRegex(@"(?m)^([ \t]*)• ")] private static partial Regex ShownBullet();
 
+    // "- " no arquivo ↔ "• " na tela.
     public static string ToDisplay(string md) => MdBullet().Replace(md, "$1• ");
     public static string ToMarkdown(string shown) => ShownBullet().Replace(shown, "$1- ");
 
+    // Início e fim da linha onde está o cursor.
     static int LineStart(string text, int caret) => caret == 0 ? 0 : text.LastIndexOf('\n', caret - 1) + 1;
 
-    static int LineEnd(string text, int caret)
-    {
-        int end = text.IndexOf('\n', caret);
-        return end < 0 ? text.Length : end;
-    }
+    static int LineEnd(string text, int caret) => text.IndexOf('\n', caret) is var end and >= 0 ? end : text.Length;
 
     /// <summary>
     /// Shift+Enter numa linha de lista: abre o próximo item (e renumera os de baixo). Item vazio (Shift+Enter
@@ -95,7 +95,7 @@ public static partial class ListText
     }
 }
 
-/// <summary>Liga as listas a um campo de texto. bullets = mostra "•" no lugar de "- " (edição direto na nota).</summary>
+/// <summary>Aqui usamos a classe ListTyping para ligar as listas a um campo de texto. bullets = mostra "•" no lugar de "- " (edição direto na nota).</summary>
 public static class ListTyping
 {
     public static void Attach(TextBox box, bool bullets)

@@ -13,26 +13,7 @@ using Quadtab.Services;
 
 namespace Quadtab.ViewModels;
 
-/// <summary>Um grupo da lista "No quadro" (Post-its, Páginas...), que abre e fecha.</summary>
-public partial class OutlineGroup : ObservableObject
-{
-    public OutlineGroup(string key, string name)
-    {
-        Key = key;
-        Name = name;
-        IsOpen = StorageService.State.Abertos.Contains("grupo:" + key);
-    }
-
-    public string Key { get; }
-    public string Name { get; }
-    public ObservableCollection<BoardItemViewModel> Items { get; } = [];
-    [ObservableProperty] public partial bool IsOpen { get; set; }
-    partial void OnIsOpenChanged(bool value) => MainViewModel.SaveOpen("grupo:" + Key, value);
-    public int Count => Items.Count;
-    public void Changed() => OnPropertyChanged(nameof(Count));
-}
-
-/// <summary>Estado de um quadro aberto e da interface. As telas só leem daqui e chamam os métodos.</summary>
+/// <summary>Aqui usamos a classe MainViewModel para o estado de um quadro aberto e da interface. As telas só leem daqui e chamam os métodos.</summary>
 public partial class MainViewModel : ObservableObject
 {
     static readonly Random Rng = new();
@@ -49,13 +30,13 @@ public partial class MainViewModel : ObservableObject
     const long MaxUndoBytes = 32 * 1024 * 1024;
     readonly List<byte[]> _undo = [];
     readonly List<byte[]> _redo = [];
-    string? _lastSnapshot;
     DateTime _lastCheckpoint;
 
     static List<BoardItem>? _clipboard;
     static ItemStyle? _styleClip;
     static (string Color, Fastening Fastening, bool Lined)? _noteStyleClip;
 
+    // Abre um quadro: cria os itens, separa notas que dividiam arquivo, conserta anexos e liga o salvamento automático.
     public MainViewModel(Board board, string path)
     {
         FilePath = path;
@@ -72,7 +53,6 @@ public partial class MainViewModel : ObservableObject
         NewStyle = Enum.TryParse<NoteStyle>(StorageService.State.EstiloPostit, out var ns) ? ns : NoteStyle.Pin;
         Search = "";
         BoardSearch = "";
-        OutlineOpen = StorageService.State.Abertos.Contains("noquadro");
         foreach (var s in board.Cenas) Scenes.Add(s);
 
         var usedNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -117,17 +97,17 @@ public partial class MainViewModel : ObservableObject
                     break;
                 }
         }
-        foreach (var (k, n) in GroupNames) OutlineGroups.Add(new OutlineGroup(k, n));
-        RefreshOutline();
-        _lastSnapshot = Snapshot();
+        RenumberNotes();
 
         // Salva ~1 s depois da última mudança.
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _saveTimer.Tick += async (_, _) =>
         {
             _saveTimer.Stop();
-            await StorageService.SaveBoardAsync(FilePath, ToBoard());
-            IsSaving = false;
+            bool ok = await StorageService.SaveBoardAsync(FilePath, ToBoard());
+            SaveDone(ok);
+            // Não gravou (arquivo travado, disco cheio...): tenta de novo em 5 s, sem perder a mudança.
+            if (!ok && !_closed) { _saveTimer.Interval = TimeSpan.FromSeconds(5); _saveTimer.Start(); }
         };
 
         // Atualiza o "editado há ..." de tempos em tempos.
@@ -136,23 +116,6 @@ public partial class MainViewModel : ObservableObject
         _clockTimer.Start();
         if (separated) MarkDirty(); // grava logo os arquivos novos, para não separar de novo na próxima vez
     }
-
-    static readonly (string Key, string Name)[] GroupNames =
-    [
-        ("postit", "Post-its"), ("pagina", "Notas"), ("bloco", "Blocos de vidro"), ("texto", "Textos"),
-        ("forma", "Formas e linhas"), ("desenho", "Desenhos"), ("midia", "Imagens e arquivos"),
-    ];
-
-    static string GroupOf(BoardItemViewModel i) => i.Kind switch
-    {
-        ItemKind.PostIt => "postit",
-        ItemKind.Page => "pagina",
-        ItemKind.Block => "bloco",
-        ItemKind.Text or ItemKind.TextBox => "texto",
-        ItemKind.Shape or ItemKind.Line or ItemKind.Table => "forma",
-        ItemKind.Drawing => "desenho",
-        _ => "midia",
-    };
 
     /// <summary>Valores que o WPF não aceita (arquivo danificado ou editado à mão) viram valores válidos, para o quadro abrir sempre.</summary>
     static void Sanitize(BoardItem m)
@@ -185,6 +148,8 @@ public partial class MainViewModel : ObservableObject
         }
         m.Tracos = m.Tracos?.Where(t => t?.Pontos is not null).ToList();
         m.Tabela = m.Tabela?.Where(r => r is not null).Select(r => r.Select(c => c ?? "").ToList()).ToList();
+        // Tabela sem linhas ou sem colunas (arquivo editado à mão): volta à tabela padrão.
+        if (m.Tabela is { } t && (t.Count == 0 || t.All(r => r.Count == 0))) m.Tabela = null;
     }
 
     /// <summary>Blocos com o título padrão antigo ("Bloco de vidro") ficam com o título livre.</summary>
@@ -208,7 +173,7 @@ public partial class MainViewModel : ObservableObject
         {
             var text = StorageService.ReadPage(StorageService.Full(rel));
             m.Titulo = StorageService.PageTitle(StorageService.Full(rel));
-            m.Texto = Markdown.StripTitle(text, m.Titulo);
+            m.Texto = Markdown.StripTitle(text);
             return;
         }
         var name = string.IsNullOrWhiteSpace(m.Titulo) ? "Nova nota" : m.Titulo;
@@ -216,13 +181,12 @@ public partial class MainViewModel : ObservableObject
         var path = existing ?? StorageService.CreatePage(name, $"# {name}\n\n{m.Texto}\n");
         m.Arquivo = StorageService.Rel(path);
         m.Titulo = StorageService.PageTitle(path);
-        m.Texto = Markdown.StripTitle(StorageService.ReadPage(path), m.Titulo);
+        m.Texto = Markdown.StripTitle(StorageService.ReadPage(path));
     }
 
     public ObservableCollection<BoardItemViewModel> Items { get; } = [];
 
     /// <summary>Lista "No quadro" em grupos que abrem e fecham.</summary>
-    public ObservableCollection<OutlineGroup> OutlineGroups { get; } = [];
 
     public ObservableCollection<Scene> Scenes { get; } = [];
 
@@ -277,16 +241,16 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusText))]
     public partial bool IsSaving { get; set; }
 
+    /// <summary>A última gravação falhou: o status avisa até uma gravação dar certo.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    public partial bool SaveError { get; set; }
+
     [ObservableProperty] public partial string Search { get; set; }
     [ObservableProperty] public partial string BoardSearch { get; set; }
     [ObservableProperty] public partial BoardItemViewModel? Selected { get; set; }
     [ObservableProperty] public partial NoteStyle NewStyle { get; set; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(OutlineArrowAngle))]
-    public partial bool OutlineOpen { get; set; }
-    partial void OnOutlineOpenChanged(bool value) => SaveOpen("noquadro", value);
-    public double OutlineArrowAngle => OutlineOpen ? 90 : 0;
 
     public BoardItemViewModel? EditingItem { get; private set; }
 
@@ -296,6 +260,7 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public bool IsPreview { get; private set; }
 
+    // Prévia de design: quadro só para ver, num caminho falso (nada é gravado).
     public static MainViewModel Preview(Board board, string name)
     {
         var vm = new MainViewModel(board, StorageService.PreviewBoardPath) { IsPreview = true };
@@ -308,7 +273,7 @@ public partial class MainViewModel : ObservableObject
     public string ModelName => Palette.ModelName(Model);
     public int ModelIndex => (int)Model;
     public string Subtitle => $"Editado {EditedAgo()}";
-    public string StatusText => $"{(IsSaving ? "Salvando…" : "Salvo")}{(ReadOnly ? " · somente visualização" : "")}";
+    public string StatusText => $"{(SaveError ? "Não foi possível salvar" : IsSaving ? "Salvando…" : "Salvo")}{(ReadOnly ? " · somente visualização" : "")}";
     public string ZoomText => $"{Math.Round(Zoom * 100)}%";
     public string TitleToggleVerb => TitleHidden ? "Mostrar" : "Ocultar";
     public string TitleToggleLabel => TitleToggleVerb + " título";
@@ -316,6 +281,7 @@ public partial class MainViewModel : ObservableObject
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
 
+    // Guarda em estado.json quais seções estão abertas.
     public static void SaveOpen(string key, bool open)
     {
         var list = StorageService.State.Abertos;
@@ -324,6 +290,7 @@ public partial class MainViewModel : ObservableObject
         StorageService.SaveState();
     }
 
+    // "Editado agora", "há 5 min"... para o subtítulo.
     string EditedAgo()
     {
         var span = DateTime.Now - _lastEdit;
@@ -338,11 +305,9 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] void ToggleSidebar() => SidebarOpen = !SidebarOpen;
     [RelayCommand] void ToggleTitle() => TitleHidden = !TitleHidden;
     [RelayCommand] void ToggleTray() => TrayOpen = !TrayOpen;
-    [RelayCommand] void ToggleOutline() => OutlineOpen = !OutlineOpen;
-    [RelayCommand] void SetModel(BoardModel model) => Model = model;
-    [RelayCommand] void SetNewStyle(NoteStyle style) => NewStyle = style;
 
     partial void OnModelChanged(BoardModel value) { Checkpoint(); MarkDirty(); }
+    // Mudanças do quadro que precisam ser gravadas.
     partial void OnTitleHiddenChanged(bool value) => MarkDirty();
     partial void OnShowGridChanged(bool value) => MarkDirty(touchClock: false);
     partial void OnDiagramModeChanged(bool value) => MarkDirty(touchClock: false);
@@ -382,6 +347,7 @@ public partial class MainViewModel : ObservableObject
     // Selected é o item principal; vários itens podem estar selecionados ao mesmo tempo (IsSelected).
     bool _keepOthers;
 
+    // Seleção: um item, vários, todos ou nenhum.
     partial void OnSelectedChanged(BoardItemViewModel? oldValue, BoardItemViewModel? newValue)
     {
         if (!_keepOthers)
@@ -442,12 +408,12 @@ public partial class MainViewModel : ObservableObject
     {
         _query = BoardItemViewModel.Normalize((value ?? "").Trim());
         foreach (var it in Items) it.IsDimmed = !it.Matches(_query);
-        RefreshOutline();
     }
 
     /// <summary>Busca no quadro (Ctrl+F): destaca os resultados.</summary>
     public List<BoardItemViewModel> BoardSearchHits { get; private set; } = [];
 
+    // Ctrl+F: guarda os resultados e apaga os outros itens.
     partial void OnBoardSearchChanged(string value)
     {
         var q = BoardItemViewModel.Normalize((value ?? "").Trim());
@@ -472,6 +438,7 @@ public partial class MainViewModel : ObservableObject
         else MarkDirty(touchClock: false);
     }
 
+    // Cenas (vistas salvas da câmera).
     public void AddScene(string name)
     {
         if (Camera is null) return;
@@ -487,8 +454,8 @@ public partial class MainViewModel : ObservableObject
 
     // ---------- itens ----------
 
+    // Camada mais alta usada no quadro.
     int TopZ() => Items.Count == 0 ? 0 : Items.Max(i => i.Z);
-    public int NextId() => ++_seq;
 
     /// <summary>Cria um item dos tipos clássicos centralizado em (cx, cy), em coordenadas do mundo.</summary>
     public BoardItemViewModel Add(ItemKind kind, string color, double cx, double cy, NoteStyle? style = null)
@@ -557,6 +524,7 @@ public partial class MainViewModel : ObservableObject
         return vm;
     }
 
+    // Caligrafia do texto (título, texto solto, formas...).
     public void SetFont(BoardItemViewModel vm, string font)
     {
         if (vm.Style.Fonte == font) return;
@@ -633,6 +601,7 @@ public partial class MainViewModel : ObservableObject
         return vm;
     }
 
+    // Apaga o item (e as setas ligadas a ele e os anexos); notas apagam o .md de vez.
     public void Remove(BoardItemViewModel vm)
     {
         Checkpoint();
@@ -647,7 +616,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (table.Table is not { Count: > 0 } t) return;
         Checkpoint();
-        int cols = t.Max(r => r.Count);
+        int cols = Math.Max(1, t.Max(r => r.Count));
         var copy = t.Select(r => r.ToList()).ToList();
         if (row) copy.Add(Enumerable.Repeat("", cols).ToList());
         else
@@ -665,8 +634,8 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Arrastando o + da tabela: deixa com tantas linhas ou colunas, a partir da tabela como estava (voltar o arraste devolve o texto).</summary>
     public void TableResize(BoardItemViewModel table, List<List<string>> original, double originalWidth, bool row, int count)
     {
-        int cols = original.Max(r => r.Count);
-        if (count == (row ? table.Table!.Count : table.Table!.Max(r => r.Count))) return;
+        int cols = Math.Max(1, original.Count == 0 ? 0 : original.Max(r => r.Count));
+        if (count < 1 || count == (row ? table.Table!.Count : table.Table!.Max(r => r.Count))) return;
         var copy = original.Select(r => r.ToList()).ToList();
         if (row)
         {
@@ -707,6 +676,7 @@ public partial class MainViewModel : ObservableObject
 
     // ---------- anexos: um item preso em cima ou embaixo de outro ----------
 
+    // Anexos: itens presos dentro de outro (em cima ou embaixo), que o principal leva junto.
     IEnumerable<BoardItemViewModel> AttachedItems(BoardItemViewModel parent) => Items.Where(i => i.AttachedTo == parent.Id);
 
     /// <summary>Tudo o que está anexado a este item, inclusive anexos dos anexos.</summary>
@@ -724,6 +694,7 @@ public partial class MainViewModel : ObservableObject
 
     const double AttachInset = 14, AttachGap = 10;
 
+    // Prende um item dentro de outro (guarda o tamanho de antes para voltar ao soltar).
     public void Attach(BoardItemViewModel child, BoardItemViewModel parent, string side)
     {
         child.AttachPrevW = child.W;
@@ -734,6 +705,7 @@ public partial class MainViewModel : ObservableObject
         MarkDirty();
     }
 
+    // Solta o anexo e devolve o tamanho de antes.
     public void Detach(BoardItemViewModel child)
     {
         var parent = Items.FirstOrDefault(i => i.Id == child.AttachedTo);
@@ -757,6 +729,7 @@ public partial class MainViewModel : ObservableObject
 
         var above = kids.Where(c => c.AttachSide == "cima").ToList();
         var below = kids.Where(c => c.AttachSide != "cima").ToList();
+        // Altura empilhada dos anexos de um lado e a posição de cada um.
         double Stack(List<BoardItemViewModel> list) => list.Count == 0 ? 0 : list.Sum(c => c.Box.Height) + AttachGap * (list.Count - 1);
         double aboveHeight = Stack(above), belowHeight = Stack(below);
         double top = above.Count == 0 ? 0 : aboveHeight + AttachInset, bottom = below.Count == 0 ? 0 : belowHeight + AttachInset;
@@ -781,6 +754,7 @@ public partial class MainViewModel : ObservableObject
         Place(below, box.Bottom - (postIt ? 26 : AttachInset) - belowHeight);
     }
 
+    // Tipos que crescem para caber os anexos.
     static bool IsFillKind(BoardItemViewModel c) => c.Kind is ItemKind.Page or ItemKind.PostIt or ItemKind.Block or ItemKind.TextBox or ItemKind.Table;
 
     /// <summary>Notas, post-its e cartões ocupam a largura toda; formas e imagens só encolhem se não couberem.</summary>
@@ -806,6 +780,7 @@ public partial class MainViewModel : ObservableObject
         if (item.AttachedTo is { } id && Items.FirstOrDefault(i => i.Id == id) is { } parent) LayoutAttached(parent);
     }
 
+    // Tira o item do quadro sem desfazer próprio (usado por Remove e pelo desfazer).
     void RemoveCore(BoardItemViewModel vm)
     {
         if (!Items.Contains(vm)) return; // já saiu junto com outro item (seta do item apagado)
@@ -847,11 +822,8 @@ public partial class MainViewModel : ObservableObject
         StructureChanged();
     }
 
-    public BoardItemViewModel Duplicate(BoardItemViewModel src)
-    {
-        var copies = DuplicateMany([src], new Vector(30, 30));
-        return copies[0];
-    }
+    // Duplicar: cópia 30 px abaixo e à direita (nota ganha arquivo próprio).
+    public BoardItemViewModel Duplicate(BoardItemViewModel src) => DuplicateMany([src], new Vector(30, 30))[0];
 
     /// <summary>Copia vários itens com um deslocamento (Ctrl+D, Alt + arrastar). Linhas entre eles continuam ligadas.</summary>
     public List<BoardItemViewModel> DuplicateMany(IReadOnlyList<BoardItemViewModel> src, Vector offset, bool select = true)
@@ -862,6 +834,7 @@ public partial class MainViewModel : ObservableObject
         return PasteModels(models, offset, select);
     }
 
+    // Cola itens (ids novos, grupos novos e linhas religadas entre as cópias).
     List<BoardItemViewModel> PasteModels(List<BoardItem> models, Vector offset, bool select = true)
     {
         Checkpoint();
@@ -919,10 +892,12 @@ public partial class MainViewModel : ObservableObject
         return result;
     }
 
+    // Número de grupo ainda não usado.
     int NewGroupId() => Items.Select(i => i.Group ?? 0).DefaultIfEmpty(0).Max() + 1 + Rng.Next(1000);
 
     // ---------- camadas ----------
 
+    // Camadas: frente, fundo, topo e base.
     void Renumber(List<BoardItemViewModel> order)
     {
         for (int i = 0; i < order.Count; i++) order[i].Z = i + 1;
@@ -961,20 +936,9 @@ public partial class MainViewModel : ObservableObject
         foreach (var i in items.OrderByDescending(i => i.Z).ToList()) SendToBack(i);
     }
 
-    /// <summary>Arrastar na lista "No quadro": coloca o item logo acima (ou abaixo) de outro.</summary>
-    public void PlaceAbove(BoardItemViewModel moving, BoardItemViewModel target, bool above)
-    {
-        if (moving == target) return;
-        Checkpoint();
-        var order = Items.OrderBy(i => i.Z).ToList();
-        order.Remove(moving);
-        int t = order.IndexOf(target);
-        order.Insert(above ? t + 1 : t, moving);
-        Renumber(order);
-    }
-
     // ---------- cor e estilo ----------
 
+    // Cor do item (formas, caixas, linhas e tabelas também ajustam o estilo).
     public void SetColor(BoardItemViewModel vm, string key)
     {
         Checkpoint();
@@ -1010,6 +974,7 @@ public partial class MainViewModel : ObservableObject
         vm.Style = s;
     }
 
+    // Fixação ou pautado do post-it (vale para os próximos).
     public void SetStyle(BoardItemViewModel vm, NoteStyle style)
     {
         Checkpoint();
@@ -1022,18 +987,7 @@ public partial class MainViewModel : ObservableObject
         else vm.Fastening = (Fastening)(int)style;
     }
 
-    /// <summary>Muda o estilo livre de todos os selecionados (inspetor).</summary>
-    public void EditStyle(Action<ItemStyle> change)
-    {
-        Checkpoint(coalesce: true);
-        foreach (var vm in SelectedItems)
-        {
-            var s = vm.Style.Clone();
-            change(s);
-            vm.Style = s;
-        }
-    }
-
+    // Copiar e colar estilo entre itens.
     public void CopyStyle(BoardItemViewModel vm)
     {
         _styleClip = vm.Style.Clone();
@@ -1055,6 +1009,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // Bloqueia ou desbloqueia (todos os selecionados juntos).
     public void ToggleLock(BoardItemViewModel item)
     {
         Checkpoint();
@@ -1062,14 +1017,9 @@ public partial class MainViewModel : ObservableObject
         foreach (var i in item.IsSelected ? SelectedItems.ToList() : [item]) i.Locked = on;
     }
 
-    public void SetDescription(BoardItemViewModel item, string text)
-    {
-        Checkpoint(coalesce: true);
-        item.Description = text;
-    }
-
     // ---------- grupos ----------
 
+    // Agrupar e desagrupar a seleção.
     public void GroupSelection()
     {
         var sel = SelectedItems.ToList();
@@ -1089,6 +1039,7 @@ public partial class MainViewModel : ObservableObject
 
     // ---------- alinhar e distribuir ----------
 
+    // Alinhar e distribuir os selecionados.
     public void Align(string how)
     {
         var sel = SelectedItems.Where(i => !i.Locked && i.Kind != ItemKind.Line).ToList();
@@ -1136,6 +1087,7 @@ public partial class MainViewModel : ObservableObject
 
     // ---------- área de transferência ----------
 
+    // Copiar, recortar (para a área de transferência do Windows, em formato próprio).
     public void Copy()
     {
         var sel = SelectedItems.ToList();
@@ -1177,6 +1129,7 @@ public partial class MainViewModel : ObservableObject
 
     // ---------- edição de texto ----------
 
+    // Entrar e sair da edição de texto de um item.
     public void BeginEdit(BoardItemViewModel vm, EditField field)
     {
         Checkpoint();
@@ -1218,22 +1171,20 @@ public partial class MainViewModel : ObservableObject
         catch (UnauthorizedAccessException ex) { App.Log(ex); }
     }
 
-    /// <summary>Chamado ao soltar um item arrastado: reordena a lista da lateral.</summary>
-    public void CommitMove()
-    {
-        RefreshOutline();
-        MarkDirty();
-    }
+    /// <summary>Chamado ao soltar um item arrastado (ou ao terminar uma mudança de linha): grava.</summary>
+    public void CommitMove() => MarkDirty();
 
+    // Itens entraram ou saíram: contadores, números dos post-its e salvamento.
     void StructureChanged()
     {
         OnPropertyChanged(nameof(Count));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(SelectionCount));
-        RefreshOutline();
+        RenumberNotes();
         MarkDirty();
     }
 
+    // Um item mudou: anexos acompanham, a busca reavalia e o quadro é gravado.
     void OnItemChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_restoring) return;
@@ -1243,11 +1194,7 @@ public partial class MainViewModel : ObservableObject
         {
             case nameof(BoardItemViewModel.Title):
             case nameof(BoardItemViewModel.Text):
-                if (sender is BoardItemViewModel vm && _query.Length > 0)
-                {
-                    vm.IsDimmed = !vm.Matches(_query);
-                    RefreshOutline();
-                }
+                if (sender is BoardItemViewModel vm && _query.Length > 0) vm.IsDimmed = !vm.Matches(_query);
                 MarkDirty();
                 break;
             case nameof(BoardItemViewModel.ColorKey):
@@ -1275,7 +1222,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>Atualiza a lista em grupos mexendo só no que mudou (sem recriar as linhas).</summary>
     /// <summary>Numera os post-its do quadro pela ordem em que foram colados (1, 2, 3...).</summary>
     void RenumberNotes()
     {
@@ -1283,30 +1229,12 @@ public partial class MainViewModel : ObservableObject
         foreach (var it in Items.Where(i => i.Kind == ItemKind.PostIt).OrderBy(i => i.Id)) it.NoteNumber = ++n;
     }
 
-    void RefreshOutline()
-    {
-        RenumberNotes();
-        var matching = Items.Where(i => i.Matches(_query)).OrderBy(i => i.Y).ThenBy(i => i.X).ToList();
-        foreach (var g in OutlineGroups)
-        {
-            var target = matching.Where(i => GroupOf(i) == g.Key).ToList();
-            for (int i = 0; i < target.Count; i++)
-            {
-                if (i < g.Items.Count && ReferenceEquals(g.Items[i], target[i])) continue;
-                int j = g.Items.IndexOf(target[i]);
-                if (j >= 0) g.Items.Move(j, i);
-                else g.Items.Insert(i, target[i]);
-            }
-            while (g.Items.Count > target.Count) g.Items.RemoveAt(g.Items.Count - 1);
-            g.Changed();
-        }
-    }
-
     // ---------- desfazer / refazer ----------
 
     string Snapshot() => StorageService.SerializeItems(Items.OrderBy(i => i.Id).Select(i => i.ToModel()).ToList())
                          + "|" + Palette.ModelKey(Model);
 
+    // Fotos do desfazer comprimidas (Deflate) para gastar pouca memória.
     static byte[] Pack(string text)
     {
         using var output = new MemoryStream();
@@ -1349,6 +1277,7 @@ public partial class MainViewModel : ObservableObject
     public void Undo() { if (!ReadOnly) Travel(_undo, _redo); }
     public void Redo() { if (!ReadOnly) Travel(_redo, _undo); }
 
+    // Desfazer/refazer: troca o estado atual pela foto guardada.
     void Travel(List<byte[]> from, List<byte[]> to)
     {
         EndEdit();
@@ -1364,9 +1293,17 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRedo));
     }
 
+    // Recria os itens a partir de uma foto, reaproveitando os que não mudaram.
     void Restore(string snap)
     {
         _restoring = true;
+        try { RestoreCore(snap); }
+        finally { _restoring = false; } // um erro no meio não pode deixar o salvamento desligado
+        StructureChanged();
+    }
+
+    void RestoreCore(string snap)
+    {
         int bar = snap.LastIndexOf('|');
         var models = StorageService.DeserializeItems(snap[..bar]);
         Model = Palette.ParseModel(snap[(bar + 1)..]);
@@ -1394,12 +1331,11 @@ public partial class MainViewModel : ObservableObject
             vm.IsDimmed = !vm.Matches(_query);
         }
         Selected = null;
-        _restoring = false;
-        StructureChanged();
     }
 
     // ---------- salvamento ----------
 
+    // Marca que algo mudou: "Salvando…" e grava ~1 s depois.
     void MarkDirty(bool touchClock = true)
     {
         if (_saveTimer is null || _restoring || IsPreview) return; // ainda no construtor; prévia de design nunca grava
@@ -1418,16 +1354,29 @@ public partial class MainViewModel : ObservableObject
     {
         if (!_saveTimer.IsEnabled || IsPreview) return;
         _saveTimer.Stop();
-        StorageService.SaveBoard(FilePath, ToBoard());
-        IsSaving = false;
+        SaveDone(StorageService.SaveBoard(FilePath, ToBoard()));
     }
 
+    // Resultado de uma gravação: volta ao "Salvo" (e ao ritmo normal) ou mostra o erro.
+    void SaveDone(bool ok)
+    {
+        IsSaving = false;
+        SaveError = !ok;
+        if (ok) _saveTimer.Interval = TimeSpan.FromSeconds(1);
+    }
+
+    bool _closed;
+
+    // Fecha o quadro gravando na hora.
     public void Close()
     {
         Flush();
+        _closed = true;
+        _saveTimer.Stop();
         _clockTimer.Stop();
     }
 
+    // O quadro como é gravado no arquivo.
     public Board ToBoard() => new()
     {
         Titulo = BoardTitle,

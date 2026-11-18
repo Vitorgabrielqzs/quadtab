@@ -5,7 +5,7 @@ using Quadtab.Rendering;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Fundo da janela: cor Bg com três manchas em gradiente radial que somem a 62% do raio.
+/// Aqui usamos a classe BackdropBlobs para desenhar o fundo da janela: cor Bg com três manchas em gradiente radial que somem a 62% do raio.
 /// Com Saturation > 1 desenha a versão "vista através do vidro" (saturate do CSS).
 /// </summary>
 public sealed class BackdropBlobs : FrameworkElement
@@ -40,16 +40,10 @@ public sealed class BackdropBlobs : FrameworkElement
         Blob(dc, S(Blob3), new Point(w * 0.35, h * 1.08), 700, 520);
     }
 
+    // Uma mancha: degradê radial elíptico que some até transparente.
     static void Blob(DrawingContext dc, Color c, Point center, double rx, double ry)
     {
-        var b = new RadialGradientBrush
-        {
-            MappingMode = BrushMappingMode.Absolute,
-            Center = center,
-            GradientOrigin = center,
-            RadiusX = rx,
-            RadiusY = ry,
-        };
+        var b = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute, Center = center, GradientOrigin = center, RadiusX = rx, RadiusY = ry };
         // Some até a mesma cor com alfa 0 (sem clarear no meio do caminho).
         b.GradientStops.Add(new GradientStop(c, 0));
         b.GradientStops.Add(new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 0.62));

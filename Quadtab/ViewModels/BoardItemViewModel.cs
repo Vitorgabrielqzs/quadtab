@@ -9,14 +9,16 @@ using Quadtab.Services;
 
 namespace Quadtab.ViewModels;
 
+/// <summary>Qual parte do item está sendo editada.</summary>
 public enum EditField { None, Title, Text }
 
-/// <summary>Um item do quadro na tela: dados salvos + estado da interface (seleção, edição, busca).</summary>
+/// <summary>Aqui usamos a classe BoardItemViewModel para um item do quadro na tela: dados salvos + estado da interface (seleção, edição, busca).</summary>
 public partial class BoardItemViewModel : ObservableObject
 {
     static readonly string[] Months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
     static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
 
+    // Lê o item salvo para as propriedades da tela.
     public BoardItemViewModel(BoardItem m)
     {
         Id = m.Id;
@@ -206,7 +208,7 @@ public partial class BoardItemViewModel : ObservableObject
     public Color InkColor => Color.Ink;
     public Brush PaperBrush => Color.PaperBrush;
 
-    /// <summary>Fundo e letra do item quando o quadro estÃ¡ bem afastado (sÃ³ o tÃ­tulo aparece).</summary>
+    /// <summary>Fundo e letra do item quando o quadro está bem afastado (só o título aparece).</summary>
     public Brush OverviewFill => Kind switch
     {
         ItemKind.Page => ShadowCache.BrushOf(System.Windows.Media.Color.FromRgb(0xFF, 0xFE, 0xFA)),
@@ -406,6 +408,7 @@ public partial class BoardItemViewModel : ObservableObject
         _ => new ItemStyle(),
     };
 
+    // "#AARRGGBB" → pincel (inválido = cor padrão).
     static Brush BrushFromHex(string? hex, Color fallback)
     {
         if (string.IsNullOrEmpty(hex)) return ShadowCache.BrushOf(fallback);
@@ -421,16 +424,33 @@ public partial class BoardItemViewModel : ObservableObject
     /// <summary>Minúsculas e sem acento: "Gratidão" encontra "gratidao".</summary>
     public static string Normalize(string s)
     {
-        var d = s.ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        var lower = s.ToLowerInvariant();
+        string d;
+        // Texto com caractere Unicode quebrado (colado de outro programa ou de um arquivo): o quebrado sai, a busca continua.
+        try { d = lower.Normalize(System.Text.NormalizationForm.FormD); }
+        catch (ArgumentException) { d = DropBrokenSurrogates(lower).Normalize(System.Text.NormalizationForm.FormD); }
         var sb = new System.Text.StringBuilder(d.Length);
         foreach (var ch in d)
             if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) sb.Append(ch);
         return sb.ToString();
     }
 
+    // Tira metades soltas de pares Unicode (emoji cortado ao meio), que impedem a normalização.
+    static string DropBrokenSurrogates(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (char.IsHighSurrogate(s[i]) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1])) { sb.Append(s[i]).Append(s[++i]); continue; }
+            if (!char.IsSurrogate(s[i])) sb.Append(s[i]);
+        }
+        return sb.ToString();
+    }
+
     /// <summary>Avisa a tela que a linha ou o desenho mudou por dentro (mesmo objeto).</summary>
     public void Touch(string property) => OnPropertyChanged(property);
 
+    // O item como é gravado no arquivo.
     public BoardItem ToModel() => new()
     {
         Id = Id,

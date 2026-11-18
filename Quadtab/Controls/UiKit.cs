@@ -6,12 +6,14 @@ using Quadtab.Behaviors;
 
 namespace Quadtab.Controls;
 
-/// <summary>Peças pequenas montadas em código (chips, botões de ícone, títulos) com os estilos do app.</summary>
+/// <summary>Aqui usamos a classe UiKit para montar em código as peças pequenas (chips, botões de ícone, títulos) com os estilos do app.</summary>
 public static class UiKit
 {
+    // Estilo e geometria (ícone) pelos nomes dos recursos do app.
     static Style S(string key) => (Style)Application.Current.FindResource(key);
     public static Geometry G(string key) => (Geometry)Application.Current.FindResource(key);
 
+    /// <summary>Rótulo de texto (cinza quando dim) e título de seção dos menus.</summary>
     public static TextBlock Label(string text, double size = 12.5, bool dim = true, FontWeight? weight = null)
     {
         var t = new TextBlock { Text = text, FontSize = size, FontWeight = weight ?? FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
@@ -19,23 +21,24 @@ public static class UiKit
         return t;
     }
 
-    public static TextBlock Section(string text) =>
-        new TextBlock { Text = text, FontSize = 12.5, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 12, 0, 7) }.Dim();
-
-    static TextBlock Dim(this TextBlock t)
+    public static TextBlock Section(string text)
     {
-        t.SetResourceReference(TextBlock.ForegroundProperty, "Ink3Brush");
+        var t = Label(text);
+        t.Margin = new Thickness(4, 12, 0, 7);
+        t.VerticalAlignment = VerticalAlignment.Stretch;
         return t;
     }
 
+    /// <summary>Chip (pílula que liga/desliga), com ícone opcional.</summary>
     public static ToggleButton Chip(string text, bool on, Action click, string? icon = null, string? tip = null)
     {
-        var b = new ToggleButton { Style = S("Chip"), IsChecked = on, ToolTip = tip ?? ChipTip(text) };
+        var b = new ToggleButton { Style = S("Chip"), IsChecked = on, ToolTip = tip ?? Tips.GetValueOrDefault(text) };
         b.Content = icon is null ? text : Row(new Icon { Data = G(icon), Size = 15 }, text.Length > 0 ? new TextBlock { Text = text, Margin = new Thickness(5, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center } : null);
         b.Click += (_, _) => click();
         return b;
     }
 
+    /// <summary>Botão redondo só com ícone (afunda ao clicar).</summary>
     public static Button IconButton(string icon, string tip, Action click, double size = 36, double iconSize = 17)
     {
         var b = new Button
@@ -85,18 +88,17 @@ public static class UiKit
         ["Editar"] = "Edita o texto da nota",
     };
 
-    static string? ChipTip(string text) => Tips.GetValueOrDefault(text);
-    static string? PillTip(string text) => Tips.GetValueOrDefault(text);
-
+    /// <summary>Botão em pílula com texto (e ícone opcional).</summary>
     public static Button Pill(string text, Action click, string? icon = null)
     {
-        var b = new Button { Style = S("PillButton"), ToolTip = PillTip(text) };
+        var b = new Button { Style = S("PillButton"), ToolTip = Tips.GetValueOrDefault(text) };
         b.SetResourceReference(Control.BackgroundProperty, "FillBrush");
         b.Content = icon is null ? text : Row(new Icon { Data = G(icon), Size = 15 }, new TextBlock { Text = text, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         b.Click += (_, _) => click();
         return b;
     }
 
+    /// <summary>Fileira horizontal (ignora os nulos) e painel que quebra linha.</summary>
     public static StackPanel Row(params UIElement?[] children)
     {
         var p = new StackPanel { Orientation = Orientation.Horizontal };
@@ -134,17 +136,14 @@ public static class UiKit
             Minimum = min, Maximum = max, Value = value, SmallChange = step, LargeChange = step * 5,
             IsSnapToTickEnabled = step > 0, TickFrequency = step, VerticalAlignment = VerticalAlignment.Center,
         };
-        s.ValueChanged += (_, e) =>
-        {
-            val.Text = e.NewValue.ToString(format);
-            changed(e.NewValue);
-        };
+        s.ValueChanged += (_, e) => { val.Text = e.NewValue.ToString(format); changed(e.NewValue); };
         dock.Children.Add(val);
         dock.Children.Add(name);
         dock.Children.Add(s);
         return dock;
     }
 
+    /// <summary>Linha fina separando grupos.</summary>
     public static Border Separator()
     {
         var b = new Border { Height = 1, Margin = new Thickness(4, 10, 4, 2) };

@@ -4,6 +4,8 @@ using System.Windows.Media;
 
 namespace Quadtab.Controls;
 
+// Aqui ficam os menus de vidro do app: a linha de menu (ActionItem), o menu (ActionMenu) e os textos de ajuda (ActionTips).
+
 /// <summary>Uma linha de menu: texto, ícone à direita e ação. Separator = faixa antes da linha.</summary>
 public sealed record ActionItem(string Label, string? Icon, Action Run, bool Danger = false, bool Separator = false, bool Checked = false)
 {
@@ -22,7 +24,7 @@ public sealed record ActionItem(string Label, string? Icon, Action Run, bool Dan
 }
 
 /// <summary>
-/// Menu de vidro genérico (mesmo visual do menu do botão direito): usado pelo "…" da barra,
+/// Aqui usamos a classe ActionMenu como menu de vidro genérico (mesmo visual do menu do botão direito): usado pelo "…" da barra,
 /// pelos quadros e pastas da lateral e pelas opções extras dos itens.
 /// </summary>
 public sealed class ActionMenu : ContentControl
@@ -58,8 +60,8 @@ public sealed class ActionMenu : ContentControl
 
     public ActionMenu()
     {
-        var glass = new GlassPanel { CornerRadius = 24, Padding = new Thickness(6), Width = ColumnWidth + 12 };
-        glass.SetResourceReference(GlassPanel.BackgroundProperty, "Glass2Brush");
+        var glass = UiKit.Glass(null!, 24, new Thickness(6));
+        glass.Width = ColumnWidth + 12;
         var columns = new StackPanel { Orientation = Orientation.Horizontal };
         columns.Children.Add(_list);
         columns.Children.Add(_second);
@@ -75,6 +77,7 @@ public sealed class ActionMenu : ContentControl
 
     public GlassPanel Glass { get; }
 
+    /// <summary>Monta as linhas: separadores, cabeçalhos e botões (ícone, marca de escolhido, prévia ao passar o mouse).</summary>
     public void SetItems(IEnumerable<ActionItem> items)
     {
         _list.Children.Clear();
@@ -99,14 +102,14 @@ public sealed class ActionMenu : ContentControl
             var dock = new DockPanel();
             if (it.Icon is not null)
             {
-                var icon = new Icon { Data = (Geometry)Application.Current.FindResource(it.Icon) };
+                var icon = new Icon { Data = UiKit.G(it.Icon) };
                 if (!it.Danger) icon.SetResourceReference(Icon.ForegroundProperty, "Ink2Brush");
                 DockPanel.SetDock(icon, Dock.Right);
                 dock.Children.Add(icon);
             }
             if (it.Checked)
             {
-                var check = new Icon { Data = (Geometry)Application.Current.FindResource("IcCheckSmall"), Size = 17, Margin = new Thickness(0, 0, 8, 0) };
+                var check = new Icon { Data = UiKit.G("IcCheckSmall"), Size = 17, Margin = new Thickness(0, 0, 8, 0) };
                 check.SetResourceReference(Icon.ForegroundProperty, "AccentBrush");
                 DockPanel.SetDock(check, Dock.Right);
                 dock.Children.Add(check);
@@ -117,17 +120,13 @@ public sealed class ActionMenu : ContentControl
             row.Content = dock;
             if (it.Preview is { } preview) row.MouseEnter += (_, _) => preview();
             var run = it.Run;
-            row.Click += (_, _) =>
-            {
-                Closed?.Invoke();
-                run();
-            };
+            row.Click += (_, _) => { Closed?.Invoke(); run(); }; // fecha o menu e depois faz a ação
             _rows.Add(row);
         }
     }
 }
 
-/// <summary>Texto do balão de ajuda das linhas de menu que não trazem o seu (frase simples + atalho).</summary>
+/// <summary>Aqui usamos a classe ActionTips para dar o texto do balão de ajuda das linhas de menu que não trazem o seu (frase simples + atalho).</summary>
 public static class ActionTips
 {
     static readonly Dictionary<string, string> Tips = new()

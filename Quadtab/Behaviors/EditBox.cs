@@ -4,11 +4,12 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Quadtab.ViewModels;
 
 namespace Quadtab.Behaviors;
 
 /// <summary>
-/// Campo de edição dos itens. Modos:
+/// Aqui usamos a classe EditBox (propriedade anexada) para controlar o campo de edição dos itens. Modos:
 /// "note" e "multi" = Enter termina, Shift+Enter quebra a linha (post-it, corpo de nota, bloco e pautado);
 /// "line" = Enter termina (títulos e texto solto). Esc sempre termina.
 /// Tab: alterna entre título e texto (itens sem título: termina).
@@ -33,6 +34,7 @@ public static class EditBox
     public static bool GetLists(DependencyObject d) => (bool)d.GetValue(ListsProperty);
     public static void SetLists(DependencyObject d, bool v) => d.SetValue(ListsProperty, v);
 
+    // Na primeira vez que o modo é definido: liga o foco automático, as teclas e o fim da edição ao perder o foco.
     static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not TextBoxBase tb || e.OldValue is not null) return;
@@ -40,7 +42,7 @@ public static class EditBox
         tb.IsVisibleChanged += (_, _) =>
         {
             if (!tb.IsVisible) return;
-            if (tb.DataContext is ViewModels.BoardItemViewModel { HasDarkBackground: var dark })
+            if (tb.DataContext is BoardItemViewModel { HasDarkBackground: var dark })
             {
                 // Item de cor escura: o campo não clareia o fundo, para o texto branco continuar legível.
                 if (dark)
@@ -62,16 +64,13 @@ public static class EditBox
             });
         };
         tb.PreviewKeyDown += OnKey;
-        tb.LostKeyboardFocus += (_, _) =>
-        {
-            if (tb.IsVisible) App.ViewModel.EndEdit();
-        };
+        tb.LostKeyboardFocus += (_, _) => { if (tb.IsVisible) App.ViewModel.EndEdit(); };
     }
 
+    // Esc termina; Tab alterna título/texto; Enter termina; Shift+Enter quebra a linha.
     static void OnKey(object sender, KeyEventArgs e)
     {
         var tb = (TextBoxBase)sender;
-        var mode = GetMode(tb);
         if (e.Key == Key.Escape)
         {
             App.ViewModel.EndEdit();
@@ -83,7 +82,7 @@ public static class EditBox
         {
             var vm = App.ViewModel;
             if (vm.EditingItem is { } item && item.HasTitle)
-                vm.BeginEdit(item, item.Editing == ViewModels.EditField.Title ? ViewModels.EditField.Text : ViewModels.EditField.Title);
+                vm.BeginEdit(item, item.Editing == EditField.Title ? EditField.Text : EditField.Title);
             else vm.EndEdit();
             e.Handled = true;
             return;
@@ -91,7 +90,7 @@ public static class EditBox
         if (e.Key != Key.Enter) return;
 
         // Enter sai da edição em qualquer campo; Shift+Enter quebra a linha (menos nos de uma linha só).
-        if (mode != "line" && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        if (GetMode(tb) != "line" && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             // O campo formatado já tratou o Shift+Enter (lista ou quebra de linha) antes de chegar aqui.
             if (tb is TextBox plain)

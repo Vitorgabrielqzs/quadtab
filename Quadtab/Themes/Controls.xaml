@@ -1,3 +1,4 @@
+<!-- Aqui usamos o Controls.xaml para os estilos dos controles (botões, chips, linhas de menu, campos, rolagem). -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:b="clr-namespace:Quadtab.Behaviors"
@@ -10,17 +11,6 @@
         <Setter Property="RimColor" Value="{DynamicResource RimColor}" />
         <Setter Property="Rim2Color" Value="{DynamicResource Rim2Color}" />
         <Setter Property="GlowAlpha" Value="{DynamicResource GlowAlpha}" />
-    </Style>
-
-    <!-- Contorno de foco do teclado -->
-    <Style x:Key="FocusRing">
-        <Setter Property="Control.Template">
-            <Setter.Value>
-                <ControlTemplate>
-                    <Border Margin="-2" CornerRadius="12" BorderThickness="2" BorderBrush="{StaticResource AccentBrush}" />
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!-- Base de todos os botões: sem a aparência padrão do Windows -->
@@ -83,15 +73,6 @@
         <Setter Property="b:UI.Radius" Value="22" />
     </Style>
 
-    <!-- Botão redondo de 38 (recolher lateral) -->
-    <Style x:Key="RoundButton" TargetType="Button" BasedOn="{StaticResource SoftButton}">
-        <Setter Property="Width" Value="38" />
-        <Setter Property="Height" Value="38" />
-        <Setter Property="b:UI.Radius" Value="19" />
-        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
-        <Setter Property="b:Press.IsEnabled" Value="True" />
-    </Style>
-
     <!-- Botão ✕ de 32 da bandeja -->
     <Style x:Key="SmallCircleButton" TargetType="Button" BasedOn="{StaticResource SoftButton}">
         <Setter Property="Width" Value="32" />
@@ -101,41 +82,6 @@
         <Setter Property="b:UI.HoverBackground" Value="{DynamicResource Fill2Brush}" />
         <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
         <Setter Property="b:Press.IsEnabled" Value="True" />
-    </Style>
-
-    <!-- Linhas da seção "Quadros" -->
-    <Style x:Key="SidebarRow" TargetType="Button" BasedOn="{StaticResource SoftButton}">
-        <Setter Property="Height" Value="44" />
-        <Setter Property="Padding" Value="12,0" />
-        <Setter Property="b:UI.Radius" Value="13" />
-        <Setter Property="FontSize" Value="15" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Style.Triggers>
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{DynamicResource Ink3Brush}" />
-                <Setter Property="Cursor" Value="Arrow" />
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-
-    <!-- Linhas da lista "No quadro" -->
-    <Style x:Key="OutlineRow" TargetType="Button" BasedOn="{StaticResource SoftButton}">
-        <Setter Property="Height" Value="42" />
-        <Setter Property="Padding" Value="12,0" />
-        <Setter Property="Margin" Value="0,0,0,5" />
-        <Setter Property="b:UI.Radius" Value="12" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Foreground" Value="{DynamicResource InkBrush}" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Style.Triggers>
-            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
-                <Setter Property="b:UI.HoverBackground" Value="{StaticResource AccentSoftBrush}" />
-                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
-            </DataTrigger>
-        </Style.Triggers>
     </Style>
 
     <!-- Opções do controle segmentado -->
@@ -218,24 +164,6 @@
         <Setter Property="b:Press.IsEnabled" Value="True" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-
-    <!-- Miniaturas de modelo no menu -->
-    <Style x:Key="ModelThumb" TargetType="RadioButton" BasedOn="{StaticResource SoftButton}">
-        <Setter Property="Padding" Value="2,6" />
-        <Setter Property="b:UI.Radius" Value="12" />
-        <Setter Property="FontSize" Value="11.5" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource Ink2Brush}" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="Cursor" Value="Arrow" />
-        <Style.Triggers>
-            <Trigger Property="IsChecked" Value="True">
-                <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
-                <Setter Property="b:UI.HoverBackground" Value="{StaticResource AccentSoftBrush}" />
                 <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
             </Trigger>
         </Style.Triggers>

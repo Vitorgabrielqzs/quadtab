@@ -8,7 +8,7 @@ using Microsoft.Win32;
 namespace Quadtab.Services;
 
 /// <summary>
-/// Tema claro/escuro. Na primeira abertura segue o Windows; depois vale a última escolha do botão da
+/// Aqui usamos a classe ThemeService para controlar o tema claro/escuro. Na primeira abertura segue o Windows; depois vale a última escolha do botão da
 /// lateral (salva em estado.json). As cores da interface mudam suavemente (0,3 s).
 /// </summary>
 public static class ThemeService
@@ -22,6 +22,7 @@ public static class ThemeService
 
     public static event Action? Changed;
 
+    /// <summary>Aplica o tema salvo (ou o do Windows) e passa a acompanhar mudanças do Windows.</summary>
     public static void Initialize()
     {
         Apply(StorageService.State.Tema switch { "escuro" => true, "claro" => false, _ => ReadSystemIsDark() }, animate: false);
@@ -54,6 +55,7 @@ public static class ThemeService
         if (dark != IsDark) Apply(dark, animate: true);
     }
 
+    // Lê no registro se o Windows está no modo escuro.
     static bool ReadSystemIsDark()
     {
         // Para testes: QUADTAB_TEMA=claro ou escuro força um tema.
@@ -65,13 +67,11 @@ public static class ThemeService
         return key?.GetValue("AppsUseLightTheme") is int v && v == 0;
     }
 
+    // Troca o dicionário de cores e anima cada pincel até a cor nova.
     static void Apply(bool dark, bool animate)
     {
         IsDark = dark;
-        var dict = new ResourceDictionary
-        {
-            Source = new Uri(dark ? "Themes/Dark.xaml" : "Themes/Light.xaml", UriKind.Relative),
-        };
+        var dict = new ResourceDictionary { Source = new Uri(dark ? "Themes/Dark.xaml" : "Themes/Light.xaml", UriKind.Relative) };
         var app = Application.Current.Resources;
         var merged = app.MergedDictionaries;
         if (_current is not null) merged.Remove(_current);

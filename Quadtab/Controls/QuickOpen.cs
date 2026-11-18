@@ -8,9 +8,10 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Abrir rápido (Ctrl+O): digite parte do nome de um quadro ou página e aperte Enter.</summary>
+/// <summary>Aqui usamos a classe QuickOpen para o "Procurar" (Ctrl+K / Ctrl+O): digite parte do nome de um quadro ou página e aperte Enter.</summary>
 public sealed class QuickOpen : Grid
 {
+    // Um resultado: quadro, nota ou item de um quadro (com trecho do texto encontrado).
     sealed record Entry(string Name, string Path, bool IsPage, string Folder, string? Snippet = null, int? ItemId = null);
 
     readonly TextBox _box = new() { FontSize = 18, BorderThickness = new Thickness(0), Background = Brushes.Transparent, VerticalContentAlignment = VerticalAlignment.Center };
@@ -56,6 +57,7 @@ public sealed class QuickOpen : Grid
 
     public bool IsOpen => Visibility == Visibility.Visible;
 
+    /// <summary>Abre a caixa com todos os quadros e notas (recentes primeiro).</summary>
     public void Show()
     {
         _all = StorageService.BoardFiles().Select(f => new Entry(Path.GetFileNameWithoutExtension(f), f, false, Folder(f, StorageService.BoardsDir)))
@@ -73,12 +75,14 @@ public sealed class QuickOpen : Grid
 
     public void Hide() => Visibility = Visibility.Collapsed;
 
+    // Pasta do arquivo relativa à raiz ("" = na raiz).
     static string Folder(string file, string root)
     {
         var rel = Path.GetRelativePath(root, Path.GetDirectoryName(file)!);
         return rel == "." ? "" : rel;
     }
 
+    // Filtra pelo texto digitado e redesenha a lista (o escolhido fica destacado).
     void Filter()
     {
         var q = BoardItemViewModel.Normalize(_box.Text.Trim());
@@ -129,6 +133,7 @@ public sealed class QuickOpen : Grid
         }
     }
 
+    // Esc fecha; ↑↓ escolhe; Enter abre (ou cria a nota quando não há resultado).
     void OnKey(object sender, KeyEventArgs e)
     {
         switch (e.Key)

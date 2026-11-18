@@ -4,7 +4,7 @@ using System.Windows.Media.Effects;
 
 namespace Quadtab.Rendering;
 
-/// <summary>Saturação de cor feita na placa de vídeo (shader em Assets/Shaders/Saturate.fx).</summary>
+/// <summary>Aqui usamos a classe SaturateEffect para fazer a saturação de cor na placa de vídeo (shader em Assets/Shaders/Saturate.fx).</summary>
 public sealed class SaturateEffect : ShaderEffect
 {
     static readonly PixelShader Shader = CreateShader();

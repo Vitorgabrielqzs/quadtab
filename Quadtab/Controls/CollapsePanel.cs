@@ -1,25 +1,23 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 
 namespace Quadtab.Controls;
 
-/// <summary>Recolhe o conteúdo na vertical: Progress 1 = altura toda, 0 = altura zero (animável).</summary>
-public sealed class CollapsePanel : Decorator
+// Aqui ficam os painéis que recolhem o conteúdo na vertical (título do quadro e seções da lateral).
+
+/// <summary>Aqui usamos a classe HeightFold como base: mede o filho inteiro e mostra só uma fração da altura dele.</summary>
+public abstract class HeightFold : Decorator
 {
-    public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(
-        nameof(Progress), typeof(double), typeof(CollapsePanel),
-        new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+    protected HeightFold() => ClipToBounds = true;
 
-    public CollapsePanel() => ClipToBounds = true;
-
-    public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+    /// <summary>Fração da altura mostrada (0 = fechado, 1 = aberto).</summary>
+    protected abstract double Fraction { get; }
 
     protected override Size MeasureOverride(Size constraint)
     {
         if (Child is null) return default;
         Child.Measure(new Size(constraint.Width, double.PositiveInfinity));
-        return new Size(Child.DesiredSize.Width, Math.Max(0, Child.DesiredSize.Height * Progress));
+        return new Size(Child.DesiredSize.Width, Child.DesiredSize.Height * Math.Max(0, Fraction));
     }
 
     protected override Size ArrangeOverride(Size arrangeSize)
@@ -29,10 +27,22 @@ public sealed class CollapsePanel : Decorator
     }
 }
 
+/// <summary>Aqui usamos a classe CollapsePanel para recolher o conteúdo: Progress 1 = altura toda, 0 = altura zero (animável).</summary>
+public sealed class CollapsePanel : HeightFold
+{
+    public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(
+        nameof(Progress), typeof(double), typeof(CollapsePanel),
+        new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+    public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+
+    protected override double Fraction => Progress;
+}
+
 /// <summary>
-/// Seção que abre e fecha (estilo toggle do Notion): IsOpen anima a altura com mola (0.35 s).
+/// Aqui usamos a classe Fold para uma seção que abre e fecha (estilo toggle do Notion): IsOpen anima a altura com mola (0.35 s).
 /// </summary>
-public sealed class Fold : Decorator
+public sealed class Fold : HeightFold
 {
     public static readonly DependencyProperty IsOpenProperty = DependencyProperty.Register(
         nameof(IsOpen), typeof(bool), typeof(Fold), new FrameworkPropertyMetadata(false, (d, e) => ((Fold)d).Animate((bool)e.NewValue)));
@@ -45,7 +55,7 @@ public sealed class Fold : Decorator
 
     public Fold()
     {
-        ClipToBounds = true;
+        // Ao carregar, já começa aberto ou fechado (sem animar).
         Loaded += (_, _) =>
         {
             _loaded = true;
@@ -56,31 +66,16 @@ public sealed class Fold : Decorator
 
     public bool IsOpen { get => (bool)GetValue(IsOpenProperty); set => SetValue(IsOpenProperty, value); }
 
+    protected override double Fraction => (double)GetValue(ProgressProperty);
+
+    // Anima a altura; fechado, o filho some de vez (não ocupa tempo de layout).
     void Animate(bool open)
     {
-        if (!_loaded)
-        {
-            SetValue(ProgressProperty, open ? 1.0 : 0.0);
-            return;
-        }
+        if (!_loaded) { SetValue(ProgressProperty, open ? 1.0 : 0.0); return; }
         if (Child is not null && open) Child.Visibility = Visibility.Visible;
         Rendering.Anim.To(this, ProgressProperty, open ? 1 : 0, 0.35, Spring, () =>
         {
             if (!IsOpen && Child is not null) Child.Visibility = Visibility.Collapsed;
         });
-    }
-
-    protected override Size MeasureOverride(Size constraint)
-    {
-        if (Child is null) return default;
-        Child.Measure(new Size(constraint.Width, double.PositiveInfinity));
-        double p = Math.Max(0, (double)GetValue(ProgressProperty));
-        return new Size(Child.DesiredSize.Width, Child.DesiredSize.Height * p);
-    }
-
-    protected override Size ArrangeOverride(Size arrangeSize)
-    {
-        Child?.Arrange(new Rect(0, 0, arrangeSize.Width, Child.DesiredSize.Height));
-        return arrangeSize;
     }
 }

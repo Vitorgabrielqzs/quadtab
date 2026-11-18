@@ -4,10 +4,11 @@ using Quadtab.Rendering;
 
 namespace Quadtab.Controls;
 
+/// <summary>Tipo de papel: post-it, post-it pautado ou nota (folha).</summary>
 public enum PaperKind { Note, Lined, Page }
 
 /// <summary>
-/// Desenha o papel de um post-it ou de uma página (cor, grão, faixa adesiva, pautas, furos, orelha),
+/// Aqui usamos a classe PaperElement para desenhar o papel de um post-it ou de uma página (cor, grão, faixa adesiva, pautas, furos, orelha),
 /// tudo num único elemento, sem camadas extras.
 /// </summary>
 public sealed class PaperElement : FrameworkElement
@@ -33,11 +34,7 @@ public sealed class PaperElement : FrameworkElement
     static readonly Brush BandLine = ColorMath.Brush(Color.FromArgb(102, 255, 255, 255)); // brilho: branco 40%
     static readonly Brush Curl = CreateCurl();
 
-    public PaperElement()
-    {
-        IsHitTestVisible = true;
-        SnapsToDevicePixels = false;
-    }
+    public PaperElement() => SnapsToDevicePixels = false;
 
     protected override Size MeasureOverride(Size availableSize) => default;
 
@@ -49,6 +46,7 @@ public sealed class PaperElement : FrameworkElement
         else RenderNote(dc, w, h, Kind == PaperKind.Lined);
     }
 
+    // Post-it: papel liso, faixa adesiva, pautas (pautado) ou clarão, e o canto levantado.
     void RenderNote(DrawingContext dc, double w, double h, bool lined)
     {
         var shape = Rounded(w, h, 2, 3);
@@ -112,6 +110,8 @@ public sealed class PaperElement : FrameworkElement
         }
     }
 
+    // ---------- pincéis criados uma vez ----------
+
     static Pen Frozen(Pen p) { p.Freeze(); return p; }
 
     static Brush CreateWire()
@@ -164,5 +164,4 @@ public sealed class PaperElement : FrameworkElement
         g.Freeze();
         return g;
     }
-
 }

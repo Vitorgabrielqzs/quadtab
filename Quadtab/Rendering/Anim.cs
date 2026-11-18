@@ -1,11 +1,12 @@
 using System.Windows;
-using System.Windows.Media;
 using System.Windows.Media.Animation;
 
 namespace Quadtab.Rendering;
 
+// Aqui ficam as curvas de movimento do app e os atalhos para animar propriedades.
+
 /// <summary>
-/// Curva cubic-bezier igual à do CSS, aceitando valores acima de 1 (efeito mola que "passa do ponto").
+/// Aqui usamos a classe CubicBezierEase para ter uma curva cubic-bezier igual à do CSS, aceitando valores acima de 1 (efeito mola que "passa do ponto").
 /// O KeySpline do WPF não aceita valores fora de 0..1, por isso esta classe existe.
 /// </summary>
 public sealed class CubicBezierEase : EasingFunctionBase
@@ -55,20 +56,20 @@ public sealed class CubicBezierEase : EasingFunctionBase
         return Bez(t, Y1, Y2);
     }
 
+    // Bézier cúbica de 0 a 1 com pontos de controle a e b, e a derivada dela.
     static double Bez(double t, double a, double b) => ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t;
     static double Deriv(double t, double a, double b) => 3 * (1 - 3 * b + 3 * a) * t * t + 2 * (3 * b - 6 * a) * t + 3 * a;
 
     protected override Freezable CreateInstanceCore() => new CubicBezierEase();
 }
 
-/// <summary>Curvas de movimento do design e atalhos para animar.</summary>
+/// <summary>Aqui usamos a classe Anim para guardar as curvas do design e animar com uma linha só.</summary>
 public static class Anim
 {
     public static readonly CubicBezierEase Tap = new(.25, 1.7, .45, 1);        // 0.5 s  botão afunda e volta
     public static readonly CubicBezierEase Item = new(.3, 1.5, .5, 1);        // 0.45 s hover dos itens
     public static readonly CubicBezierEase Panel = new(.3, 1.4, .5, 1);       // 0.55 s bandeja
     public static readonly CubicBezierEase Pop = new(.3, 1.45, .5, 1);        // 0.4 s  menu
-    public static readonly CubicBezierEase Segment = new(.3, 1.35, .5, 1);    // 0.5 s  controle segmentado
     public static readonly CubicBezierEase Collapse = new(.3, 1, .4, 1);      // 0.5 s  título recolhendo
     public static readonly CubicBezierEase CollapseMove = new(.3, 1.2, .4, 1);
     public static readonly CubicBezierEase Sidebar = new(.3, 1.15, .4, 1);    // 0.45 s lateral recolhendo
@@ -85,6 +86,7 @@ public static class Anim
         target.BeginAnimation(dp, a, HandoffBehavior.SnapshotAndReplace);
     }
 
+    /// <summary>O mesmo, para margens (Thickness).</summary>
     public static void To(IAnimatable target, DependencyProperty dp, Thickness to, double seconds, IEasingFunction? ease = null)
     {
         var a = new ThicknessAnimation(to, TimeSpan.FromSeconds(seconds)) { EasingFunction = ease };

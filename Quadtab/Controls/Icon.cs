@@ -5,7 +5,7 @@ using System.Windows.Media;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Ícone de traço (estilo SF Symbols): desenho em grade 24×24, traço 1.9, pontas arredondadas.
+/// Aqui usamos a classe Icon para desenhar um ícone de traço (estilo SF Symbols): desenho em grade 24×24, traço 1.9, pontas arredondadas.
 /// Um único elemento leve, que herda a cor do texto (Foreground) do botão onde está.
 /// </summary>
 public sealed class Icon : FrameworkElement
@@ -31,15 +31,11 @@ public sealed class Icon : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize) => new(Size, Size);
 
+    // Desenha a geometria 24×24 escalada para o tamanho pedido.
     protected override void OnRender(DrawingContext dc)
     {
         if (Data is null) return;
-        var pen = new Pen(Foreground, StrokeThickness)
-        {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-            LineJoin = PenLineJoin.Round,
-        };
+        var pen = new Pen(Foreground, StrokeThickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
         if (pen.CanFreeze) pen.Freeze(); // durante a troca de tema o pincel está animando
         double s = Size / 24.0;
         dc.PushTransform(new ScaleTransform(s, s));

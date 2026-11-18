@@ -6,7 +6,7 @@ using System.Windows.Shapes;
 namespace Quadtab.Controls;
 
 /// <summary>
-/// Faíscas ao clicar: 8 a 12 tracinhos saem da ponta do ponteiro em todas as direções, encolhem e somem
+/// Aqui usamos a classe SparkLayer para as faíscas ao clicar: 8 a 12 tracinhos saem da ponta do ponteiro em todas as direções, encolhem e somem
 /// em ~400 ms. Camada transparente por cima de tudo, que não recebe cliques. No máximo 3 explosões ao
 /// mesmo tempo, com as partículas reaproveitadas.
 /// </summary>
@@ -15,12 +15,14 @@ public sealed class SparkLayer : Canvas
     const int MaxBursts = 3, MaxSparks = 12;
     const double Life = 0.4;
 
+    // Um tracinho (linha) com direção, distância, comprimento e espessura sorteados.
     sealed class Spark
     {
         public readonly Line Shape = new() { StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, IsHitTestVisible = false };
         public double Angle, Speed, Length, Width;
     }
 
+    // Uma explosão: até 12 tracinhos que partem do mesmo ponto.
     sealed class Burst
     {
         public readonly Spark[] Sparks = Enumerable.Range(0, MaxSparks).Select(_ => new Spark()).ToArray();
@@ -64,12 +66,14 @@ public sealed class SparkLayer : Canvas
         return list;
     }
 
+    // Sorteia uma cor diferente da última.
     static Brush NextColor()
     {
         _lastColor = (_lastColor + 1 + Rng.Next(Colors.Length - 1)) % Colors.Length;
         return Colors[_lastColor];
     }
 
+    /// <summary>Solta uma explosão no ponto (coordenadas desta camada).</summary>
     public void Fire(Point at)
     {
         if (!Enabled || !SystemParameters.ClientAreaAnimation) return;
@@ -100,6 +104,7 @@ public sealed class SparkLayer : Canvas
         }
     }
 
+    // A cada quadro: envelhece as explosões e para de ouvir quando todas acabaram.
     void OnFrame(object? sender, EventArgs e)
     {
         var now = ((RenderingEventArgs)e).RenderingTime;
@@ -127,6 +132,7 @@ public sealed class SparkLayer : Canvas
         }
     }
 
+    // Posiciona os tracinhos: saem rápido, desaceleram, encolhem e somem.
     static void Step(Burst b)
     {
         double t = b.Age / Life;

@@ -1,11 +1,13 @@
-using System.Windows;
 using System.Windows.Media;
 
 namespace Quadtab.Rendering;
 
+// Aqui fica a biblioteca de formas do quadro: o desenho de cada forma (caminho SVG) e a busca.
+
+/// <summary>Uma forma pronta: chave do JSON, nome, categoria e geometria.</summary>
 public sealed record ShapeInfo(string Key, string Name, string Category, Geometry Geometry);
 
-/// <summary>Biblioteca de formas (desenhadas numa grade 100×100 e esticadas para o tamanho do item).</summary>
+/// <summary>Aqui usamos a classe ShapeLibrary para guardar a biblioteca de formas (desenhadas numa grade 100×100 e esticadas para o tamanho do item).</summary>
 public static class ShapeLibrary
 {
     public static readonly string[] Categories = ["Básicas", "Setas", "Símbolos", "Objetos", "Natureza"];
@@ -57,6 +59,7 @@ public static class ShapeLibrary
         ("montanha", "Montanha", "Natureza", "M0,100 L35,30 L50,55 L68,20 L100,100 Z"),
     ];
 
+    // Geometrias criadas uma vez só e congeladas.
     static readonly Dictionary<string, ShapeInfo> ByKey = Defs.ToDictionary(d => d.Key, d =>
     {
         var g = Geometry.Parse(d.Path);
@@ -66,9 +69,11 @@ public static class ShapeLibrary
 
     public static IReadOnlyCollection<ShapeInfo> All => ByKey.Values;
 
+    /// <summary>Forma pela chave (desconhecida = retângulo arredondado).</summary>
     public static ShapeInfo Get(string? key) =>
         key is not null && ByKey.TryGetValue(key, out var s) ? s : ByKey["retangulo-arredondado"];
 
+    /// <summary>Busca por nome (sem acento) e categoria.</summary>
     public static IEnumerable<ShapeInfo> Search(string query, string? category)
     {
         var q = ViewModels.BoardItemViewModel.Normalize(query.Trim());

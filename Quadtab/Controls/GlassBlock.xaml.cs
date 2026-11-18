@@ -7,7 +7,7 @@ using Quadtab.ViewModels;
 
 namespace Quadtab.Controls;
 
-/// <summary>Bloco de vidro colado no quadro, com título livre e texto. Através dele aparece o fundo do quadro.</summary>
+/// <summary>Aqui usamos a classe GlassBlock para o bloco de vidro colado no quadro, com título livre e texto. Através dele aparece o fundo do quadro.</summary>
 public partial class GlassBlock : UserControl
 {
     BoardItemViewModel? _vm;
@@ -37,6 +37,7 @@ public partial class GlassBlock : UserControl
         else Glass.BackdropBrush = BoardSurfaces.BlurredSurfaceFor(BoardSurfaces.Model, _vm.X, _vm.Y);
     }
 
+    // Título ou edição mudou: atualiza o "Título" clarinho; posição mudou (cortiça): realinha o fundo desfocado.
     void OnVm(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(BoardItemViewModel.Title) or nameof(BoardItemViewModel.Editing)) ApplyPlaceholder();
