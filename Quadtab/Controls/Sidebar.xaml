@@ -165,7 +165,8 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <DockPanel>
+    <!-- Fundo transparente: o clique direito no espaço vazio abre "Novo quadro" e "Nova pasta" -->
+    <DockPanel Background="Transparent" MouseRightButtonUp="OnEmptyRightClick">
         <!-- Topo: recolher a lateral, voltar e avançar (também arrasta a janela) -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" Background="Transparent" MouseLeftButtonDown="OnDragArea">
             <Button Style="{StaticResource TopButton}" ToolTip="Esconde a barra lateral" Command="{Binding ToggleSidebarCommand}">
@@ -225,8 +226,8 @@
             </ScrollViewer>
         </DockPanel>
 
-        <ScrollViewer x:Name="MainPage" Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-            <StackPanel>
+        <ScrollViewer x:Name="MainPage" Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Background="Transparent">
+            <StackPanel Background="Transparent">
                 <!-- Ações -->
                 <Button Style="{StaticResource SideRow}" Click="OnNewBoard" ToolTip="Cria um quadro novo · Ctrl+N">
                     <StackPanel Orientation="Horizontal">

@@ -41,6 +41,69 @@ public static class ShadowSpec
 }
 
 /// <summary>
+/// Tom das sombras dos itens conforme o fundo do quadro. As sombras foram pensadas para a cortiça
+/// (marrom quente e fortes); nos fundos claros elas viravam uma faixa escura pesada embaixo dos itens.
+/// Cortiça: como foram feitas. Fundos claros: cinza-azulado e mais suaves. Fundos escuros: preto.
+/// Só as sombras marrons (dos itens) mudam; as dos painéis da interface ficam como estão.
+/// </summary>
+public static class ShadowTone
+{
+    public enum Tone { Cork, Light, Dark }
+
+    static Tone _tone = Compute();
+    static readonly Dictionary<(string, Tone), ShadowLayer[]> Cache = new();
+
+    /// <summary>Avisa só quando o tom muda de verdade (troca de modelo do quadro ou de tema).</summary>
+    public static event Action? Changed;
+
+    static ShadowTone()
+    {
+        Quadtab.Rendering.BoardSurfaces.Changed += Refresh;
+        Quadtab.Services.ThemeService.Changed += Refresh;
+    }
+
+    static Tone Compute() => Quadtab.Rendering.BoardSurfaces.Model switch
+    {
+        Quadtab.Models.BoardModel.Cortica => Tone.Cork,
+        Quadtab.Models.BoardModel.Escuro or Quadtab.Models.BoardModel.Lousa => Tone.Dark,
+        Quadtab.Models.BoardModel.Liso when Quadtab.Services.ThemeService.IsDark => Tone.Dark,
+        _ => Tone.Light,
+    };
+
+    static void Refresh()
+    {
+        var t = Compute();
+        if (t == _tone) return;
+        _tone = t;
+        Changed?.Invoke();
+    }
+
+    /// <summary>As camadas da sombra já no tom do quadro atual.</summary>
+    public static ShadowLayer[] Parse(string? spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec)) return [];
+        var key = (spec, _tone);
+        if (Cache.TryGetValue(key, out var done)) return done;
+        var layers = ShadowSpec.Parse(spec);
+        if (_tone != Tone.Cork)
+        {
+            layers = layers.Select(l =>
+            {
+                var c = l.Color;
+                bool warm = !l.Inset && c.R > c.B + 20 && c.R >= c.G; // marrom das sombras dos itens
+                if (!warm) return l;
+                var tinted = _tone == Tone.Light
+                    ? Color.FromArgb((byte)(c.A * 0.45), 0x1E, 0x24, 0x3C)
+                    : Color.FromArgb((byte)Math.Min(255, c.A * 1.1), 0, 0, 0);
+                return l with { Color = tinted };
+            }).ToArray();
+        }
+        Cache[key] = layers;
+        return layers;
+    }
+}
+
+/// <summary>
 /// Sombras suaves sem Effect do WPF (que pesa muito): o desfoque é calculado uma única vez,
 /// guardado em pequenos bitmaps e reaproveitado por todos os elementos com a mesma sombra.
 /// Formas grandes usam "9 fatias" (cantos + bordas esticadas), então redimensionar não custa nada.

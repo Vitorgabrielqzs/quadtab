@@ -118,8 +118,8 @@ public class GlassPanel : Decorator
             if (GlowEnabled) GlassGlow.Register(this);
             RefreshBackdrop();
         };
-        Loaded += (_, _) => ShadowsChanged += InvalidateVisual;
-        Unloaded += (_, _) => { GlassGlow.Unregister(this); ShadowsChanged -= InvalidateVisual; };
+        Loaded += (_, _) => { ShadowsChanged += InvalidateVisual; ShadowTone.Changed += InvalidateVisual; };
+        Unloaded += (_, _) => { GlassGlow.Unregister(this); ShadowsChanged -= InvalidateVisual; ShadowTone.Changed -= InvalidateVisual; };
     }
 
     // ---------- árvore visual: [fundo] [vidro] [brilho] conteúdo [borda] [borda viva] ----------
@@ -202,7 +202,7 @@ public class GlassPanel : Decorator
     protected override void OnRender(DrawingContext dc)
     {
         if (!_shadowsEnabled && !KeepShadow) return;
-        var layers = ShadowSpec.Parse(ShadowLayers);
+        var layers = ShadowTone.Parse(ShadowLayers); // blocos: sombra no tom do fundo do quadro
         if (layers.Length > 0 && ActualWidth > 0)
             ShadowCache.Draw(dc, new Rect(RenderSize), Radius(RenderSize), layers, hollow: true);
     }

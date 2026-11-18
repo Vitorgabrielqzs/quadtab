@@ -55,6 +55,8 @@ public static class StorageService
 
     /// <summary>"Quadro" usado quando todos foram apagados (tela com "Criar novo quadro"); não aparece na lista.</summary>
     public static string EmptyBoardPath => Path.Combine(MetaDir, "vazio" + BoardExt);
+    /// <summary>Caminho de mentira da prévia de um design (nunca é gravado nem aparece na lista).</summary>
+    public static string PreviewBoardPath => Path.Combine(MetaDir, "previa" + BoardExt);
     public static bool IsEmptyBoard(string path) => string.Equals(path, EmptyBoardPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Registros de erro: dentro do cofre (.quadtab), como todo o resto.</summary>

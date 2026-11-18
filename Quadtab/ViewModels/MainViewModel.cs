@@ -290,6 +290,20 @@ public partial class MainViewModel : ObservableObject
 
     public BoardItemViewModel? EditingItem { get; private set; }
 
+    /// <summary>
+    /// Prévia de um design ("Visualizar design"): o quadro aparece só para ver, nada é gravado,
+    /// e o status vira o botão "Adicionar quadro".
+    /// </summary>
+    public bool IsPreview { get; private set; }
+
+    public static MainViewModel Preview(Board board, string name)
+    {
+        var vm = new MainViewModel(board, StorageService.PreviewBoardPath) { IsPreview = true };
+        vm.BoardTitle = name;
+        vm.ReadOnly = true;
+        return vm;
+    }
+
     public int Count => Items.Count;
     public string ModelName => Palette.ModelName(Model);
     public int ModelIndex => (int)Model;
@@ -334,6 +348,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnDiagramModeChanged(bool value) => MarkDirty(touchClock: false);
     partial void OnReadOnlyChanged(bool value)
     {
+        if (IsPreview && !value) { ReadOnly = true; return; } // a prévia de um design é sempre só para ver
         if (value) { EndEdit(); ClearSelection(); }
         MarkDirty(touchClock: false);
     }
@@ -355,7 +370,7 @@ public partial class MainViewModel : ObservableObject
     public void Rename(string name)
     {
         name = name.Trim();
-        if (name.Length == 0 || name == BoardTitle) return;
+        if (name.Length == 0 || name == BoardTitle || IsPreview) return;
         Flush();
         FilePath = StorageService.RenameBoard(FilePath, name);
         BoardTitle = Path.GetFileNameWithoutExtension(FilePath);
@@ -1387,7 +1402,7 @@ public partial class MainViewModel : ObservableObject
 
     void MarkDirty(bool touchClock = true)
     {
-        if (_saveTimer is null || _restoring) return; // ainda no construtor
+        if (_saveTimer is null || _restoring || IsPreview) return; // ainda no construtor; prévia de design nunca grava
         if (touchClock)
         {
             _lastEdit = DateTime.Now;
@@ -1401,7 +1416,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Grava agora, se houver mudança pendente (ao fechar ou trocar de quadro).</summary>
     public void Flush()
     {
-        if (!_saveTimer.IsEnabled) return;
+        if (!_saveTimer.IsEnabled || IsPreview) return;
         _saveTimer.Stop();
         StorageService.SaveBoard(FilePath, ToBoard());
         IsSaving = false;

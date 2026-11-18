@@ -23,6 +23,9 @@ public sealed class Shadow : FrameworkElement
     {
         IsHitTestVisible = false;
         SnapsToDevicePixels = false;
+        // O tom da sombra acompanha o fundo do quadro (cortiça, claro ou escuro).
+        Loaded += (_, _) => ShadowTone.Changed += InvalidateVisual;
+        Unloaded += (_, _) => ShadowTone.Changed -= InvalidateVisual;
     }
 
     /// <summary>Ex.: "0 14 36 0 #1A1E243C, 0 1 3 0 #0F1E243C" (x y desfoque espalhamento cor).</summary>
@@ -38,6 +41,6 @@ public sealed class Shadow : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
-        ShadowCache.Draw(dc, new Rect(RenderSize), CornerRadius, ShadowSpec.Parse(Layers), Hollow);
+        ShadowCache.Draw(dc, new Rect(RenderSize), CornerRadius, ShadowTone.Parse(Layers), Hollow);
     }
 }

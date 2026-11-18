@@ -273,7 +273,8 @@ public partial class BoardItemViewModel : ObservableObject
     public double StrokeWidth => Style.Espessura;
     public double ItemOpacity => Style.Opacidade;
     public Brush TextBrush => BrushFromHex(Style.CorTexto, System.Windows.Media.Color.FromRgb(0x1D, 0x21, 0x30));
-    public FontFamily FontFamilyValue => (FontFamily)Application.Current.FindResource(Style.Fonte == "Nunito" ? "Nunito" : "Inter");
+    /// <summary>Letra do texto das formas, caixas e tabelas: Inter, Nunito ou uma das caligrafias embutidas (usadas nos Designs).</summary>
+    public FontFamily FontFamilyValue => Style.Fonte == "Nunito" ? (FontFamily)Application.Current.FindResource("Nunito") : ResolveFont(Style.Fonte);
     /// <summary>
     /// Caligrafias do título e do texto solto. Todas vêm dentro do app (Assets\Fonts, Google Fonts, licença livre),
     /// então ficam iguais em qualquer computador. O nome gravado em estilo.fonte é o da família.

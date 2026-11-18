@@ -45,8 +45,8 @@ public partial class MainWindow : Window
 
         // O vidro sobre o quadro usa a textura já desfocada, alinhada com a câmera.
         Board.Settled += RefreshBoardGlass;
-        Board.UseAsGlassBackdrop(Hint, Status, Tray.DockGlass, Tray.SheetGlass, GoToContent, FpsPanel, ZoomPanel, SearchBar, PresentBar, Palette.Glass);
-        foreach (var g in new[] { Menu.GlassPanel, Actions.Glass, CtxTray.Glass })
+        Board.UseAsGlassBackdrop(Hint, Status, PreviewBar, Tray.DockGlass, Tray.SheetGlass, GoToContent, FpsPanel, ZoomPanel, SearchBar, PresentBar, Palette.Glass);
+        foreach (var g in new[] { Menu.GlassPanel, Actions.Glass, CtxTray.Glass, ExportPickSheet })
         {
             g.SetResourceReference(GlassPanel.BackgroundProperty, "MenuGlassBrush");
             g.SetResourceReference(GlassPanel.BackdropBaseProperty, "BgBrush");
@@ -59,6 +59,7 @@ public partial class MainWindow : Window
         CtxTray.RenderTransform = TrayScale;
         Board.MenuRequested += (item, p) => ShowMenu(item, default, p);
         Board.TrayRequested += ShowContextTray;
+        Board.SelectionMenuRequested += ShowSelectionMenu;
         Menu.CloseRequested += CloseMenu;
         Menu.MoreRequested += ShowItemExtras;
         Actions.Closed += CloseActions;
@@ -165,9 +166,23 @@ public partial class MainWindow : Window
         _quietZoomUntil = DateTime.Now.AddSeconds(1); // abrir um quadro não mostra o balão de zoom
         ApplyEmptyState(StorageService.IsEmptyBoard(vm.FilePath));
         ApplyReadOnly();
+        ApplyPreview();
         ApplyTitle(animate: false);
         UpdateSearchCount();
     }
+
+    /// <summary>Prévia de um design: o "Salvo" dá lugar ao botão "Adicionar quadro" (e ao ✕ que volta).</summary>
+    void ApplyPreview()
+    {
+        bool preview = _vm.IsPreview;
+        Status.Opacity = preview ? 0 : 1;
+        Status.IsHitTestVisible = !preview;
+        PreviewBar.Visibility = preview && !_presenting ? Visibility.Visible : Visibility.Collapsed;
+        if (preview) PreviewBar.RefreshBackdrop();
+    }
+
+    void OnAddPreview(object sender, RoutedEventArgs e) => App.AddPreviewAsBoard();
+    void OnExitPreview(object sender, RoutedEventArgs e) => App.ExitPreview();
 
     /// <summary>Todos os quadros apagados: a tela vazia cobre título e quadro, com o botão "Criar novo quadro".</summary>
     void ApplyEmptyState(bool empty)
@@ -604,6 +619,30 @@ public partial class MainWindow : Window
         if (_ctxOpen && !CtxTray.IsMouseOver) CloseContextTray();
     }
 
+    /// <summary>Menu depois de selecionar segurando o botão direito: excluir (e outras ações) de uma vez.</summary>
+    void ShowSelectionMenu(Point at)
+    {
+        _ctxWasOpen = false; // o próximo clique direito abre a bandeja normalmente
+        var sel = _vm.SelectedItems.ToList();
+        if (sel.Count == 0) return;
+        string what = sel.Count == 1 ? "1 item" : $"{sel.Count} itens";
+        var list = new List<ActionItem>
+        {
+            ActionItem.Header($"{what} selecionado{(sel.Count == 1 ? "" : "s")}"),
+            new($"Excluir {what}", "IcTrash", () => { CloseMenu(); _vm.RemoveSelected(); }, Danger: true) { Tip = "Apaga tudo o que está selecionado · Delete · Ctrl+Z desfaz" },
+            new("Duplicar", "IcDuplicate", () => _vm.DuplicateMany(_vm.SelectedItems.ToList(), new Vector(30, 30)), Separator: true) { Tip = "Cria uma cópia dos itens selecionados · Ctrl+D" },
+            new("Copiar", "IcDuplicate", _vm.Copy) { Tip = "Copia os itens selecionados · Ctrl+C" },
+        };
+        if (IsOneGroup(sel)) list.Add(new("Desagrupar itens", "IcGroup", _vm.Ungroup) { Tip = "Separa o grupo em itens soltos · Ctrl+Shift+G" });
+        else if (sel.Count >= 2) list.Add(new("Agrupar itens", "IcGroup", _vm.GroupSelection) { Tip = "Junta os itens selecionados num grupo · Ctrl+G" });
+        list.Add(new("Tirar a seleção", "IcClose", _vm.ClearSelection) { Tip = "Desmarca os itens · Esc" });
+        ShowActions(at, list);
+    }
+
+    /// <summary>Todos os selecionados (2 ou mais) já estão num mesmo grupo: o menu troca "Agrupar" por "Desagrupar".</summary>
+    static bool IsOneGroup(List<BoardItemViewModel> sel) =>
+        sel.Count >= 2 && sel[0].Group is int g && sel.All(i => i.Group == g);
+
     /// <summary>Caligrafias do título e do texto solto; a atual fica marcada.</summary>
     void ShowFonts(BoardItemViewModel item, Point at)
     {
@@ -650,7 +689,8 @@ public partial class MainWindow : Window
         if (_vm.HasStyleClip) list.Add(new("Colar estilo", "IcBrush", _vm.PasteStyle));
         if (sel.Count >= 2)
         {
-            list.Add(new("Agrupar (Ctrl+G)", "IcGroup", _vm.GroupSelection, Separator: true));
+            if (IsOneGroup(sel)) list.Add(new("Desagrupar itens", "IcGroup", _vm.Ungroup, Separator: true) { Tip = "Separa o grupo em itens soltos · Ctrl+Shift+G" });
+            else list.Add(new("Agrupar itens", "IcGroup", _vm.GroupSelection, Separator: true) { Tip = "Junta os itens selecionados num grupo · Ctrl+G" });
             list.Add(new("Alinhar à esquerda", "IcAlignLeft", () => _vm.Align("esquerda")));
             list.Add(new("Centralizar", "IcAlignCenter", () => _vm.Align("centro")));
             list.Add(new("Alinhar no topo", "IcAlignTop", () => _vm.Align("topo")));
@@ -661,7 +701,7 @@ public partial class MainWindow : Window
                 list.Add(new("Distribuir na vertical", "IcDistributeV", () => _vm.Distribute(false)));
             }
         }
-        if (sel.Any(i => i.Group is not null)) list.Add(new("Desagrupar (Ctrl+Shift+G)", "IcGroup", _vm.Ungroup, Separator: sel.Count < 2));
+        if (!IsOneGroup(sel) && sel.Any(i => i.Group is not null)) list.Add(new("Desagrupar itens", "IcGroup", _vm.Ungroup, Separator: sel.Count < 2) { Tip = "Separa o grupo em itens soltos · Ctrl+Shift+G" });
         ShowActions(at, list);
     }
 
@@ -688,9 +728,8 @@ public partial class MainWindow : Window
             new("Apresentar", "IcPresent", StartPresenting),
             new(_fullscreen ? "Sair da tela cheia" : "Tela cheia", _fullscreen ? "IcExitFullscreen" : "IcFullscreen", () => SetFullscreen(!_fullscreen))
                 { Tip = "Deixa o quadro em tela cheia · F11" },
-            new("Exportar quadro em PDF…", "IcExport", () => Export(selectionOnly: false), Separator: true),
+            new("Exportar…", "IcExport", () => ShowExportPicker(sel.Count > 0), Separator: true),
         };
-        if (sel.Count > 0) list.Add(new("Exportar seleção em PDF…", "IcExport", () => Export(selectionOnly: true)));
         list.Add(new("Abrir a pasta do cofre", "IcFolder", () => ItemViewBase.OpenExternal(StorageService.Root), Separator: true));
         ShowActions(p, list, MoreButton);
     }
@@ -728,7 +767,7 @@ public partial class MainWindow : Window
         Board.Tool = BoardTool.Select;
         _presentMadeFullscreen = !_fullscreen;
         if (!_fullscreen) SetFullscreen(true);
-        foreach (var el in new UIElement[] { Hint, Tray, Status, Palette }) el.Visibility = Visibility.Collapsed;
+        foreach (var el in new UIElement[] { Hint, Tray, Status, Palette, PreviewBar }) el.Visibility = Visibility.Collapsed;
         PresentBar.Visibility = Visibility.Visible;
         _scene = 0;
         GoScene(0);
@@ -740,7 +779,8 @@ public partial class MainWindow : Window
         _presenting = false;
         PresentBar.Visibility = Visibility.Collapsed;
         Status.Visibility = Visibility.Visible;
-        ApplyReadOnly(); // o dock volta, a não ser que o quadro esteja só para visualização
+        ApplyReadOnly();
+        ApplyPreview(); // o dock volta, a não ser que o quadro esteja só para visualização
         UpdateHint();
         if (_presentMadeFullscreen) SetFullscreen(false);
     }
@@ -812,36 +852,99 @@ public partial class MainWindow : Window
 
     bool _exporting;
 
-    async void Export(bool selectionOnly)
+    // ----- mini janela "Exportar" (no centro): Imagem (PNG) ou PDF; com seleção, escolhe entre o quadro e a seleção -----
+
+    void ShowExportPicker(bool hasSelection)
+    {
+        if (_exporting) return;
+        ExportScopeRow.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        ExportScopeAll.IsChecked = true;
+        ExportScopeSel.IsChecked = false;
+        ExportPick.Visibility = Visibility.Visible;
+        // Surge como a bandeja: de 95% a 100%, com a mola de painel.
+        Anim.Set(ExportPickScale, ScaleTransform.ScaleXProperty, 0.95);
+        Anim.Set(ExportPickScale, ScaleTransform.ScaleYProperty, 0.95);
+        Anim.Set(ExportPickSheet, OpacityProperty, 0.0);
+        Anim.To(ExportPickScale, ScaleTransform.ScaleXProperty, 1, 0.55, Anim.Panel);
+        Anim.To(ExportPickScale, ScaleTransform.ScaleYProperty, 1, 0.55, Anim.Panel);
+        Anim.To(ExportPickSheet, OpacityProperty, 1, 0.2, Anim.Ease);
+        Board.RefreshGlass();
+        ExportPick.Focus();
+    }
+
+    void HideExportPicker()
+    {
+        if (ExportPick.Visibility != Visibility.Visible) return;
+        Anim.To(ExportPickSheet, OpacityProperty, 0, 0.18, Anim.Ease, () => ExportPick.Visibility = Visibility.Collapsed);
+    }
+
+    void OnExportPng(object sender, RoutedEventArgs e) => PickExport(png: true);
+    void OnExportPdf(object sender, RoutedEventArgs e) => PickExport(png: false);
+    void OnExportPickClose(object sender, RoutedEventArgs e) => HideExportPicker();
+
+    void OnExportScope(object sender, RoutedEventArgs e)
+    {
+        bool sel = sender == ExportScopeSel;
+        ExportScopeAll.IsChecked = !sel;
+        ExportScopeSel.IsChecked = sel;
+    }
+
+    // Clicar fora da mini janela fecha.
+    void OnExportPickBackdrop(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource == ExportPick) { HideExportPicker(); e.Handled = true; }
+    }
+
+    void OnExportPickKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) { HideExportPicker(); e.Handled = true; }
+    }
+
+    void PickExport(bool png)
+    {
+        bool selectionOnly = ExportScopeRow.Visibility == Visibility.Visible && ExportScopeSel.IsChecked == true;
+        ExportPick.Visibility = Visibility.Collapsed;
+        Export(selectionOnly, png);
+    }
+
+    async void Export(bool selectionOnly, bool png)
     {
         var items = selectionOnly ? _vm.SelectedItems.ToList() : _vm.Items.ToList();
         if (items.Count == 0 || _exporting) return;
+        // Imagem (PNG, sem perda) abre direto no visualizador de fotos; o PDF fica como segunda opção na lista.
         var dlg = new SaveFileDialog
         {
             Title = selectionOnly ? "Exportar seleção" : "Exportar quadro",
             FileName = _vm.BoardTitle + (selectionOnly ? " (seleção)" : ""),
-            Filter = "Documento PDF|*.pdf",
-            DefaultExt = ".pdf",
+            Filter = png ? "Imagem PNG|*.png|Documento PDF|*.pdf" : "Documento PDF|*.pdf|Imagem PNG|*.png",
+            DefaultExt = png ? ".png" : ".pdf",
             AddExtension = true,
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            InitialDirectory = Environment.GetFolderPath(png ? Environment.SpecialFolder.MyPictures : Environment.SpecialFolder.MyDocuments),
         };
         if (dlg.ShowDialog(this) != true) return;
+        await ExportTo(dlg.FileName, items, selectionOnly);
+    }
+
+    /// <summary>Desenha os itens e grava em PDF ou PNG, conforme a extensão do arquivo.</summary>
+    async Task ExportTo(string path, List<BoardItemViewModel> items, bool selectionOnly)
+    {
+        bool png = string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase);
         var sel = _vm.SelectedItems.ToList();
         _vm.EndEdit();
         _vm.ClearSelection(); // o contorno azul não vai para a imagem
         _exporting = true;
-        ShowExportBusy(selectionOnly);
+        ShowExportBusy(selectionOnly, png);
         try
         {
             await Task.Delay(250); // o bloco aparece por inteiro antes de o desenho ocupar a tela
-            // O título do mapa é o maior texto solto; o quadro todo abre a partir do centro dele.
-            var title = selectionOnly ? null : items.Where(i => i.Kind == ItemKind.Text).OrderByDescending(i => i.FontSizeValue).ThenBy(i => i.Y).FirstOrDefault();
-            var image = Board.RenderRegion(items, 4, onlyThese: selectionOnly, centerOn: title); // 4×: dá para aproximar e ler na imagem
+            // Página no máximo 4:3 (ou 3:4), com tudo o que tem escrito dentro. PNG: 4× e até 100 megapixels (a melhor
+            // nitidez que a memória aguenta); PDF: 3× e até 32, para o leitor de PDF não travar.
+            var image = await Board.RenderRegionAsync(items, png ? 4 : 3, onlyThese: selectionOnly, maxAspect: 4.0 / 3,
+                                                      maxPixels: png ? BoardView.PngMaxPixels : BoardView.PdfMaxPixels);
             _vm.SelectMany(sel, add: false);
             sel.Clear();
             // A compressão é a parte demorada: fora da tela, que continua respondendo (a imagem já está congelada).
-            string path = dlg.FileName;
-            await Task.Run(() => ExportService.SavePdf(image, path));
+            await Task.Run(() => { if (png) ExportService.SavePng(image, path); else ExportService.SavePdf(image, path); });
         }
         catch (IOException) { MessageBox.Show(this, "Não foi possível salvar o arquivo (ele está aberto em outro programa?).", "Quadtab"); }
         catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
@@ -858,9 +961,9 @@ public partial class MainWindow : Window
         }
     }
 
-    void ShowExportBusy(bool selectionOnly)
+    void ShowExportBusy(bool selectionOnly, bool png)
     {
-        ExportDetail.Text = selectionOnly ? "Salvando a seleção em PDF" : "Salvando o quadro em PDF";
+        ExportDetail.Text = (selectionOnly ? "Salvando a seleção em " : "Salvando o quadro em ") + (png ? "PNG" : "PDF");
         ExportBusy.Visibility = Visibility.Visible;
         // Surge como a bandeja: de 95% a 100%, com a mola de painel.
         Anim.Set(ExportScale, ScaleTransform.ScaleXProperty, 0.95);
@@ -889,7 +992,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (_vm.Items.Count == 0) return;
+            if (_vm.Items.Count == 0 || _vm.IsPreview) return;
             var area = _vm.Items.Aggregate(Rect.Empty, (r, i) => { r.Union(i.Bounds); return r; });
             double scale = Math.Min(1, 560 / Math.Max(1, Math.Max(area.Width, area.Height)));
             var sel = _vm.SelectedItems.ToList();
@@ -1162,10 +1265,12 @@ public partial class MainWindow : Window
         switch (key)
         {
             case Key.Escape:
+                bool hadMenu = _menuOpen || _actionsOpen || _ctxOpen;
                 CloseMenu(); CloseActions(); CloseContextTray();
                 if (Board.Tool != BoardTool.Select) Board.Tool = BoardTool.Select;
                 else if (SearchBar.Visibility == Visibility.Visible) CloseSearch();
                 else if (App.Library.GalleryOpen) App.Library.GalleryOpen = false;
+                else if (_vm.IsPreview && !hadMenu && _vm.SelectionCount == 0) App.ExitPreview();
                 else { _vm.EndEdit(); _vm.ClearSelection(); }
                 break;
             case Key.Delete or Key.Back when _vm.SelectionCount > 0:

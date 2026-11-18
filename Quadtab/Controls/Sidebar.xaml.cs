@@ -39,6 +39,19 @@ public partial class Sidebar : UserControl
     void OnNewBoard(object sender, RoutedEventArgs e) => Lib.NewBoard();
     void OnNewFolder(object sender, RoutedEventArgs e) => Lib.CreateFolder(boards: Lib.Checked);
     void OnDesigns(object sender, RoutedEventArgs e) => Shell?.ShowDesigns(DesignsButton);
+
+    /// <summary>Clique direito no espaço vazio da lateral: criar um quadro ou uma pasta.</summary>
+    void OnEmptyRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Handled || Shell is not { } shell) return;
+        e.Handled = true;
+        shell.ShowActions(e.GetPosition(shell.Root),
+        [
+            new("Novo quadro", "IcPlus", () => Lib.NewBoard()) { Tip = "Cria um quadro novo · Ctrl+N" },
+            new("Nova pasta", "IcFolderPlus", () => Lib.CreateFolder(boards: Lib.Checked)) { Tip = "Cria uma pasta para guardar quadros" },
+            new("Designs…", "IcDesigns", () => shell.ShowDesigns()) { Tip = "Abre os mapas mentais prontos para importar" },
+        ]);
+    }
     void OnSearch(object sender, RoutedEventArgs e) => Shell?.ShowSearch();
     void OnTrash(object sender, RoutedEventArgs e) => Lib.ShowGalleryCommand.Execute("apagados");
 

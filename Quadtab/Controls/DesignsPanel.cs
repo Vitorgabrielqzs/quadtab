@@ -53,7 +53,14 @@ public sealed class DesignsPanel : Grid
         stack.Children.Add(head);
 
         for (int i = 0; i < DesignLibrary.All.Length; i++) _grid.Children.Add(Card(DesignLibrary.All[i], i));
-        stack.Children.Add(_grid);
+        // Mais designs do que cabem: a grade rola por dentro (o painel nunca passa da janela).
+        var scroll = new ScrollViewer
+        {
+            Content = _grid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false, Style = (Style)Application.Current.FindResource("OverlayScroll"),
+        };
+        SizeChanged += (_, e) => scroll.MaxHeight = Math.Max(220, e.NewSize.Height - 250);
+        stack.Children.Add(scroll);
 
         // Rodapé: o escolhido e o botão de importar
         var foot = new DockPanel { Margin = new Thickness(8, 14, 0, 2) };
@@ -72,6 +79,23 @@ public sealed class DesignsPanel : Grid
         import.Click += (_, _) => Import();
         DockPanel.SetDock(import, Dock.Right);
         foot.Children.Add(import);
+        // "Visualizar design": abre só o design no quadro, sem criar arquivo; lá, "Adicionar quadro" importa.
+        var view = new Button
+        {
+            Style = (Style)Application.Current.FindResource("SoftButton"), Height = 42, Padding = new Thickness(18, 0, 18, 0),
+            Margin = new Thickness(0, 0, 8, 0), FontSize = 14.5, FontWeight = FontWeights.SemiBold, Cursor = Cursors.Arrow,
+            ToolTip = "Mostra o design no quadro, só para ver, antes de adicionar · Espaço",
+            Content = UiKit.Row(new Icon { Data = UiKit.G("IcEye"), Size = 16, Margin = new Thickness(0, 0, 8, 0) },
+                new TextBlock { Text = "Visualizar design", VerticalAlignment = VerticalAlignment.Center }),
+        };
+        view.SetResourceReference(Control.ForegroundProperty, "InkBrush");
+        view.SetResourceReference(Control.BackgroundProperty, "FillBrush");
+        view.SetResourceReference(UI.HoverBackgroundProperty, "Fill2Brush");
+        UI.SetRadius(view, new CornerRadius(21));
+        Press.SetIsEnabled(view, true);
+        view.Click += (_, _) => Preview();
+        DockPanel.SetDock(view, Dock.Right);
+        foot.Children.Add(view);
         _chosen.VerticalAlignment = VerticalAlignment.Center;
         _chosen.TextTrimming = TextTrimming.CharacterEllipsis;
         foot.Children.Add(_chosen);
@@ -110,6 +134,7 @@ public sealed class DesignsPanel : Grid
         {
             case Key.Escape: Hide(); break;
             case Key.Enter: Import(); break;
+            case Key.Space: Preview(); break;
             case Key.Right: Select((_pick + 1) % _cards.Count); break;
             case Key.Left: Select((_pick + _cards.Count - 1) % _cards.Count); break;
             case Key.Down: Select(Math.Min(_cards.Count - 1, _pick + 5)); break;
@@ -141,6 +166,14 @@ public sealed class DesignsPanel : Grid
             var path = StorageService.CreateBoard("", d.Name, d.Build());
             App.OpenBoard(path);
         }
+        catch (Exception ex) { App.Log(ex); }
+    }
+
+    void Preview()
+    {
+        var d = DesignLibrary.All[_pick];
+        Hide();
+        try { App.PreviewDesign(d); }
         catch (Exception ex) { App.Log(ex); }
     }
 

@@ -85,8 +85,13 @@ public partial class BoardView : UserControl
     // Imagem do item com o dobro de pixels da tela: em posição "quebrada" ela é reamostrada, e com 1× o texto borra.
     const double GapHoldMs = 500;
     readonly DispatcherTimer _holdTimer = new() { Interval = TimeSpan.FromMilliseconds(GapHoldMs + 20) };
-    double ItemCacheScale =>Math.Clamp(_camera.Zoom * _dpi * 2, 0.2, 6);
-    const double MaxExportSide = 16000, MaxExportPixels = 100_000_000; // imagem de até 100 megapixels
+    // 2x a escala da tela para ficar nítido, mas no máximo 4x: com zoom alto cada item virava uma imagem
+    // enorme (até 36x a área), refeita toda vez que a câmera parava, e o app engasgava.
+    double ItemCacheScale => Math.Clamp(_camera.Zoom * _dpi * 2, 0.2, 4);
+    // Até 32 megapixels: nítido ao aproximar, mas leve para o leitor de PDF abrir sem travar.
+    // PDF: até 32 megapixels, leve para o leitor abrir sem travar. PNG: até 100 megapixels, a melhor nitidez possível.
+    public const double PdfMaxPixels = 32_000_000, PngMaxPixels = 100_000_000;
+    const double MaxExportSide = 16000;
     readonly DispatcherTimer _idle;
     readonly Stopwatch _work = new();
 
@@ -121,6 +126,9 @@ public partial class BoardView : UserControl
 
     /// <summary>Clique direito no vazio: abre a bandeja junto ao cursor (ponto no mundo, ponto na janela).</summary>
     public event Action<Point, Point>? TrayRequested;
+
+    /// <summary>Seleção feita segurando o botão direito: menu dos itens escolhidos (ponto na janela).</summary>
+    public event Action<Point>? SelectionMenuRequested;
 
     /// <summary>A câmera parou.</summary>
     public event Action? Settled;
@@ -536,7 +544,7 @@ public partial class BoardView : UserControl
     static double Dist(BoardItemViewModel v, Point c) => (v.X - c.X) * (v.X - c.X) + (v.Y - c.Y) * (v.Y - c.Y);
 
     bool IsPinned(BoardItemViewModel vm) =>
-        vm.IsSelected || vm.Editing != EditField.None || (_drag?.Parts.Exists(p => p.Item == vm) ?? false);
+        _exportHold || vm.IsSelected || vm.Editing != EditField.None || (_drag?.Parts.Exists(p => p.Item == vm) ?? false);
 
     void CreateSome()
     {
@@ -961,6 +969,17 @@ public partial class BoardView : UserControl
     {
         var p = e.GetPosition(Surface);
         // Botão direito segurado num item e arrastado: vira uma linha nova até onde o mouse soltar.
+        if (_rightEmpty is { } re && !_marquee)
+        {
+            if (e.RightButton != MouseButtonState.Pressed) _rightEmpty = null;
+            else if ((p - re).Length >= 6)
+            {
+                // Botão direito segurado no vazio e arrastado: seleção em caixa (soltar abre o menu com Excluir).
+                Vm.ClearSelection();
+                StartMarquee(re);
+                _rightMarquee = true;
+            }
+        }
         if (_rightStart is { } rs && _connecting is null)
         {
             if (e.RightButton != MouseButtonState.Pressed) _rightStart = null;
@@ -1948,17 +1967,33 @@ public partial class BoardView : UserControl
     (BoardItemViewModel Item, Point Pointer)? _rightStart;
     bool _rightDrag;
 
+    // Botão direito apertado no vazio (arrastar = seleção em caixa).
+    Point? _rightEmpty;
+    bool _rightMarquee;
+
     void OnRightDown(object sender, MouseButtonEventArgs e)
     {
         _rightStart = null;
-        if (Vm.ReadOnly || Tool != BoardTool.Select || _drag is not null || _connecting is not null) return;
+        _rightEmpty = null;
+        if (Vm.ReadOnly || Tool != BoardTool.Select || _drag is not null || _connecting is not null || _marquee) return;
         var item = Tree.FindAncestor<BoardItemContainer>(e.OriginalSource as DependencyObject)?.Item;
         if (item is not null && item.Editing == EditField.None) _rightStart = (item, e.GetPosition(Surface));
+        else if (item is null) _rightEmpty = e.GetPosition(Surface);
     }
 
     void OnRightUp(object sender, MouseButtonEventArgs e)
     {
         _rightStart = null;
+        _rightEmpty = null;
+        if (_rightMarquee)
+        {
+            _rightMarquee = false;
+            EndMarquee();
+            var shell = Window.GetWindow(this)?.Content as IInputElement;
+            if (shell is not null) SelectionMenuRequested?.Invoke(e.GetPosition(shell)); // sem nada dentro da caixa: só fecha
+            e.Handled = true;
+            return;
+        }
         if (_rightDrag)
         {
             _rightDrag = false;
@@ -1984,8 +2019,29 @@ public partial class BoardView : UserControl
 
     // ---------- exportar ----------
 
+    bool _exportHold; // exportando: nenhum item criado para a imagem é guardado de volta
+
+    /// <summary>
+    /// Exportar: cria todos os itens e espera o app terminar de montá-los (modelos, textos carregados, eventos
+    /// Loaded) antes de desenhar. Itens recém-criados desenhados na hora saíam em branco.
+    /// </summary>
+    public async Task<BitmapSource> RenderRegionAsync(IReadOnlyCollection<BoardItemViewModel> items, double scale, bool onlyThese, double maxAspect = 0, double maxPixels = PdfMaxPixels)
+    {
+        _exportHold = true;
+        try
+        {
+            foreach (var it in items) Realize(it);
+            UpdateLayout();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            UpdateLayout();
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            return RenderRegion(items, scale, onlyThese, maxAspect, maxPixels);
+        }
+        finally { _exportHold = false; Invalidate(); }
+    }
+
     /// <summary>Desenha uma área do quadro (todo ou só a seleção) numa imagem, com o fundo do quadro atual por baixo.</summary>
-    public BitmapSource RenderRegion(IReadOnlyCollection<BoardItemViewModel> items, double scale, bool onlyThese, BoardItemViewModel? centerOn = null)
+    public BitmapSource RenderRegion(IReadOnlyCollection<BoardItemViewModel> items, double scale, bool onlyThese, double maxAspect = 0, double maxPixels = PdfMaxPixels)
     {
         // Primeiro cria e mede tudo: itens fora da tela ainda não têm o tamanho real, e a área sairia errada.
         foreach (var it in items) Realize(it);
@@ -2007,14 +2063,14 @@ public partial class BoardView : UserControl
         var area = items.Aggregate(Rect.Empty, (r, i) => { r.Union(i.Bounds); return r; });
         if (area.IsEmpty) area = _camera.VisibleWorld;
         area.Inflate(40, 40);
-        // Parte do centro do título e abre para os dois lados até caber tudo.
-        if (centerOn is not null)
+        // Cobre tudo o que tem escrito; se ficar comprido demais, abre o lado curto (igual para os dois lados)
+        // até a proporção pedida, para a página não virar uma faixa.
+        if (maxAspect > 1)
         {
-            double cx = centerOn.Box.X + centerOn.Box.Width / 2;
-            double half = Math.Max(cx - area.Left, area.Right - cx);
-            area = new Rect(cx - half, area.Y, half * 2, area.Height);
+            if (area.Width / area.Height > maxAspect) area.Inflate(0, (area.Width / maxAspect - area.Height) / 2);
+            else if (area.Height / area.Width > maxAspect) area.Inflate((area.Height / maxAspect - area.Width) / 2, 0);
         }
-        scale = Math.Min(scale, Math.Min(MaxExportSide / Math.Max(area.Width, area.Height), Math.Sqrt(MaxExportPixels / (area.Width * area.Height))));
+        scale = Math.Min(scale, Math.Min(MaxExportSide / Math.Max(area.Width, area.Height), Math.Sqrt(maxPixels / (area.Width * area.Height))));
 
         // Fotos na resolução que a imagem pede (na tela elas ficam reduzidas para poupar memória).
         var images = _containers.Values.Select(FindChild<ImageView>).OfType<ImageView>().ToList();

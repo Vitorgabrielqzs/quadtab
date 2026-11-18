@@ -14,6 +14,10 @@ public static class DesignLibrary
 {
     public static readonly Design[] All =
     [
+        new("Mapa pastel", "Ideia central num borrão de tinta e oito tópicos em etiquetas pastel com setas.", Pastel),
+        new("Caderno de estudos", "Resumo de matéria: nuvem no centro, ramos coloridos, listas e post-its de lembrete.", Notebook),
+        new("Teia orgânica", "Ramos grossos que afinam até as folhas, com o texto direto nas linhas.", Organic),
+        new("Teia de conceitos", "Conceitos em caixas ligadas por linhas finas, espalhados como uma teia.", ConceptWeb),
         new("Mapa mental radial", "Uma ideia no centro e seis ramos coloridos, cada um com dois detalhes.", Radial),
         new("Espinha de peixe", "Causas e efeito (Ishikawa): seis espinhas levam ao problema na cabeça.", Fishbone),
         new("Linha do tempo neon", "Seis marcos sobre uma linha luminosa, no quadro escuro.", Timeline),
@@ -49,17 +53,17 @@ public static class DesignLibrary
 
         /// <summary>Forma da biblioteca com texto no meio. x, y = canto de cima à esquerda.</summary>
         public int Shape(double x, double y, double w, double h, string shape, string fill, string border, string text = "",
-            double size = 18, string ink = "#FF1D2130", bool bold = true, double stroke = 2.5, string font = "Inter") =>
+            double size = 18, string ink = "#FF1D2130", bool bold = true, double stroke = 2.5, string font = "Inter", string align = "centro") =>
             Put(new BoardItem
             {
                 Tipo = "forma", Forma = shape, X = x, Y = y, Largura = w, Altura = h, Texto = text, Fixacao = "nenhuma",
-                Estilo = new ItemStyle { Preenchimento = fill, Borda = border, Espessura = stroke, Tamanho = size, CorTexto = ink, Alinhamento = "centro", Negrito = bold, Fonte = font },
+                Estilo = new ItemStyle { Preenchimento = fill, Borda = border, Espessura = stroke, Tamanho = size, CorTexto = ink, Alinhamento = align, Negrito = bold, Fonte = font },
             }, w, h);
 
         /// <summary>Forma centrada em (cx, cy).</summary>
         public int ShapeAt(double cx, double cy, double w, double h, string shape, string fill, string border, string text = "",
-            double size = 18, string ink = "#FF1D2130", bool bold = true, double stroke = 2.5) =>
-            Shape(cx - w / 2, cy - h / 2, w, h, shape, fill, border, text, size, ink, bold, stroke);
+            double size = 18, string ink = "#FF1D2130", bool bold = true, double stroke = 2.5, string font = "Inter") =>
+            Shape(cx - w / 2, cy - h / 2, w, h, shape, fill, border, text, size, ink, bold, stroke, font);
 
         /// <summary>Texto solto (título). A largura é estimada só para não encostar em nada.</summary>
         public int Text(double x, double y, string text, double size, string color = "branco", string font = "Inter") =>
@@ -85,6 +89,14 @@ public static class DesignLibrary
                 Tipo = "caixa", Cor = color, X = x, Y = y, Largura = w, Altura = h, Texto = text, Fixacao = "nenhuma",
                 Estilo = new ItemStyle { Tamanho = size, CorTexto = "#FF1D2130" },
             }, w, h);
+
+        /// <summary>Tabela (a primeira linha é o cabeçalho). Altura estimada só para as linhas acharem a borda.</summary>
+        public int Table(double x, double y, double w, params string[][] rows) =>
+            Put(new BoardItem { Tipo = "tabela", X = x, Y = y, Largura = w, Tabela = rows.Select(r => r.ToList()).ToList(), Fixacao = "nenhuma" }, w, rows.Length * 44);
+
+        /// <summary>Ícone da biblioteca de formas (lâmpada, livro, estrela...), centrado em (cx, cy).</summary>
+        public int Icon(double cx, double cy, double size, string shape, string fill, string border) =>
+            ShapeAt(cx, cy, size, size, shape, fill, border, "", 14, "#FF1D2130", false, 2);
 
         public (double X, double Y) Anchor(int id, string side)
         {
@@ -137,12 +149,77 @@ public static class DesignLibrary
             }, 4, 4);
         }
 
-        public Board Done(bool hideTitle = false)
+        public Board Done(bool hideTitle = false, double scale = 1)
         {
             // Linhas atrás de tudo: os itens ficam por cima das pontas.
             int z = 1;
             foreach (var it in _items.OrderBy(i => i.Tipo == "linha" ? 0 : 1).ThenBy(i => i.Id)) it.Z = z++;
-            return new Board { Modelo = model, Itens = _items, TituloOculto = hideTitle, Diagrama = true };
+            if (scale != 1) Shrink(scale);
+
+            // Abre no meio do conteúdo, num zoom em que o texto dos blocos dá para ler
+            // (abaixo de 34% o quadro mostra só os títulos). Afastar mostra o mapa inteiro.
+            var boxes = _items.Where(i => i.Tipo != "linha").Select(Box).ToList();
+            double minX = boxes.Min(r => r.X), maxX = boxes.Max(r => r.X + r.W), minY = boxes.Min(r => r.Y), maxY = boxes.Max(r => r.Y + r.H);
+            double zoom = Math.Clamp(Math.Min(1150 / (maxX - minX), 680 / (maxY - minY)), 0.55, 1);
+            return new Board
+            {
+                Modelo = model, Itens = _items, TituloOculto = hideTitle, Diagrama = true,
+                Camera = new Camera { X = (minX + maxX) / 2, Y = (minY + maxY) / 2, Zoom = zoom },
+            };
+        }
+
+        (double X, double Y, double W, double H) Box(BoardItem it)
+        {
+            var (_, _, w, h) = _boxes[it.Id];
+            return (it.X, it.Y, it.Largura ?? w, it.Altura ?? h);
+        }
+
+        /// <summary>
+        /// Deixa o design mais compacto: posições, formas e letras das formas e títulos encolhem; blocos,
+        /// tabelas, caixas e post-its (letra fixa) mantêm um tamanho mínimo, centrados onde estavam.
+        /// </summary>
+        void Shrink(double s)
+        {
+            foreach (var it in _items)
+            {
+                if (it.Linha is { } l)
+                {
+                    foreach (var e in new[] { l.De, l.Para }) { e.X *= s; e.Y *= s; }
+                    it.X *= s; it.Y *= s;
+                    if (it.Largura is { } lw) it.Largura = Math.Max(4, lw * s);
+                    if (it.Altura is { } lh) it.Altura = Math.Max(4, lh * s);
+                    continue;
+                }
+                var (x, y, w, h) = Box(it);
+                double cx = (x + w / 2) * s, cy = (y + h / 2) * s;
+                (double minW, double minH) = it.Tipo switch
+                {
+                    "bloco" => (250, 110),
+                    "tabela" => (300, 0),
+                    "caixa" => (220, 70),
+                    _ => (0, 0),
+                };
+                double nw = it.Tipo == "postit" ? 172 : Math.Max(minW, w * s);
+                double nh = it.Tipo == "postit" ? 172 : Math.Max(minH, h * s);
+                if (it.Tipo != "postit")
+                {
+                    if (it.Largura is not null) it.Largura = nw;
+                    if (it.Altura is not null) it.Altura = nh;
+                }
+                if (it.Estilo is { } st && it.Tipo is "forma" or "texto") st.Tamanho = Math.Max(12, Math.Round(st.Tamanho * s, 1));
+                // Forma com texto: nunca menor que o texto (a forma tem 16 px de margem por dentro).
+                if (it is { Tipo: "forma", Estilo: { } ts } && it.Texto.Length > 0)
+                {
+                    var rows = it.Texto.Split('\n');
+                    nw = Math.Max(nw, rows.Max(r => r.Length) * ts.Tamanho * 0.6 + 36);
+                    nh = Math.Max(nh, rows.Length * ts.Tamanho * 1.35 + 34);
+                    it.Largura = nw;
+                    it.Altura = nh;
+                }
+                it.X = cx - nw / 2;
+                it.Y = cy - nh / 2;
+                _boxes[it.Id] = (it.X, it.Y, nw, nh);
+            }
         }
     }
 
@@ -153,6 +230,230 @@ public static class DesignLibrary
     }
 
     static string Alpha(string hex, byte a) => $"#{a:X2}{hex[3..]}";
+
+    // ---------- estilo "teia" (pedidos depois): pastel, caderno, orgânico e conceitos ----------
+
+    /// <summary>Largura de um texto solto numa forma transparente (estimada pelo tamanho da letra).</summary>
+    static double TextWidth(string text, double size) => text.Split('\n').Max(l => l.Length) * size * 0.6 + 50; // + as margens do texto da forma
+
+    /// <summary>Texto sem caixa: forma sem fundo e sem borda, centrada em (cx, cy).</summary>
+    static int Label(Builder b, double cx, double cy, string text, double size, string ink, bool bold = false, string font = "Inter", string align = "centro", double? width = null)
+    {
+        double w = width ?? TextWidth(text, size);
+        double h = text.Split('\n').Length * size * 1.4 + 40;
+        return b.Shape(cx - w / 2, cy - h / 2, w, h, "retangulo", "#00FFFFFF", "#00FFFFFF", text, size, ink, bold, 0, font, align);
+    }
+
+    // ---------- mapa pastel ----------
+
+    static Board Pastel()
+    {
+        var b = new Builder("liso");
+        const string ink = "#FF3A3F4B";
+        int center = b.Shape(-320, -165, 640, 330, "pincelada", "#FFF8D5DE", "#00FFFFFF", "Mapa\nmental", 76, "#FF4A4D55", false, 0, "Fredoka");
+        (string Title, string Key, double X, double Y, string Text, string Icon)[] topics =
+        [
+            ("Planejamento", "ceu", -780, -340, "Defina o que fazer primeiro, os prazos e quem ajuda em cada parte.", "documento"),
+            ("Benefício", "areia", 0, -500, "O que melhora para você e para quem está perto.", "estrela"),
+            ("Conceito", "amarelo", 780, -340, "Explique a ideia em poucas palavras, como para um amigo.", "lampada"),
+            ("Pesquisa", "verde", -920, 0, "Junte fontes, exemplos e números que confirmem a ideia.", "livro"),
+            ("Solução", "turquesa", 920, 0, "Como resolver o problema, passo a passo.", "raio"),
+            ("Valores", "lima", -780, 340, "O que é importante e não pode ficar de fora.", "coracao"),
+            ("Checklist", "rosa", 0, 520, "- Revisar o plano com calma\n- Pedir a opinião de alguém\n- Marcar o que já foi feito", "check"),
+            ("Resultado", "menta", 780, 340, "Como saber que deu certo: metas e sinais de avanço.", "bandeira"),
+        ];
+        foreach (var (title, key, x, y, text, icon) in topics)
+        {
+            double w = 340, h = title == "Checklist" ? 190 : 160;
+            int block = b.Block(x - w / 2, y - h / 2, w, h, key, title, text);
+            b.Link(center, block, ink, "curva", 2.2, arrow: true);
+            var (paper, dark) = C(key);
+            b.Icon(x + w / 2 - 6, y - h / 2 - 6, 56, icon, paper, dark);
+        }
+        // enfeites leves em volta do centro
+        foreach (var (x, y, s) in new[] { (-390.0, -200.0, 34.0), (400, -190, 26), (380, 215, 30), (-360, 210, 22) })
+            b.Icon(x, y, s, "estrela", "#FFFFE9A8", "#FFD9A13A");
+        b.Text(-1360, -860, "Como montar o seu", 44, "framboesa", "Pacifico");
+        b.PostIt(-1360, -680, "rosa", "- Uma ideia por bloco\n- Palavras-chave\n- Cores iguais = ideias ligadas", "alfinete", lined: true, title: "Lembrar");
+        b.Box(1140, -760, 360, 100, "cinza", "Dica: 2 cliques no vazio criam outro item igual ao último.", 17);
+        b.PostIt(1180, 560, "amarelo", "Comece pelo centro!", "fita");
+        b.Table(-1400, 560, 460, ["Etapa", "Quando", "Feito"], ["Pesquisar", "Semana 1", "✓"], ["Planejar", "Semana 2", ""], ["Apresentar", "Semana 3", ""]);
+        return b.Done(hideTitle: true, scale: 0.62);
+    }
+
+    // ---------- caderno de estudos ----------
+
+    static Board Notebook()
+    {
+        var b = new Builder("pontilhado");
+        const string dark = "#FF2A2E39";
+        b.Text(-500, -820, "Resumo · Informática", 60, "branco", "Permanent Marker");
+        b.Icon(-560, -770, 50, "estrela", "#FFFFE27A", "#FF8A6400");
+        b.Icon(560, -770, 40, "estrela", "#FFFFB1C6", "#FFA61F4C");
+        int cloud = b.ShapeAt(0, 0, 440, 320, "nuvem", "#FFFFFFFF", dark, "REDES E\nINTERNET", 36, dark, false, 3.5, "Fredoka");
+        b.Icon(0, -175, 54, "sol", "#FFFFE27A", "#FF8A6400");
+
+        (string Title, string Key, double X, double Y, double W, double H, string Body, string Icon)[] blocks =
+        [
+            ("NAVEGADORES", "azul", -800, -430, 400, 220, "Programas para acessar as páginas da internet.\n- Google Chrome\n- Mozilla Firefox\n- Microsoft Edge", "documento"),
+            ("BUSCAS", "roxo", -840, 90, 420, 260, "- \"aspas\": a expressão exata\n- site: procura num site só\n- filetype: tipo de arquivo (pdf)\n- intitle: palavra no título\n- -palavra: tira do resultado", "interrogacao"),
+            ("E-MAIL", "laranja", 840, 130, 420, 230, "- CC: cópia, todos veem\n- CCO: cópia oculta\n- Anexo: arquivo junto\n- Spam: lixo eletrônico", "nuvem-chat"),
+        ];
+        foreach (var (title, key, x, y, w, h, body, icon) in blocks)
+        {
+            var (paper, ink) = C(key);
+            int block = b.Block(x - w / 2, y - h / 2, w, h, key, title, body);
+            b.Link(cloud, block, ink, "curva", 6);
+            b.Icon(x - w / 2 + 4, y - h / 2 - 4, 54, icon, paper, ink);
+        }
+
+        // Atalhos: bloco curto e tabela embaixo
+        var (gp, gi) = C("verde");
+        int atalhos = b.Block(560, -620, 420, 120, "verde", "ATALHOS", "Para ganhar tempo no navegador.");
+        b.Icon(564, -624, 54, "raio", gp, gi);
+        b.Link(cloud, atalhos, gi, "curva", 6);
+        int table = b.Table(560, -470, 420, ["Ação", "Atalho"], ["Nova guia", "Ctrl+T"], ["Fechar guia", "Ctrl+W"], ["Reabrir guia", "Ctrl+Shift+T"], ["Histórico", "Ctrl+H"], ["Procurar", "Ctrl+F"], ["Favoritos", "Ctrl+D"]);
+        _ = table;
+
+        // Protocolos: bloco e quatro cartões
+        var (pp, pi) = C("indigo");
+        int proto = b.Block(-200, 300, 400, 120, "indigo", "PROTOCOLOS", "Regras para os computadores conversarem.");
+        b.Icon(-196, 296, 54, "pasta", pp, pi);
+        b.Link(cloud, proto, pi, "curva", 6, fromSide: "baixo", toSide: "cima");
+        (string Name, string Text)[] cards = [("HTTP", "páginas da web\nporta 80"), ("HTTPS", "páginas seguras\nporta 443"), ("FTP", "envio de arquivos\nportas 20 e 21"), ("SMTP", "envio de e-mails\nporta 587")];
+        for (int i = 0; i < cards.Length; i++)
+        {
+            int card = b.ShapeAt(-420 + i * 280, 560, 240, 110, "retangulo-arredondado", "#FFFFFFFF", pi, cards[i].Name + "\n" + cards[i].Text, 17, dark, false, 2);
+            b.Link(proto, card, pi, "curva", 2.5, fromSide: "baixo", toSide: "cima");
+        }
+
+        // Avisos e lembretes
+        b.Icon(-1090, 340, 62, "alerta", "#FFFF9E99", "#FFB3261E");
+        Label(b, -870, 340, "Cai muito na prova!", 22, "#FFB3261E", bold: true);
+        b.PostIt(-1180, 460, "amarelo", "Use a internet com sabedoria!", "fita");
+        b.PostIt(1000, 460, "verde", "Informação boa leva longe!", "fita");
+        int review = b.PostIt(1180, -300, "rosa", "- Protocolos\n- Atalhos\n- Buscas", "alfinete", lined: true, title: "Revisar");
+        b.Link(review, atalhos, "#FFC2A06E", "curva", 3, trace: "barbante");
+        b.Block(-220, 720, 440, 130, "lavanda", "Lembrete", "HTTPS tem cadeado: os dados vão protegidos.");
+        b.Box(480, 740, 300, 80, "cinza", "Fonte: aula 3 · página 42", 16);
+        return b.Done(hideTitle: true, scale: 0.6);
+    }
+
+    // ---------- teia orgânica (ramos que afinam) ----------
+
+    static Board Organic()
+    {
+        var b = new Builder("liso");
+        b.TextCentered(0, -800, "Plano do app", 76, "branco", "Caveat", 0.42);
+        int center = b.ShapeAt(0, 0, 230, 110, "retangulo", "#FF9A9DA3", "#00FFFFFF", "meu app", 28, "#FFFFFFFF", true, 0);
+        b.Icon(0, -105, 66, "lampada", "#FFFFE27A", "#FF8A6400");
+        (string Name, string Color, double X, double Y, (string Leaf, string[] Subs)[] Leaves)[] branches =
+        [
+            ("Problema", "#FFC77B6B", -560, -300, [("Ninguém acha nada", ["arquivos espalhados", "pastas demais"]), ("Tudo é lento", ["muitos cliques"]), ("Difícil de dividir", ["só por e-mail"])]),
+            ("Solução", "#FF7FAE4E", -560, 300, [("Simples de usar", ["um clique", "sem cadastro"]), ("Rápido", ["abre na hora"]), ("Bonito", ["cores leves", "letras grandes"])]),
+            ("Público", "#FF4F8DCB", 560, -330, [("Estudantes", ["resumos", "trabalhos em grupo"]), ("Professores", ["aulas"]), ("Equipes pequenas", ["projetos", "reuniões"])]),
+            ("Concorrência", "#FFE0A93A", 600, 30, [("Caro demais", []), ("Complicado", []), ("Sem versão grátis", [])]),
+            ("História", "#FF9A79C6", 560, 380, [("Ideia em 2026", ["num caderno"]), ("Primeiro teste", ["10 amigos"]), ("Lançamento", ["em breve"])]),
+        ];
+        foreach (var (name, color, x, y, leaves) in branches)
+        {
+            double side = Math.Sign(x);
+            int label = Label(b, x, y, name, 30, color, bold: true);
+            b.Link(center, label, color, "curva", 9);
+            for (int i = 0; i < leaves.Length; i++)
+            {
+                var (leaf, subs) = leaves[i];
+                double ly = y + (i - (leaves.Length - 1) / 2.0) * 115;
+                double lx = x + side * (TextWidth(name, 30) / 2 + 60 + TextWidth(leaf, 20) / 2);
+                int l = Label(b, lx, ly, leaf, 20, "#FF3A3F4B");
+                b.Link(label, l, color, "curva", 3.5, fromSide: side > 0 ? "direita" : "esquerda", toSide: side > 0 ? "esquerda" : "direita");
+                for (int k = 0; k < subs.Length; k++)
+                {
+                    double sy = ly + (k - (subs.Length - 1) / 2.0) * 46;
+                    double sx = lx + side * (TextWidth(leaf, 20) / 2 + 30 + TextWidth(subs[k], 16) / 2);
+                    int s = Label(b, sx, sy, subs[k], 16, "#FF6E737C");
+                    b.Link(l, s, color, "curva", 1.5, fromSide: side > 0 ? "direita" : "esquerda", toSide: side > 0 ? "esquerda" : "direita");
+                }
+            }
+        }
+        int mission = b.Block(-200, -620, 400, 140, "amarelo", "Missão", "Ajudar quem estuda a organizar ideias sem complicação.");
+        b.Link(mission, center, "#FF9A9DA3", "curva", 2, arrow: true, fromSide: "baixo", toSide: "cima");
+        b.Block(-220, 560, 440, 210, "verde", "Próximos passos", "- Desenhar as telas\n- Testar com 5 pessoas\n- Corrigir o que confundir\n- Lançar a versão 1");
+        b.Table(-1420, 600, 460, ["Mês", "Meta", "Status"], ["Jan", "Protótipo", "✓"], ["Mar", "10 usuários", "…"], ["Jun", "Lançar", ""]);
+        int idea = b.PostIt(330, 560, "rosa", "Ideia: modo escuro", "alfinete");
+        b.Link(idea, center, "#FF9A79C6", "curva", 2, arrow: true, trace: "barbante");
+        b.Box(1060, -800, 380, 100, "cinza", "Concorrentes: compare preço, facilidade e versão grátis.", 17);
+        b.Icon(1040, -750, 44, "bandeira", "#FFFFBE8C", "#FFA4470E");
+        return b.Done(hideTitle: true, scale: 0.75);
+    }
+
+    // ---------- teia de conceitos ----------
+
+    static Board ConceptWeb()
+    {
+        var b = new Builder("liso");
+        const string line = "#FF6E737C", dark = "#FF2A2E39";
+        int Node(string text, double x, double y, int level)
+        {
+            double size = level switch { 0 => 26, 1 => 19, _ => 17 };
+            var (fill, border) = level switch
+            {
+                0 => ("#FFD9D2EE", dark),
+                1 => ("#FFCFC8EA", "#FF6B6496"),
+                _ => ("#FFC9DEF5", "#FF4C7FB5"),
+            };
+            double w = text.Split('\n').Max(l => l.Length) * size * 0.58 + 44;
+            double h = level == 0 ? 78 : text.Contains('\n') ? 70 : 52;
+            return b.ShapeAt(x, y, w, h, "retangulo", fill, border, text, size, dark, level < 2, level == 0 ? 2.5 : 1.5);
+        }
+        void Edge(int a, int c) => b.Link(a, c, line, "reta", 1.6);
+
+        b.Text(-640, -820, "Psicologia da personalidade", 60, "indigo", "Playfair Display");
+        int root = Node("Psicologia", 0, 0, 0);
+        b.Icon(0, -78, 48, "lampada", "#FFFFE27A", "#FF8A6400");
+        // Testes
+        int tests = Node("Testes", 300, -170, 1); Edge(root, tests);
+        int mbti = Node("MBTI", 260, -380, 2); Edge(tests, mbti);
+        foreach (var (t, x, y) in new[] { ("Quatro\nindicadores", 80, -540), ("16 tipos", 430, -540), ("Simétrico", 470, -400) }) Edge(mbti, Node(t, x, y, 2));
+        int enne = Node("Eneagrama", 640, -170, 2); Edge(tests, enne);
+        int types = Node("9 tipos", 860, -40, 2); Edge(enne, types);
+        foreach (var (t, x, y) in new[] { ("Perfeccionista", 1080, 90), ("Ajudante", 1100, -60), ("Realizador", 1060, -190), ("Não estático", 700, -320) })
+            Edge(t == "Não estático" ? enne : types, Node(t, x, y, 2));
+        int big = Node("Big Five", 260, 220, 2); Edge(tests, big);
+        foreach (var (t, x, y) in new[] { ("Abertura", 520, 300), ("Extroversão", 440, 420), ("Amabilidade", 220, 470), ("Neuroticismo", 20, 400) }) Edge(big, Node(t, x, y, 2));
+        b.Icon(370, 175, 34, "estrela", "#FFFFE27A", "#FF8A6400");
+        // Críticas
+        int crit = Node("Críticas", -320, -230, 1); Edge(root, crit);
+        int valid = Node("Validade\ncientífica", -420, -420, 2); Edge(crit, valid);
+        foreach (var (t, x, y) in new[] { ("Viés", -620, -520), ("Discriminação", -660, -380) }) Edge(valid, Node(t, x, y, 2));
+        Edge(crit, Node("Confiabilidade", -140, -400, 2));
+        Edge(crit, Node("Ética", -580, -250, 2));
+        // Benefícios
+        int ben = Node("Benefícios", -560, 0, 1); Edge(root, ben);
+        foreach (var (t, x, y) in new[] { ("Comunicação", -820, -110), ("Empatia", -860, 20), ("Relações", -820, 140) }) Edge(ben, Node(t, x, y, 2));
+        // Aplicações
+        int app = Node("Aplicações", -300, 250, 1); Edge(root, app);
+        Edge(app, Node("Coaching", -560, 190, 2));
+        Edge(app, Node("Liderança", -600, 330, 2));
+        int grow = Node("Crescimento", -420, 450, 2); Edge(app, grow);
+        foreach (var (t, x, y) in new[] { ("Planejamento", -640, 560), ("Carreira", -380, 600) }) Edge(grow, Node(t, x, y, 2));
+        Edge(app, Node("Treinamento", -140, 460, 2));
+
+        // Blocos de apoio, legenda e lembretes
+        int summary = b.Block(700, 330, 420, 190, "ceu", "Resumo", "Os testes descrevem como cada pessoa tende a agir. Ajudam a se conhecer, mas não são um rótulo.");
+        b.Link(big, summary, "#FF4C7FB5", "curva", 2, arrow: true, trace: "barbante");
+        b.Block(-1300, -640, 400, 170, "lilas", "Para lembrar", "- MBTI: 16 tipos\n- Eneagrama: 9 tipos\n- Big Five: 5 traços");
+        b.Block(-1300, -420, 400, 150, "pessego", "Pergunta", "Um teste pode mudar com o tempo?");
+        b.PostIt(-1200, 300, "amarelo", "Prova: MBTI e Big Five", "alfinete");
+        b.Box(900, -820, 420, 190, "cinza", "", 16);
+        b.ShapeAt(950, -770, 40, 30, "retangulo", "#FFCFC8EA", "#FF6B6496", "", 14, dark, false, 1.5);
+        Label(b, 1080, -770, "Tema principal", 18, dark, align: "esquerda", width: 200);
+        b.ShapeAt(950, -720, 40, 30, "retangulo", "#FFC9DEF5", "#FF4C7FB5", "", 14, dark, false, 1.5);
+        Label(b, 1080, -720, "Detalhe", 18, dark, align: "esquerda", width: 200);
+        b.Free(930, -670, 970, -670, line, 1.6);
+        Label(b, 1080, -670, "Ligação", 18, dark, align: "esquerda", width: 200);
+        return b.Done(hideTitle: true, scale: 0.8);
+    }
 
     // ---------- 1. mapa mental radial ----------
 
@@ -186,6 +487,11 @@ public static class DesignLibrary
                 b.Link(branch, leaf, ink, "curva", 2.5);
             }
         }
+        b.Block(-1260, -760, 380, 180, "ceu", "Como usar", "- Troque os textos\n- Some ramos com o botão direito\n- Use cores por assunto");
+        b.PostIt(1000, -760, "amarelo", "Escreva só palavras-chave", "fita");
+        b.Table(900, 580, 440, ["Ramo", "Prazo"], ["Objetivo", "Hoje"], ["Recursos", "Semana 1"], ["Riscos", "Semana 2"]);
+        b.Icon(-1120, 640, 60, "lampada", "#FFFFE27A", "#FF8A6400");
+        b.Block(-1050, 580, 360, 150, "lilas", "Ideia solta", "Anote aqui o que ainda não tem lugar no mapa.");
         return b.Done(hideTitle: true);
     }
 
@@ -221,6 +527,10 @@ public static class DesignLibrary
                 b.Text(cx, cy - 16, "• " + causes[k], 17, key);
             }
         }
+        b.Block(900, 150, 380, 210, "verde", "Plano de ação", "- Escrever um passo a passo\n- Treinar a equipe\n- Medir toda semana");
+        b.Table(900, -470, 380, ["Causa", "Peso"], ["Pessoas", "Alto"], ["Métodos", "Médio"], ["Ambiente", "Baixo"]);
+        b.Icon(1300, 120, 56, "check", "#FFC6EC9E", "#FF3B770F");
+        b.PostIt(-1000, 420, "amarelo", "Pergunte 5 vezes: por quê?", "alfinete");
         return b.Done(hideTitle: true);
     }
 
@@ -252,6 +562,10 @@ public static class DesignLibrary
                 marks[i].Title.ToUpperInvariant() + "\n\n" + marks[i].Text, 19, "#FFFFFFFF", false, 2.5);
             b.Link(dot, card, hex, "reta", 2.5, fromSide: up ? "cima" : "baixo", toSide: up ? "baixo" : "cima");
         }
+        b.Block(1820, -170, 340, 170, "indigo", "Meta do ano", "Lançar o projeto e celebrar com quem ajudou.");
+        b.Icon(1990, -190, 56, "bandeira", "#FFFF6D00", "#FFFFFFFF");
+        b.PostIt(-460, -100, "amarelo", "Revise todo mês", "fita");
+        b.Table(-520, 220, 420, ["Mês", "Feito"], ["JAN", "✓"], ["MAR", "✓"], ["MAI", ""]);
         return b.Done(hideTitle: true);
     }
 
@@ -285,6 +599,10 @@ public static class DesignLibrary
         b.TextCentered(-720, 400, "só do gato", 24, "rosa");
         b.TextCentered(0, 400, "os dois", 24, "roxo");
         b.TextCentered(720, 400, "só do cachorro", 24, "azul");
+        b.Table(-360, 500, 720, ["", "Gato", "Cachorro"], ["Energia", "Média", "Alta"], ["Espaço", "Pouco", "Mais"], ["Passeios", "Não precisa", "Todo dia"]);
+        b.Block(-1120, -560, 360, 150, "rosa", "Gato", "Mais calmo e independente.");
+        b.Block(760, -560, 360, 150, "azul", "Cachorro", "Mais agitado e companheiro.");
+        b.Icon(0, -400, 54, "coracao", "#FFFFB1C6", "#FFA61F4C");
         return b.Done(hideTitle: true);
     }
 
@@ -316,6 +634,10 @@ public static class DesignLibrary
                 b.Link(node, leaf, paper, "angulo", 2.5, fromSide: "baixo", toSide: "cima");
             }
         }
+        b.Icon(-200, -230, 60, "livro", "#FFFFE27A", "#FF8A6400");
+        b.Block(880, -460, 360, 180, "amarelo", "Rotina", "- 2 h por dia\n- 1 redação por semana\n- Simulado no sábado");
+        b.PostIt(-1060, -460, "menta", "- Funções\n- Revolução Francesa\n- Crase", "alfinete", lined: true, title: "Semana 1");
+        b.Table(-300, 380, 600, ["Matéria", "Nota", "Meta"], ["Matemática", "6", "8"], ["Redação", "7", "9"]);
         return b.Done(hideTitle: true);
     }
 
@@ -346,6 +668,10 @@ public static class DesignLibrary
         b.Link(no, step1, gray, "angulo", 2.5, true, "cima", "direita");
         b.Text(-215, -14, "Sim", 20, "verde");
         b.Text(150, -14, "Não", 20, "vermelho");
+        b.Box(420, -380, 300, 190, "cinza", "Verde: começo\nAzul: etapa\nAmarelo: pergunta\nVermelho: fim", 17);
+        b.Block(-960, 360, 380, 150, "ceu", "Dica", "Cada losango é uma pergunta de sim ou não.");
+        b.PostIt(440, 260, "rosa", "E se não der certo?", "alfinete");
+        b.Icon(-300, -330, 56, "interrogacao", "#FFFFE27A", "#FF8A6400");
         return b.Done(hideTitle: true);
     }
 
@@ -371,6 +697,9 @@ public static class DesignLibrary
             for (int k = 0; k < notes.Length; k++)
                 b.PostIt(x + 114, 80 + k * 230, notes[k].Color, notes[k].Text, k % 2 == 0 ? "alfinete" : "fita");
         }
+        b.Block(1360, -20, 360, 230, "lavanda", "Regras", "- No máximo 3 em Fazendo\n- Mova da esquerda para a direita\n- Revise na sexta");
+        b.Icon(1700, -30, 56, "check", "#FFC6EC9E", "#FF3B770F");
+        b.Table(1360, 260, 360, ["Quem", "Tarefas"], ["Ana", "2"], ["Leo", "3"]);
         return b.Done(hideTitle: true);
     }
 
@@ -402,6 +731,9 @@ public static class DesignLibrary
             b.Text(x + 32, y + 80, hint, 20, key);
             b.PostIt(x + 60 + (i % 2) * 140, y + 170 + (i / 2) * 40, key == "cinza" ? "branco" : key, note, "fita");
         }
+        b.Block(1240, -100, 360, 190, "ceu", "Dica", "Comece o dia pelo quadrado vermelho e agende o azul na agenda.");
+        b.Icon(1580, -110, 56, "raio", "#FFFFE27A", "#FF8A6400");
+        b.PostIt(1300, 200, "amarelo", "Diga não ao que é cinza", "fita");
         return b.Done(hideTitle: true);
     }
 
@@ -431,6 +763,10 @@ public static class DesignLibrary
         (string Text, double X, double Y)[] meets = [("Paixão", -150, -150), ("Missão", 150, -150), ("Profissão", -150, 150), ("Vocação", 150, 150)];
         foreach (var (t, x, y) in meets) b.ShapeAt(x, y, 170, 56, "retangulo-arredondado", "#00FFFFFF", "#00FFFFFF", t, 21, "#FF1D2130");
         b.ShapeAt(0, 0, 150, 150, "estrela", "#FFFFFFFF", "#FF8E2C87", "IKIGAI", 16, "#FF8E2C87", true, 3);
+        b.Block(720, -780, 400, 210, "lilas", "Perguntas", "- O que faço sem ver o tempo passar?\n- Em que as pessoas me pedem ajuda?");
+        b.PostIt(-1060, -700, "rosa", "Escreva 3 respostas em cada círculo", "alfinete");
+        b.Icon(-560, -320, 50, "coracao", "#FFFFB1C6", "#FFA61F4C");
+        b.Icon(560, -320, 50, "sol", "#FFFFE27A", "#FF8A6400");
         return b.Done(hideTitle: true);
     }
 
@@ -457,6 +793,10 @@ public static class DesignLibrary
             b.Link(title, note, "#FFC2A06E", "reta", 3, trace: "barbante");
         }
         b.ShapeAt(0, 640, 420, 84, "retangulo-arredondado", "#FFFBFAF5", "#FF6B3F22", "UM PASSO POR DIA", 26, "#FF6B3F22", true, 3);
+        b.Icon(-900, -560, 60, "estrela", "#FFFFE27A", "#FF8A6400");
+        b.Icon(860, 620, 60, "coracao", "#FFFFB1C6", "#FFA61F4C");
+        b.Icon(900, -620, 70, "sol", "#FFFFE27A", "#FF8A6400");
+        b.Block(700, 560, 380, 170, "amarelo", "Este mês", "- Correr 3 vezes por semana\n- Guardar 10% do salário");
         return b.Done(hideTitle: true);
     }
 }

@@ -193,13 +193,33 @@
 
                         <c:GlassPanel x:Name="Status" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,32" Height="36"
                                       CornerRadius="18" Padding="15,0" Panel.ZIndex="20">
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" x:Name="StatusInfo">
                                 <Grid Width="14" Height="14" VerticalAlignment="Center">
                                     <Ellipse Fill="{StaticResource SuccessRingBrush}" />
                                     <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{StaticResource SuccessBrush}" />
                                 </Grid>
                                 <TextBlock Text="{Binding StatusText}" FontSize="13" FontWeight="Medium" Foreground="{DynamicResource Ink2Brush}"
                                            Margin="5,0,0,0" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular" />
+                            </StackPanel>
+                        </c:GlassPanel>
+
+                        <!-- Prévia de um design ("Visualizar design"): no lugar do "Salvo", o botão de adicionar como quadro -->
+                        <c:GlassPanel x:Name="PreviewBar" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,30,32" Height="46"
+                                      CornerRadius="23" Padding="5" Panel.ZIndex="21" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource SmallCircleButton}" Width="36" Height="36" Margin="0,0,5,0" Click="OnExitPreview"
+                                        ToolTip="Sai da visualização e volta ao quadro de antes · Esc">
+                                    <c:Icon Data="{StaticResource IcClose}" Size="15" />
+                                </Button>
+                                <Button Style="{StaticResource SoftButton}" Height="36" Padding="16,0" b:UI.Radius="18" b:Press.IsEnabled="True" Click="OnAddPreview"
+                                        Background="{DynamicResource AccentBrush}" b:UI.HoverBackground="{DynamicResource AccentBrush}"
+                                        Foreground="White" FontSize="14" FontWeight="SemiBold"
+                                        ToolTip="Cria um quadro novo com este design e abre">
+                                    <StackPanel Orientation="Horizontal">
+                                        <c:Icon Data="{StaticResource IcPlus}" Size="15" Foreground="White" />
+                                        <TextBlock Text="Adicionar quadro" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </c:GlassPanel>
 
@@ -268,6 +288,66 @@
                                            Foreground="{DynamicResource Ink2Brush}" Typography.NumeralAlignment="Tabular" />
                             </c:GlassPanel>
                         </StackPanel>
+
+                        <!-- Exportar: mini janela de vidro no centro, com os dois formatos (clicar fora ou Esc fecha) -->
+                        <Grid x:Name="ExportPick" Panel.ZIndex="59" Background="#1F000000" Visibility="Collapsed" Focusable="True"
+                              FocusVisualStyle="{x:Null}" MouseLeftButtonDown="OnExportPickBackdrop" PreviewKeyDown="OnExportPickKey">
+                            <c:GlassPanel x:Name="ExportPickSheet" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="34" Width="460"
+                                          Padding="22,18,22,22" Background="{DynamicResource MenuGlassBrush}" RenderTransformOrigin="0.5,0.5">
+                                <c:GlassPanel.RenderTransform>
+                                    <ScaleTransform x:Name="ExportPickScale" />
+                                </c:GlassPanel.RenderTransform>
+                                <StackPanel>
+                                    <DockPanel Margin="4,0,0,16">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource SmallCircleButton}" VerticalAlignment="Top"
+                                                Click="OnExportPickClose" ToolTip="Fecha sem exportar · Esc">
+                                            <c:Icon Data="{StaticResource IcClose}" Size="15" />
+                                        </Button>
+                                        <StackPanel>
+                                            <TextBlock Text="Exportar" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource InkBrush}" />
+                                            <TextBlock Text="Escolha o formato do arquivo" FontSize="13.5" Margin="0,2,0,0" Foreground="{DynamicResource Ink2Brush}" />
+                                        </StackPanel>
+                                    </DockPanel>
+
+                                    <!-- Só aparece com itens selecionados -->
+                                    <StackPanel x:Name="ExportScopeRow" Orientation="Horizontal" Margin="2,0,0,10" Visibility="Collapsed">
+                                        <ToggleButton x:Name="ExportScopeAll" Style="{StaticResource Chip}" Content="Quadro inteiro" Click="OnExportScope"
+                                                      ToolTip="Exporta tudo o que tem no quadro" />
+                                        <ToggleButton x:Name="ExportScopeSel" Style="{StaticResource Chip}" Content="Só a seleção" Click="OnExportScope"
+                                                      ToolTip="Exporta só os itens selecionados" />
+                                    </StackPanel>
+
+                                    <UniformGrid Columns="2">
+                                        <Button Style="{StaticResource TrayCard}" Height="150" Margin="0,0,6,0" Padding="16,14"
+                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="OnExportPng"
+                                                ToolTip="Imagem nítida, que abre direto no visualizador de fotos">
+                                            <StackPanel>
+                                                <Border Width="46" Height="46" CornerRadius="23" Background="{StaticResource Accent14Brush}" HorizontalAlignment="Left">
+                                                    <c:Icon Data="{StaticResource IcImage}" Size="22" Foreground="{StaticResource AccentBrush}"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <TextBlock Text="Imagem (PNG)" FontSize="16" FontWeight="Bold" Margin="0,14,0,0" />
+                                                <TextBlock Text="A melhor qualidade, para ver e aproximar" FontSize="12.5" FontWeight="Medium"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource TrayCard}" Height="150" Margin="6,0,0,0" Padding="16,14"
+                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Click="OnExportPdf"
+                                                ToolTip="Documento para imprimir ou enviar">
+                                            <StackPanel>
+                                                <Border Width="46" Height="46" CornerRadius="23" Background="{StaticResource Accent14Brush}" HorizontalAlignment="Left">
+                                                    <c:Icon Data="{StaticResource IcPage}" Size="22" Foreground="{StaticResource AccentBrush}"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <TextBlock Text="PDF" FontSize="16" FontWeight="Bold" Margin="0,14,0,0" />
+                                                <TextBlock Text="Documento para imprimir ou enviar" FontSize="12.5" FontWeight="Medium"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0" Foreground="{DynamicResource Ink2Brush}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </c:GlassPanel>
+                        </Grid>
 
                         <!-- Exportando: bloco de vidro (o mesmo da bandeja) no meio, segurando os cliques até terminar -->
                         <Grid x:Name="ExportBusy" Panel.ZIndex="60" Background="Transparent" Visibility="Collapsed">

@@ -68,6 +68,51 @@ public partial class App : Application
         MemoryService.Request();
     }
 
+    static string? _previewReturn;
+    static Design? _previewDesign;
+
+    /// <summary>"Visualizar design": mostra o design no quadro, só para ver, sem criar arquivo.</summary>
+    public static void PreviewDesign(Design d)
+    {
+        if (ViewModel is { IsPreview: false } current)
+        {
+            MakeThumbnail();
+            _previewReturn = current.FilePath;
+        }
+        ViewModel?.Close();
+        _previewDesign = d;
+        ViewModel = MainViewModel.Preview(d.Build(), d.Name);
+        Window?.SetBoard(ViewModel);
+        Library.GalleryOpen = false;
+        Library.Refresh();
+    }
+
+    /// <summary>"Adicionar quadro" na prévia: cria o quadro com o design (e a câmera de agora) e abre.</summary>
+    public static void AddPreviewAsBoard()
+    {
+        if (_previewDesign is not { } d || ViewModel is not { IsPreview: true } vm) return;
+        try
+        {
+            var board = d.Build();
+            board.Camera = vm.Camera ?? board.Camera;
+            var path = StorageService.CreateBoard("", d.Name, board);
+            _previewDesign = null;
+            _previewReturn = null;
+            OpenBoard(path, makeThumb: false);
+        }
+        catch (Exception ex) { Log(ex); }
+    }
+
+    /// <summary>Sai da prévia e volta ao quadro que estava aberto antes.</summary>
+    public static void ExitPreview()
+    {
+        if (ViewModel is not { IsPreview: true }) return;
+        var back = _previewReturn is { } p && File.Exists(p) ? p : StorageService.EmptyBoardPath;
+        _previewDesign = null;
+        _previewReturn = null;
+        OpenBoard(back, makeThumb: false);
+    }
+
     /// <summary>Abre uma página no editor ao lado do quadro.</summary>
     public static void OpenPage(string path)
     {

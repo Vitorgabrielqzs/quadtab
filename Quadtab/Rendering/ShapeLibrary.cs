@@ -31,6 +31,7 @@ public static class ShapeLibrary
         ("seta-dupla", "Seta dupla", "Setas", "M0,50 L25,10 V32 H75 V10 L100,50 L75,90 V68 H25 V90 Z"),
         ("chevron", "Divisa", "Setas", "M0,0 H60 L100,50 L60,100 H0 L40,50 Z"),
         ("seta-curva", "Seta curva", "Setas", "M10,100 V55 A45,45 0 0 1 55,10 H70 V0 L100,22 L70,44 V34 H55 A21,21 0 0 0 34,55 V100 Z"),
+        ("pincelada", "Pincelada", "Símbolos", "M6,30 C10,18 30,14 50,15 C64,12 82,10 94,20 L91,26 L98,30 L92,36 L97,44 C99,60 96,74 88,82 L92,86 L80,88 C64,92 40,90 22,86 L12,90 L14,82 C6,76 2,62 4,50 L0,44 L5,40 Z"),
         ("estrela", "Estrela", "Símbolos", "M50,0 L62,36 L100,38 L70,61 L81,100 L50,77 L19,100 L30,61 L0,38 L38,36 Z"),
         ("coracao", "Coração", "Símbolos", "M50,95 C10,65 0,45 0,28 A24,24 0 0 1 50,18 A24,24 0 0 1 100,28 C100,45 90,65 50,95 Z"),
         ("mais", "Mais", "Símbolos", "M35,0 H65 V35 H100 V65 H65 V100 H35 V65 H0 V35 H35 Z"),
