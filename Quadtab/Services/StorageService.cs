@@ -51,19 +51,35 @@ public static class StorageService
     /// <summary>Notas (.md). A pasta se chamava "Páginas"; é renomeada ao abrir.</summary>
     public static string PagesDir => Path.Combine(Root, "Notas");
     static string OldPagesDir => Path.Combine(Root, "Páginas");
+    // Estrutura do cofre (todas as pastas visíveis no Explorador):
+    //   Quadros\                        quadros (.quadtab), com as pastas do usuário
+    //   Notas\                          notas (.md)
+    //   Anexos\Imagens, Vídeos, Arquivos, Prévias
+    //   Lixeira\Quadros, Notas, Arquivos (some de vez depois de 30 dias)
+    //   Sistema\estado.json, Miniaturas\, Registros\ (erros.log), Temporários\
+    // Até a versão 1.3.1 a lixeira era ".lixeira" e o sistema ".quadtab" (ocultas): MigrateLayout muda ao abrir.
     public static string AttachDir => Path.Combine(Root, "Anexos");
-    public static string TrashDir => Path.Combine(Root, ".lixeira");
-    public static string MetaDir => Path.Combine(Root, ".quadtab");
+    public static string TrashDir => Path.Combine(Root, "Lixeira");
+    public static string MetaDir => Path.Combine(Root, "Sistema");
+    static string TrashBoardsDir => Path.Combine(TrashDir, "Quadros");
+    static string TrashNotesDir => Path.Combine(TrashDir, "Notas");
+    static string TrashFilesDir => Path.Combine(TrashDir, "Arquivos");
+    static string ThumbDir => Path.Combine(MetaDir, "Miniaturas");
+    static string TempDir => Path.Combine(MetaDir, "Temporários");
     static string StatePath => Path.Combine(MetaDir, "estado.json");
 
     /// <summary>"Quadro" usado quando todos foram apagados (tela com "Criar novo quadro"); não aparece na lista.</summary>
-    public static string EmptyBoardPath => Path.Combine(MetaDir, "vazio" + BoardExt);
+    public static string EmptyBoardPath => Path.Combine(TempDir, "vazio" + BoardExt);
     /// <summary>Caminho de mentira da prévia de um design (nunca é gravado nem aparece na lista).</summary>
-    public static string PreviewBoardPath => Path.Combine(MetaDir, "previa" + BoardExt);
+    public static string PreviewBoardPath => Path.Combine(TempDir, "previa" + BoardExt);
+
+    /// <summary>Lixeira e Sistema: aparecem no Explorador, mas não na árvore do Cofre dentro do app.</summary>
+    public static bool IsInternalDir(string dir) =>
+        SamePath(dir, Path.GetFullPath(TrashDir)) || SamePath(dir, Path.GetFullPath(MetaDir));
     public static bool IsEmptyBoard(string path) => string.Equals(path, EmptyBoardPath, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Registros de erro: dentro do cofre (.quadtab), como todo o resto.</summary>
-    public static string LogDir => Root.Length > 0 ? MetaDir : OldDataDir;
+    /// <summary>Registros de erro: dentro do cofre (Sistema\Registros), como todo o resto.</summary>
+    public static string LogDir => Root.Length > 0 ? Path.Combine(MetaDir, "Registros") : OldDataDir;
 
     /// <summary>Onde o app antigo guardava o quadro (%AppData%\Quadtab), só para migrar.</summary>
     static string OldDataDir =>
@@ -92,6 +108,7 @@ public static class StorageService
 
         // Tudo fica em Documentos\Cofre; o estado pode apontar para outro cofre (Ajustes).
         Root = defaultRoot;
+        MigrateLayout();
         bool freshVault = !File.Exists(StatePath);
         State = ReadJson(StatePath, Json.AppState) ?? Damaged(StatePath, new AppState());
         // estado.json editado à mão: listas nulas viram listas vazias.
@@ -103,14 +120,17 @@ public static class StorageService
         State.CoresLinhaRecentes ??= [];
         State.OrdemPastas ??= [];
         State.EstiloLinha ??= new();
-        if (!string.IsNullOrEmpty(State.Cofre) && Directory.Exists(State.Cofre)) Root = State.Cofre;
+        if (!string.IsNullOrEmpty(State.Cofre) && Directory.Exists(State.Cofre))
+        {
+            Root = State.Cofre;
+            MigrateLayout(); // o outro cofre também pode estar no formato antigo
+        }
         else State.Cofre = null;
 
         Directory.CreateDirectory(MetaDir);
         MigratePagesFolder();
-        foreach (var d in new[] { BoardsDir, PagesDir, AttachDir, TrashDir, MetaDir }) Directory.CreateDirectory(d);
-        try { File.SetAttributes(TrashDir, FileAttributes.Directory | FileAttributes.Hidden); } catch { }
-        try { File.SetAttributes(MetaDir, FileAttributes.Directory | FileAttributes.Hidden); } catch { }
+        foreach (var d in new[] { BoardsDir, PagesDir, AttachDir, TrashBoardsDir, TrashNotesDir, MetaDir, ThumbDir })
+            Directory.CreateDirectory(d);
 
         MigrateOldBoard();
         // Só um cofre novo ganha o quadro de exemplo; quem apagou todos vê "Criar novo quadro".
@@ -139,6 +159,100 @@ public static class StorageService
                 foreach (var f in Directory.EnumerateFiles(PagesDir, "*.md.erro-*", SearchOption.AllDirectories).ToList())
                     File.Delete(f);
         }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>
+    /// Estrutura antiga (até a 1.3.1) → nova: ".lixeira" vira "Lixeira" (quadros em Lixeira\Quadros, notas e páginas
+    /// em Lixeira\Notas), ".quadtab" vira "Sistema" (miniaturas, registros e temporários em subpastas), os anexos
+    /// soltos vão para Anexos\Imagens, Vídeos ou Arquivos e a pasta "Páginas" vazia some. Nada é apagado: se um
+    /// arquivo não puder sair (travado pelo OneDrive, por exemplo), fica onde está e a próxima abertura tenta de novo.
+    /// </summary>
+    static void MigrateLayout()
+    {
+        try
+        {
+            var oldTrash = Path.Combine(Root, ".lixeira");
+            if (Directory.Exists(oldTrash))
+            {
+                MoveFiles(oldTrash, TrashBoardsDir, "*" + BoardExt);
+                MoveTree(Path.Combine(oldTrash, "Notas"), TrashNotesDir);
+                MoveTree(Path.Combine(oldTrash, "Páginas"), TrashNotesDir);
+                MoveTree(Path.Combine(oldTrash, "Arquivos"), TrashFilesDir);
+                MoveTree(oldTrash, TrashDir); // o que mais houver
+            }
+
+            var oldMeta = Path.Combine(Root, ".quadtab");
+            if (Directory.Exists(oldMeta))
+            {
+                MoveTree(Path.Combine(oldMeta, "miniaturas"), ThumbDir);
+                MoveFiles(oldMeta, Path.Combine(MetaDir, "Registros"), "*.log");
+                foreach (var temp in new[] { "vazio", "previa" })
+                    MoveFile(Path.Combine(oldMeta, temp + BoardExt), Path.Combine(TempDir, temp + BoardExt));
+                MoveTree(oldMeta, MetaDir); // estado.json e o resto
+            }
+            // O quadro vazio antigo era aberto por ".quadtab\vazio.quadtab".
+            ReplaceStatePrefix(@".quadtab\", @"Sistema\Temporários\");
+
+            // Anexos soltos na raiz de Anexos (versões antigas) vão para a subpasta do tipo.
+            if (Directory.Exists(AttachDir))
+                foreach (var f in Directory.EnumerateFiles(AttachDir).ToList())
+                    MoveFile(f, Path.Combine(AttachDir, AttachSubdir(f), Path.GetFileName(f)));
+
+            DeleteIfEmpty(OldPagesDir);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    // Troca o começo dos caminhos guardados no estado.json (direto no texto: o estado ainda não foi carregado).
+    static void ReplaceStatePrefix(string oldPrefix, string newPrefix)
+    {
+        if (!File.Exists(StatePath)) return;
+        var text = File.ReadAllText(StatePath);
+        // No JSON a barra invertida aparece dobrada.
+        string oldJson = "\"" + oldPrefix.Replace(@"\", @"\\"), newJson = "\"" + newPrefix.Replace(@"\", @"\\");
+        if (!text.Contains(oldJson, StringComparison.Ordinal)) return;
+        WriteText(StatePath, text.Replace(oldJson, newJson, StringComparison.Ordinal));
+    }
+
+    // Move os arquivos de uma pasta (só o primeiro nível) que combinam com o filtro.
+    static void MoveFiles(string from, string to, string pattern)
+    {
+        if (!Directory.Exists(from)) return;
+        foreach (var f in Directory.EnumerateFiles(from, pattern).ToList()) MoveFile(f, Path.Combine(to, Path.GetFileName(f)));
+    }
+
+    // Move uma pasta inteira para dentro de outra, mesclando com o que já existe lá; a de origem some se esvaziar.
+    static void MoveTree(string from, string to)
+    {
+        if (!Directory.Exists(from)) return;
+        foreach (var f in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories).ToList())
+            MoveFile(f, Path.Combine(to, Path.GetRelativePath(from, f)));
+        foreach (var d in Directory.EnumerateDirectories(from, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length).ToList())
+            DeleteIfEmpty(d);
+        DeleteIfEmpty(from);
+    }
+
+    // Move um arquivo; se o destino já existe, o nome ganha um número (nada é sobrescrito).
+    static void MoveFile(string from, string to)
+    {
+        if (!File.Exists(from)) return;
+        try
+        {
+            var dir = Path.GetDirectoryName(to)!;
+            Directory.CreateDirectory(dir);
+            if (File.Exists(to)) to = Unique(dir, Path.GetFileNameWithoutExtension(to), Path.GetExtension(to));
+            File.Move(from, to);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    static void DeleteIfEmpty(string dir)
+    {
+        try { if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
@@ -184,7 +298,15 @@ public static class StorageService
         // Quadros antigos guardam "Páginas\nota.md": a pasta agora se chama "Notas".
         if (rel.StartsWith("Páginas\\", StringComparison.Ordinal) || rel.StartsWith("Páginas/", StringComparison.Ordinal))
             rel = "Notas" + rel[7..];
-        return Path.Combine(Root, rel);
+        var full = Path.Combine(Root, rel);
+        // Quadros antigos guardam "Anexos\foto.png": o arquivo agora mora na subpasta do tipo (Anexos\Imagens\foto.png).
+        if ((rel.StartsWith("Anexos\\", StringComparison.Ordinal) || rel.StartsWith("Anexos/", StringComparison.Ordinal))
+            && rel.IndexOfAny(['\\', '/'], 7) < 0 && !File.Exists(full))
+        {
+            var moved = Path.Combine(AttachDir, AttachSubdir(rel), rel[7..]);
+            if (File.Exists(moved)) return moved;
+        }
+        return full;
     }
 
     /// <summary>Nome sem caracteres proibidos pelo Windows.</summary>
@@ -414,12 +536,12 @@ public static class StorageService
 
     /// <summary>
     /// Tira uma pasta (já sem os quadros) do cofre: arquivos que não são quadros (colocados pelo Explorador)
-    /// vão para .lixeira\Arquivos, nunca são apagados direto; depois somem as pastas vazias.
+    /// vão para Lixeira\Arquivos, nunca são apagados direto; depois somem as pastas vazias.
     /// </summary>
     public static void RemoveFolder(string dir)
     {
         if (!Directory.Exists(dir)) return;
-        var bin = Path.Combine(TrashDir, "Arquivos");
+        var bin = TrashFilesDir;
         foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).ToList())
         {
             try
@@ -512,8 +634,8 @@ public static class StorageService
     public static void TrashBoard(string path, bool notify = true)
     {
         var rel = Path.GetRelativePath(BoardsDir, path).Replace('\\', '¦');
-        Directory.CreateDirectory(TrashDir);
-        File.Move(path, TrashTarget(TrashDir, rel));
+        Directory.CreateDirectory(TrashBoardsDir);
+        File.Move(path, TrashTarget(TrashBoardsDir, rel));
         State.Recentes.Remove(Rel(path));
         State.Favoritos.Remove(Rel(path));
         SaveState();
@@ -541,8 +663,8 @@ public static class StorageService
     /// <summary>Quadros na lixeira, lidos do nome "data__pasta¦quadro.quadtab".</summary>
     public static IEnumerable<TrashEntry> TrashEntries()
     {
-        if (!Directory.Exists(TrashDir)) yield break;
-        foreach (var f in Directory.EnumerateFiles(TrashDir, "*" + BoardExt))
+        if (!Directory.Exists(TrashBoardsDir)) yield break;
+        foreach (var f in Directory.EnumerateFiles(TrashBoardsDir, "*" + BoardExt))
         {
             var name = Path.GetFileName(f);
             int i = name.IndexOf("__", StringComparison.Ordinal);
@@ -583,7 +705,7 @@ public static class StorageService
     /// <summary>Notas de um quadro que está na lixeira: (onde a nota morava, a cópia mais nova na lixeira).</summary>
     static IEnumerable<(string Note, string Trashed)> TrashedNotesOf(string trashedBoard)
     {
-        var dir = Path.Combine(TrashDir, "Notas");
+        var dir = TrashNotesDir;
         if (!Directory.Exists(dir)) yield break;
         var board = ReadBoard(trashedBoard);
         if (board is null) yield break;
@@ -603,7 +725,7 @@ public static class StorageService
             if ((DateTime.Now - e.DeletedAt).TotalDays > 30)
                 DeleteWithNotes(e.TrashPath);
         // Arquivos soltos de pastas apagadas: mesmo prazo de 30 dias.
-        var bin = Path.Combine(TrashDir, "Arquivos");
+        var bin = TrashFilesDir;
         if (!Directory.Exists(bin)) return;
         foreach (var f in Directory.EnumerateFiles(bin).ToList())
         {
@@ -712,7 +834,7 @@ public static class StorageService
 
     public static void TrashPage(string path)
     {
-        var dir = Path.Combine(TrashDir, "Notas");
+        var dir = TrashNotesDir;
         Directory.CreateDirectory(dir);
         File.Move(path, TrashTarget(dir, Path.GetFileName(path)));
         NotifyLibrary();
@@ -720,10 +842,13 @@ public static class StorageService
 
     // ---------- anexos ----------
 
-    /// <summary>Grava bytes (SaveAttachment) ou copia um arquivo (ImportAttachment) para Anexos; devolve o caminho relativo.</summary>
-    public static string SaveAttachment(byte[] data, string name)
+    /// <summary>
+    /// Grava bytes (SaveAttachment) ou copia um arquivo (ImportAttachment) para a subpasta do tipo em Anexos;
+    /// devolve o caminho relativo. Prévias (1ª página de PDF, imagem de link) vão para Anexos\Prévias.
+    /// </summary>
+    public static string SaveAttachment(byte[] data, string name, bool preview = false)
     {
-        var path = NewAttachment(name);
+        var path = NewAttachment(name, preview ? "Prévias" : null);
         File.WriteAllBytes(path, data);
         return Rel(path);
     }
@@ -735,15 +860,28 @@ public static class StorageService
         return Rel(path);
     }
 
-    // Caminho livre em Anexos com o nome (seguro) do arquivo.
-    static string NewAttachment(string name)
+    // Caminho livre em Anexos\<tipo> com o nome (seguro) do arquivo.
+    static string NewAttachment(string name, string? subdir = null)
     {
-        Directory.CreateDirectory(AttachDir);
-        return Unique(AttachDir, SafeName(Path.GetFileNameWithoutExtension(name)), Path.GetExtension(name));
+        var dir = Path.Combine(AttachDir, subdir ?? AttachSubdir(name));
+        Directory.CreateDirectory(dir);
+        return Unique(dir, SafeName(Path.GetFileNameWithoutExtension(name)), Path.GetExtension(name));
     }
 
-    /// <summary>Miniatura do quadro (galeria), em .quadtab/miniaturas.</summary>
-    public static string ThumbPath(string boardPath) => Path.Combine(MetaDir, "miniaturas", Rel(boardPath).Replace('\\', '¦') + ".png");
+    static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".ico", ".svg", ".heic", ".avif" };
+    static readonly HashSet<string> VideoExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".m4v", ".mpg", ".mpeg" };
+
+    /// <summary>Subpasta de Anexos pelo tipo do arquivo: Imagens, Vídeos ou Arquivos.</summary>
+    static string AttachSubdir(string name)
+    {
+        var ext = Path.GetExtension(name);
+        return ImageExts.Contains(ext) ? "Imagens" : VideoExts.Contains(ext) ? "Vídeos" : "Arquivos";
+    }
+
+    /// <summary>Miniatura do quadro (galeria), em Sistema\Miniaturas.</summary>
+    public static string ThumbPath(string boardPath) => Path.Combine(ThumbDir, Rel(boardPath).Replace('\\', '¦') + ".png");
 
     // ---------- leitura e escrita segura ----------
 

@@ -164,7 +164,7 @@ public static partial class MediaService
             using var net = stream.AsStreamForRead();
             using var ms = new MemoryStream();
             await net.CopyToAsync(ms);
-            item.PreviewImage = StorageService.SaveAttachment(ms.ToArray(), Path.GetFileNameWithoutExtension(path) + " (prévia).png");
+            item.PreviewImage = StorageService.SaveAttachment(ms.ToArray(), Path.GetFileNameWithoutExtension(path) + " (prévia).png", preview: true);
         }
         catch { } // PDF protegido ou corrompido: fica o ícone
     }
@@ -211,7 +211,7 @@ public static partial class MediaService
                 var bytes = await ir.Content.ReadAsByteArrayAsync();
                 if (bytes.Length > 8_000_000) return;
                 var ext = type switch { "image/png" => ".png", "image/gif" => ".gif", "image/webp" => ".webp", _ => ".jpg" };
-                item.PreviewImage = StorageService.SaveAttachment(bytes, $"link {uri.Host}{ext}");
+                item.PreviewImage = StorageService.SaveAttachment(bytes, $"link {uri.Host}{ext}", preview: true);
             }
         }
         catch { } // sem internet ou site bloqueou: o cartão fica só com o endereço

@@ -3,6 +3,10 @@ bin/
 obj/
 publish/
 *.exe
+Executavel/
+
+# Documentos do TCC (locais)
+TCC/
 
 # Visual Studio / VS Code
 .vs/

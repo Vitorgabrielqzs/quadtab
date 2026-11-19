@@ -2,7 +2,7 @@
 
 Quadro visual infinito para Windows: cole notas, post-its, blocos, formas e imagens, arraste tudo livremente e ligue as ideias com linhas e setas.
 
-![Quadtab no tema claro](docs/claro.png)
+![Quadtab no tema claro](Documentacao/Imagens/claro.png)
 
 ## Baixar
 
@@ -23,9 +23,9 @@ Windows 10 (1809 ou mais novo) ou Windows 11, 64 bits.
 
 | Bandeja de elementos | Linhas e setas |
 |---|---|
-| ![Bandeja](docs/bandeja.png) | ![Menu da linha](docs/linha.png) |
+| ![Bandeja](Documentacao/Imagens/bandeja.png) | ![Menu da linha](Documentacao/Imagens/linha.png) |
 
-![Quadtab no tema escuro](docs/escuro.png)
+![Quadtab no tema escuro](Documentacao/Imagens/escuro.png)
 
 ## Atalhos
 
@@ -47,11 +47,14 @@ Windows 10 (1809 ou mais novo) ou Windows 11, 64 bits.
 Tudo fica em `Documentos\Cofre`, salvo automaticamente:
 
 ```
-Quadros\    um arquivo .quadtab (JSON) por quadro
+Quadros\    um arquivo .quadtab (JSON) por quadro, com as suas pastas
 Notas\      cada nota é um arquivo .md
-Anexos\     imagens, vídeos e arquivos
-.lixeira\   itens apagados (30 dias)
+Anexos\     Imagens\, Vídeos\, Arquivos\ e Prévias\ (de PDFs e links)
+Lixeira\    Quadros\, Notas\ e Arquivos\ apagados (somem depois de 30 dias)
+Sistema\    estado.json, Miniaturas\, Registros\ (erros.log) e Temporários\
 ```
+
+Cofres das versões até a 1.3.1 (com `.lixeira` e `.quadtab` ocultas) são convertidos sozinhos na primeira abertura.
 
 ## Compilar
 
@@ -65,6 +68,16 @@ dotnet run --project Quadtab
 dotnet publish Quadtab -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-O `.exe` sai em `Quadtab\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish\`.
+O `.exe` sai em `Quadtab\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish\`. O `Scripts\publicar.bat` faz a publicação, copia o `.exe` para `Executavel\` e cria o atalho no menu Iniciar.
+
+Pastas do repositório:
+
+```
+Quadtab\        código do app (C#, WPF)
+Documentacao\   imagens do README
+Scripts\        publicar.bat
+Executavel\     Quadtab.exe publicado (fora do git)
+TCC\            documentos do TCC (fora do git)
+```
 
 Feito em C#, .NET 10 e WPF (MVVM, [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet)). Fontes [Inter](https://github.com/rsms/inter) e [Nunito](https://github.com/googlefonts/nunito) sob a licença SIL OFL (textos em `Quadtab/Assets/Fonts`).

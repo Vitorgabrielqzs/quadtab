@@ -402,7 +402,8 @@ public partial class LibraryViewModel : ObservableObject
     static IEnumerable<SideNode> FolderEntries(string dir, int depth)
     {
         if (!Directory.Exists(dir)) yield break;
-        foreach (var d in Directory.EnumerateDirectories(dir).Where(d => !System.IO.Path.GetFileName(d).StartsWith('.'))
+        // Lixeira e Sistema ficam visíveis no Explorador, mas aqui não: abrir algo de lá pelo app daria confusão.
+        foreach (var d in Directory.EnumerateDirectories(dir).Where(d => !System.IO.Path.GetFileName(d).StartsWith('.') && !StorageService.IsInternalDir(d))
                      .OrderBy(d => d, StringComparer.CurrentCultureIgnoreCase))
             yield return new SideNode(SideKind.Folder, d, System.IO.Path.GetFileName(d), depth, "cofre") { Icon = "IcFolder" };
         foreach (var f in Directory.EnumerateFiles(dir).Where(f => !System.IO.Path.GetFileName(f).StartsWith('.') && !f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
