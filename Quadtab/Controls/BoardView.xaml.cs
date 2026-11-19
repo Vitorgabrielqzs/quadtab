@@ -80,14 +80,60 @@ public partial class BoardView : UserControl
     const int MaxPooled = 24;
     readonly List<BoardItemViewModel> _pending = [];
     readonly Stack<BoardItemContainer>[] _pool = Enumerable.Range(0, 13).Select(_ => new Stack<BoardItemContainer>()).ToArray();
-    readonly BitmapCache _itemCache = new(1) { EnableClearType = false, SnapsToDevicePixels = false };
+    // Cada item tem a própria imagem guardada (BitmapCache). Quando a escala ideal muda, elas são refeitas
+    // aos poucos (CacheBudgetPerFrame), e não todas de uma vez: com 512 blocos o app congelava 3,5 s.
+    double _cacheScale = 1;
+    readonly List<BoardItemContainer> _rescale = [];
+    // Pixels refeitos por quadro. Na Iris Xe, o vidro dos blocos sai a ~35 MP/s: 1 MP ≈ 30 ms, o app segue a ~30 fps.
+    const double CacheBudgetPerFrame = 1_000_000;
+    static BitmapCache NewCache(double scale) => new(scale) { EnableClearType = false, SnapsToDevicePixels = false };
 
     // Imagem do item com o dobro de pixels da tela: em posição "quebrada" ela é reamostrada, e com 1× o texto borra.
     const double GapHoldMs = 500;
     readonly DispatcherTimer _holdTimer = new() { Interval = TimeSpan.FromMilliseconds(GapHoldMs + 20) };
     // 2x a escala da tela para ficar nítido, mas no máximo 4x: com zoom alto cada item virava uma imagem
     // enorme (até 36x a área), refeita toda vez que a câmera parava, e o app engasgava.
-    double ItemCacheScale => Math.Clamp(_camera.Zoom * _dpi * 2, 0.2, 4);
+    // Com muitos itens na tela, as imagens somadas passavam de 2 GB (512 blocos: 2,5 GB de memória de vídeo).
+    // Por isso a soma tem um teto (CacheBudgetPx); para caber, a escala cai até 1x a tela, nunca abaixo (o texto ficaria borrado).
+    double ItemCacheScale
+    {
+        get
+        {
+            double screen = _camera.Zoom * _dpi;
+            double scale = Math.Clamp(screen * 2, 0.2, 4);
+            double area = CachedArea();
+            if (area <= 0) return scale;
+            double fit = Math.Sqrt(CacheBudgetPx / area);
+            return fit >= scale ? scale : Math.Max(Math.Min(screen, scale), fit);
+        }
+    }
+
+    /// <summary>Para o contador de FPS: escala e tamanho somado das imagens guardadas dos itens.</summary>
+    public string CacheInfo
+    {
+        get
+        {
+            double s = _cacheScale;
+            return $"cache {s:0.0}× · {CachedArea() * s * s / 1e6:0} MP";
+        }
+    }
+
+    // 64 megapixels ≈ 256 MB de imagens guardadas.
+    const double CacheBudgetPx = 64_000_000;
+
+    // Área (em pixels do mundo) das imagens guardadas dos itens criados e dos que estão para ser criados
+    // (ao abrir o quadro ainda não há nenhum criado), com folga para as sombras.
+    double CachedArea()
+    {
+        double sum = 0;
+        foreach (var (vm, c) in _containers)
+            if (c.CacheMode is not null) sum += CacheArea(vm);
+        foreach (var vm in _pending)
+            if (vm.Kind != ItemKind.Video) sum += CacheArea(vm);
+        return sum;
+    }
+
+    static double CacheArea(BoardItemViewModel vm) => vm.Bounds.Width * vm.Bounds.Height; // Bounds já tem a folga
     // Até 32 megapixels: nítido ao aproximar, mas leve para o leitor de PDF abrir sem travar.
     // PDF: até 32 megapixels, leve para o leitor abrir sem travar. PNG: até 100 megapixels, a melhor nitidez possível.
     public const double PdfMaxPixels = 32_000_000, PngMaxPixels = 100_000_000;
@@ -357,9 +403,10 @@ public partial class BoardView : UserControl
             _autoFit = true; // primeira vez: enquadra tudo (e reenquadra enquanto a janela termina de abrir)
             Fit(animate: false);
         }
-        _itemCache.RenderAtScale = ItemCacheScale;
         BoardSurfaces.Update(Vm.Model, _camera.Zoom);
         ApplyCamera();
+        // Depois do ApplyCamera: os itens que vão aparecer já estão na fila e entram na conta do teto.
+        _cacheScale = ItemCacheScale;
         Settle();
     }
 
@@ -433,11 +480,12 @@ public partial class BoardView : UserControl
         if (changed || needsRealize) ApplyCamera();
         else if (_drag is not null || _handle is not null) UpdateAdorner();
         if (_pending.Count > 0) CreateSome();
+        if (_rescale.Count > 0 && !changed && !_camera.IsMoving && !_panning && _drag is null) RescaleSome();
 
         if (changed || _drag is not null) GlassGlow.Paused = true;
         LastWorkMs = _work.Elapsed.TotalMilliseconds;
 
-        if (!changed && !_camera.IsMoving && _pending.Count == 0 && !_panning && _drag is null && _handle is null)
+        if (!changed && !_camera.IsMoving && _pending.Count == 0 && _rescale.Count == 0 && !_panning && _drag is null && _handle is null)
         {
             CompositionTarget.Rendering -= OnFrame;
             _ticking = false;
@@ -527,10 +575,46 @@ public partial class BoardView : UserControl
         if (_vm is null || !_cameraReady) return;
         BoardSurfaces.Update(_vm.Model, _camera.Zoom);
         GlassGlow.Paused = false;
-        double scale = ItemCacheScale;
-        if (Math.Abs(_itemCache.RenderAtScale - scale) > 0.01) _itemCache.RenderAtScale = scale;
+        _cacheScale = ItemCacheScale;
+        QueueRescale();
         _vm.ReportCamera(_camera.Cx, _camera.Cy, _camera.Zoom);
         Settled?.Invoke();
+    }
+
+    /// <summary>A imagem guardada precisa ser refeita? Só se o texto for borrar (menos que a tela pede)
+    /// ou se estiver gastando memória à toa (bem acima da escala ideal). No meio, fica como está.</summary>
+    bool NeedsRescale(double current)
+    {
+        double screen = _camera.Zoom * _dpi;
+        double low = Math.Max(Math.Min(screen, _cacheScale) * 0.9, _cacheScale / 1.6);
+        return current < low || current > _cacheScale * 1.6;
+    }
+
+    // Câmera parou: põe na fila os itens cuja imagem precisa de outra escala (os do centro primeiro).
+    void QueueRescale()
+    {
+        _rescale.Clear();
+        foreach (var (_, c) in _containers)
+            if (c.CacheMode is BitmapCache bc && NeedsRescale(bc.RenderAtScale)) _rescale.Add(c);
+        if (_rescale.Count == 0) return;
+        var center = new Point(_camera.Cx, _camera.Cy);
+        _rescale.Sort((a, b) => Dist(a.Item!, center).CompareTo(Dist(b.Item!, center)));
+        Kick();
+    }
+
+    // Refaz algumas imagens por quadro, até CacheBudgetPerFrame pixels: o app nunca congela de uma vez.
+    void RescaleSome()
+    {
+        double s2 = _cacheScale * _cacheScale, done = 0;
+        int i = 0;
+        while (i < _rescale.Count && (i == 0 || done < CacheBudgetPerFrame))
+        {
+            var c = _rescale[i++];
+            if (c.Item is not { } vm || c.CacheMode is not BitmapCache bc) continue;
+            bc.RenderAtScale = _cacheScale;
+            done += CacheArea(vm) * s2;
+        }
+        _rescale.RemoveRange(0, i);
     }
 
     // ---------- virtualização ----------
@@ -585,11 +669,12 @@ public partial class BoardView : UserControl
             c.Visibility = Visibility.Visible;
             // Reaproveitado no mesmo tamanho não avisa: guarda o tamanho e acerta o espaço dos anexos.
             if (c.ActualWidth > 0) { vm.Width = c.ActualWidth; vm.Height = c.ActualHeight; }
+            if (c.CacheMode is BitmapCache bc && NeedsRescale(bc.RenderAtScale) && !_rescale.Contains(c)) { _rescale.Add(c); Kick(); }
             Vm.OnItemResized(vm);
         }
         else
         {
-            c = new BoardItemContainer { DataContext = vm, Content = vm, CacheMode = vm.Kind == ItemKind.Video ? null : _itemCache };
+            c = new BoardItemContainer { DataContext = vm, Content = vm, CacheMode = vm.Kind == ItemKind.Video ? null : NewCache(_cacheScale) };
             c.SizeChanged += (_, e) =>
             {
                 if (c.Item is not { } item) return;
@@ -612,6 +697,7 @@ public partial class BoardView : UserControl
     void Unrealize(BoardItemViewModel vm)
     {
         if (!_containers.Remove(vm, out var c)) return;
+        _rescale.Remove(c);
         c.Detach();
         c.Visibility = Visibility.Collapsed;
         // Mídia guardada solta a imagem ou o vídeo; a reserva de cada tipo tem limite (o resto é descartado).
@@ -2099,8 +2185,8 @@ public partial class BoardView : UserControl
             foreach (var (vm, c) in _containers)
                 if (!items.Contains(vm) && c.Visibility == Visibility.Visible) { c.Visibility = Visibility.Hidden; hidden.Add(c); }
         // Sem o cache de bitmap: o texto é desenhado direto, nítido em qualquer escala.
-        var cached = _containers.Values.Where(c => c.CacheMode is not null).ToList();
-        foreach (var c in cached) c.CacheMode = null;
+        var cached = _containers.Values.Where(c => c.CacheMode is not null).Select(c => (c, c.CacheMode)).ToList();
+        foreach (var (c, _) in cached) c.CacheMode = null;
         // Os + das tabelas são da tela: não vão para a imagem.
         var tables = _containers.Values.Where(c => c.Item?.Kind == ItemKind.Table).Select(FindChild<TableView>).OfType<TableView>().ToList();
         foreach (var tv in tables) tv.ShowAdd(false);
@@ -2157,7 +2243,7 @@ public partial class BoardView : UserControl
             CameraTransform.Matrix = camera;
             foreach (var iv in images) iv.EndExport();
             foreach (var c in hidden) c.Visibility = Visibility.Visible;
-            foreach (var c in cached) c.CacheMode = _itemCache;
+            foreach (var (c, mode) in cached) c.CacheMode = mode;
             if (wasOverview) { _overview = true; foreach (var (vm, c) in _containers) ApplyOverview(vm, c); }
             foreach (var tv in tables) tv.ShowAdd(true);
         }

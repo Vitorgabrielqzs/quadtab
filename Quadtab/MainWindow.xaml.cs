@@ -329,7 +329,9 @@ public partial class MainWindow : Window
         double secs = _fpsClock.Elapsed.TotalSeconds;
         if (secs < 0.5) return;
         string gpu = (RenderCapability.Tier >> 16) == 2 ? "GPU" : "sem GPU";
-        FpsText.Text = $"{_fpsFrames / secs:0} fps · {gpu} · pior quadro {_fpsWorst:0.0} ms · cálculo {Board.LastWorkMs:0.0} ms · {Board.RealizedCount}/{Board.ItemCount} itens";
+        // Conta os quadros da interface: o desenho das imagens dos itens roda em outra linha e não entra aqui.
+        // Por isso o "cache" ao lado: muitos MP = trabalho pesado escondido na placa de vídeo.
+        FpsText.Text = $"{_fpsFrames / secs:0} fps (interface) · {gpu} · pior quadro {_fpsWorst:0.0} ms · cálculo {Board.LastWorkMs:0.0} ms · {Board.RealizedCount}/{Board.ItemCount} itens · {Board.CacheInfo}";
         _fpsClock.Restart();
         _fpsFrames = 0;
         _fpsWorst = 0;

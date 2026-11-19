@@ -94,7 +94,7 @@ public static class GlassGlow
                     double dy = Math.Max(Math.Max(b.Top - _mouse.Y, 0), _mouse.Y - b.Bottom);
                     double dist = Math.Sqrt(dx * dx + dy * dy);
                     double prox = _inside ? Math.Max(0, 1 - dist / Reach) : 0;
-                    bool far = dist > 320;
+                    bool far = dist >= p.FarDistance;
                     var inv = t.Inverse;
                     var local = inv is not null ? inv.Transform(_mouse) : _mouse;
                     p.SetPointer(local, prox, far && _inside);

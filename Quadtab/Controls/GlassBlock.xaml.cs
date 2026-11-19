@@ -16,6 +16,9 @@ public partial class GlassBlock : UserControl
     {
         InitializeComponent();
         Glass.KeepShadow = true;
+        // O bloco fica numa imagem guardada (BitmapCache): cada mudança no brilho a refaz inteira.
+        // Só segue o mouse onde o brilho aparece (170 px); antes ia até 320 e, com muitos blocos, travava.
+        Glass.FarDistance = 170;
         // O item pode ser reaproveitado para outro bloco (virtualização): acompanha a troca de DataContext.
         DataContextChanged += (_, e) =>
         {

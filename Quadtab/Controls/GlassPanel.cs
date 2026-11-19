@@ -97,6 +97,10 @@ public class GlassPanel : Decorator
     internal double GlowTarget, GlowValue;
     internal bool PointerFar = true;
 
+    /// <summary>Distância (px) a partir da qual o brilho para de seguir o mouse. Os blocos do quadro usam 170,
+    /// onde o brilho já é zero: assim, com o mouse longe, a imagem guardada do bloco não é refeita.</summary>
+    internal double FarDistance { get; set; } = 320;
+
     public GlassPanel()
     {
         var far = new Point(-9999, -9999);
@@ -239,6 +243,8 @@ public class GlassPanel : Decorator
     {
         if (far && PointerFar) return;
         PointerFar = far;
+        // Longe: estaciona as luzes fora do painel (nada fica aceso parado na borda).
+        if (far) local = new Point(-9999, -9999);
         _glowBrush.Center = _glowBrush.GradientOrigin = local;
         _rimBrush.Center = _rimBrush.GradientOrigin = local;
         _rimDynamic.Opacity = 0.2 + 0.8 * prox;
